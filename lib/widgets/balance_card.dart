@@ -43,6 +43,8 @@ class BalanceCard extends StatelessWidget {
             children: [
               const Text(
                 'CURRENT BALANCE',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -51,12 +53,19 @@ class BalanceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                amount,
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              // FittedBox keeps the full amount on one line by scaling the
+              // text down on narrow widths, instead of truncating digits.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  amount,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],

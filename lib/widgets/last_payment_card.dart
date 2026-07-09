@@ -54,6 +54,8 @@ class LastPaymentCard extends StatelessWidget {
               children: [
                 const Text(
                   'Last Payment',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -63,6 +65,8 @@ class LastPaymentCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   amount,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -72,9 +76,15 @@ class LastPaymentCard extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            date,
-            style: const TextStyle(fontSize: 12, color: AppColors.grayText),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              date,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 12, color: AppColors.grayText),
+            ),
           ),
         ],
       ),

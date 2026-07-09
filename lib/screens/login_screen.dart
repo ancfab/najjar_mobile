@@ -11,6 +11,7 @@ import '../widgets/login/login_text_field.dart';
 import '../widgets/login/password_field.dart';
 import '../widgets/login/primary_login_button.dart';
 import '../widgets/login/secondary_back_button.dart';
+import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,12 +64,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     // TODO: Wire up the real authentication API call using
-    // fullPhoneNumber, _clientNameController.text, and password.
+    // fullPhoneNumber, _clientNameController.text, and password. Currently
+    // any non-empty input is treated as a successful login so the Home
+    // screen is reachable for frontend development; navigation below
+    // should move behind the real API's success response once it exists.
     await Future.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     debugPrint('Login attempted for $fullPhoneNumber');
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+    );
   }
 
   void _handleBack() {

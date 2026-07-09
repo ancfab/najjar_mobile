@@ -10,6 +10,9 @@ class AvailabilitySearchCard extends StatelessWidget {
     required this.helperText,
     this.controller,
     this.onSearch,
+    this.isLoading = false,
+    this.errorText,
+    this.resultText,
   });
 
   final String title;
@@ -17,6 +20,16 @@ class AvailabilitySearchCard extends StatelessWidget {
   final String helperText;
   final TextEditingController? controller;
   final VoidCallback? onSearch;
+
+  /// Shows a spinner in the search button and disables input while a
+  /// lookup is in flight.
+  final bool isLoading;
+
+  /// Validation/error message shown below the helper text, if any.
+  final String? errorText;
+
+  /// Success/no-results message shown below the helper text, if any.
+  final String? resultText;
 
   @override
   Widget build(BuildContext context) {
@@ -47,12 +60,16 @@ class AvailabilitySearchCard extends StatelessWidget {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A1A),
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A1A),
+                  ),
                 ),
               ),
             ],
@@ -65,7 +82,9 @@ class AvailabilitySearchCard extends StatelessWidget {
                   height: 44,
                   child: TextField(
                     controller: controller,
+                    enabled: !isLoading,
                     style: const TextStyle(fontSize: 14),
+                    onSubmitted: (_) => onSearch?.call(),
                     decoration: InputDecoration(
                       hintText: hintText,
                       hintStyle: const TextStyle(
@@ -99,15 +118,23 @@ class AvailabilitySearchCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(6),
-                  onTap: onSearch,
-                  child: const SizedBox(
+                  onTap: isLoading ? null : onSearch,
+                  child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Icon(
-                      Icons.search_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    child: isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.search_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                   ),
                 ),
               ),
@@ -118,6 +145,23 @@ class AvailabilitySearchCard extends StatelessWidget {
             helperText,
             style: const TextStyle(fontSize: 12.5, color: AppColors.grayText),
           ),
+          if (errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              errorText!,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.dangerRed),
+            ),
+          ] else if (resultText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              resultText!,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkTeal,
+              ),
+            ),
+          ],
         ],
       ),
     );
