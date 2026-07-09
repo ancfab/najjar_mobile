@@ -1,5 +1,5 @@
 // Basic smoke test for the Login Screen.
-
+//The test folder contains automated Flutter widget tests. We added Home screen tests to validate navigation, responsive layout, catalogue lookup states, and pull-to-refresh behavior. These tests do not affect the production app; they are only used during development to make sure future changes do not break the UI.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

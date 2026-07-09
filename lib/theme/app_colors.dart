@@ -15,4 +15,8 @@ class AppColors {
   static const Color border = Color(0xFFD8D6E4);
   static const Color grayText = Color(0xFF6E6E7A);
   static const Color dangerRed = Color(0xFFEE2B2B);
+
+  /// Green used for primary "action" buttons on dark/navy surfaces (e.g. the
+  /// Order Detail Price Breakdown card's Invoice button).
+  static const Color actionGreen = Color(0xFF1E9E6B);
 }

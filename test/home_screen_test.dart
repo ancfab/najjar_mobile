@@ -1,3 +1,4 @@
+//The test folder contains automated Flutter widget tests. We added Home screen tests to validate navigation, responsive layout, catalogue lookup states, and pull-to-refresh behavior. These tests do not affect the production app; they are only used during development to make sure future changes do not break the UI.
 // Widget checks for the Home screen: narrow-width overflow safety and the
 // navigation wiring for the Scan CTA and bottom tab bar.
 
