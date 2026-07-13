@@ -12,6 +12,7 @@ import 'package:anc_fabrics/data/country_codes.dart';
 import 'package:anc_fabrics/main.dart';
 import 'package:anc_fabrics/models/fabric_order_filter.dart';
 import 'package:anc_fabrics/models/fabric_specs.dart';
+import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/invoices_screen.dart';
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
@@ -312,17 +313,91 @@ void main() {
     );
   });
 
-  group('Placeholder screens', () {
-    testWidgets(
-      'Support screen has no overflow at small width + 1.5x text scale',
-      (tester) async {
-        await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
-        await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-      },
-    );
+  group('Support screen', () {
+    for (final size in _sizes) {
+      testWidgets(
+        'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await _setSize(tester, size);
+          await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
 
+    testWidgets('No overflow at 1.5x system text scale', (tester) async {
+      await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
+      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('No overflow in landscape', (tester) async {
+      await _setSize(tester, const Size(844, 390));
+      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Content column is width-capped on tablet', (tester) async {
+      await _setSize(tester, _tablet);
+      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpAndSettle();
+
+      final cardWidth = tester
+          .getSize(find.byKey(const ValueKey('support-corporate-office-card')))
+          .width;
+      // On a 768px-wide tablet a full-bleed card would be well over 700px,
+      // so this confirms the tablet max-width constraint is actually
+      // applied rather than the phone layout simply stretching.
+      expect(cardWidth, lessThan(700));
+    });
+  });
+
+  group('Contact Us screen', () {
+    for (final size in _sizes) {
+      testWidgets(
+        'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          await _setSize(tester, size);
+          await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('No overflow at 1.5x system text scale', (tester) async {
+      await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
+      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('No overflow in landscape', (tester) async {
+      await _setSize(tester, const Size(844, 390));
+      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Content column is width-capped on tablet', (tester) async {
+      await _setSize(tester, _tablet);
+      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpAndSettle();
+
+      final cardWidth = tester
+          .getSize(find.byKey(const ValueKey('contact-main-office-card')))
+          .width;
+      // On a 768px-wide tablet a full-bleed card would be well over 700px,
+      // so this confirms the tablet max-width constraint is actually
+      // applied rather than the phone layout simply stretching.
+      expect(cardWidth, lessThan(700));
+    });
+  });
+
+  group('Placeholder screens', () {
     testWidgets(
       'Invoices screen has no overflow at small width + 1.5x text scale',
       (tester) async {
