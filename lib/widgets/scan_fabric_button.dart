@@ -17,7 +17,7 @@ class ScanFabricButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         onTap: onTap,
         child: Container(
-          height: 56,
+          constraints: const BoxConstraints(minHeight: 56),
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(

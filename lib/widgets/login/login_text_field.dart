@@ -39,8 +39,8 @@ class LoginTextField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 52,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
           child: TextField(
             controller: controller,
             keyboardType: keyboardType,

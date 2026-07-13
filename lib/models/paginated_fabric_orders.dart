@@ -35,8 +35,7 @@ class PaginatedFabricOrders {
   /// Total number of pages for [totalCount] items at [pageSize] per page.
   /// Always at least 1 so "Page 1 of 1" is shown instead of "Page 1 of 0"
   /// when there are no matching orders.
-  int get totalPages =>
-      totalCount == 0 ? 1 : (totalCount / pageSize).ceil();
+  int get totalPages => totalCount == 0 ? 1 : (totalCount / pageSize).ceil();
 
   /// Empty result, used as a safe initial/placeholder value before the
   /// first fetch resolves.

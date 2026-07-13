@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/fabric_order.dart';
 import '../models/fabric_order_filter.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 const List<OrderStatus?> _statusOptions = [
   null,
@@ -72,9 +73,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
         customStartDate: _dateRange == DateRangeFilter.custom
             ? _customStart
             : null,
-        customEndDate: _dateRange == DateRangeFilter.custom
-            ? _customEnd
-            : null,
+        customEndDate: _dateRange == DateRangeFilter.custom ? _customEnd : null,
         fabricType: _fabricType,
       ),
     );
@@ -104,83 +103,89 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final maxSheetHeight = MediaQuery.of(context).size.height * 0.9;
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Filter Orders',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textNavy,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _sectionLabel('Status'),
-            const SizedBox(height: 8),
-            _buildStatusOptions(),
-            const SizedBox(height: 20),
-            _sectionLabel('Date Range'),
-            const SizedBox(height: 8),
-            _buildDateRangeOptions(),
-            if (_dateRange == DateRangeFilter.custom) ...[
-              const SizedBox(height: 12),
-              _buildCustomDateRow(),
-            ],
-            const SizedBox(height: 20),
-            // Fabric type is a frontend/mock-only filter for now.
-            // TODO: Confirm the official fabric type/category values with
-            // the backend/API team before connecting live data.
-            _sectionLabel('Fabric Type'),
-            const SizedBox(height: 8),
-            _buildFabricTypeOptions(),
-            const SizedBox(height: 24),
-            Row(
+      child: ResponsiveMaxWidth(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    key: const ValueKey('filter-sheet-reset'),
-                    onPressed: _reset,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textNavy,
-                      side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    child: const Text('Reset'),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    key: const ValueKey('filter-sheet-apply'),
-                    onPressed: _apply,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryNavy,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text('Apply'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Filter Orders',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textNavy,
                   ),
+                ),
+                const SizedBox(height: 20),
+                _sectionLabel('Status'),
+                const SizedBox(height: 8),
+                _buildStatusOptions(),
+                const SizedBox(height: 20),
+                _sectionLabel('Date Range'),
+                const SizedBox(height: 8),
+                _buildDateRangeOptions(),
+                if (_dateRange == DateRangeFilter.custom) ...[
+                  const SizedBox(height: 12),
+                  _buildCustomDateRow(),
+                ],
+                const SizedBox(height: 20),
+                // Fabric type is a frontend/mock-only filter for now.
+                // TODO: Confirm the official fabric type/category values with
+                // the backend/API team before connecting live data.
+                _sectionLabel('Fabric Type'),
+                const SizedBox(height: 8),
+                _buildFabricTypeOptions(),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        key: const ValueKey('filter-sheet-reset'),
+                        onPressed: _reset,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textNavy,
+                          side: const BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('Reset'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        key: const ValueKey('filter-sheet-apply'),
+                        onPressed: _apply,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryNavy,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text('Apply'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

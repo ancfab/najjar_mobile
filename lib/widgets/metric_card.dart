@@ -32,13 +32,14 @@ class MetricCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: borderRadius,
         child: Container(
-          height: 72,
+          constraints: const BoxConstraints(minHeight: 72),
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             borderRadius: borderRadius,
-            border:
-                borderColor != null ? Border.all(color: borderColor!) : null,
+            border: borderColor != null
+                ? Border.all(color: borderColor!)
+                : null,
           ),
           child: Row(
             children: [

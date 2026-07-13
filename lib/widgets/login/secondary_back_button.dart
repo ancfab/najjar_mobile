@@ -16,17 +16,19 @@ class SecondaryBackButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onPressed,
-        child: const SizedBox(
-          height: 56,
+        child: SizedBox(
           width: double.infinity,
-          child: Center(
-            child: Text(
-              'BACK',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: const Center(
+              child: Text(
+                'BACK',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),

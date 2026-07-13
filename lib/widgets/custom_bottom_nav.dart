@@ -29,7 +29,7 @@ class CustomBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
+      constraints: const BoxConstraints(minHeight: 64),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: AppColors.border)),
@@ -85,8 +85,9 @@ class CustomBottomNavItem extends StatelessWidget {
                 Icon(
                   icon,
                   size: 20,
-                  color:
-                      selected ? const Color(0xFFD8D6F5) : AppColors.grayText,
+                  color: selected
+                      ? const Color(0xFFD8D6F5)
+                      : AppColors.grayText,
                 ),
                 const SizedBox(height: 3),
                 Text(

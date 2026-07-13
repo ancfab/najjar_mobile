@@ -8,9 +8,7 @@ import 'package:anc_fabrics/models/fabric_order.dart';
 import 'package:anc_fabrics/widgets/order_card.dart';
 
 void main() {
-  testWidgets('OrderCard displays all required order details', (
-    tester,
-  ) async {
+  testWidgets('OrderCard displays all required order details', (tester) async {
     final order = FabricOrder(
       orderId: '#ORD-8829',
       date: 'Oct 12, 2023',
@@ -59,7 +57,9 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: Scaffold(body: OrderCard(order: order))),
+        MaterialApp(
+          home: Scaffold(body: OrderCard(order: order)),
+        ),
       );
 
       expect(find.byIcon(Icons.texture_rounded), findsOneWidget);

@@ -94,10 +94,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 600));
-    expect(
-      find.text('320 yd available at Warehouse A.'),
-      findsOneWidget,
-    );
+    expect(find.text('320 yd available at Warehouse A.'), findsOneWidget);
   });
 
   testWidgets('Catalogue lookup shows a no-results state for unknown codes', (

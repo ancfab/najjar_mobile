@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 /// Frontend-only status filter for the Invoices screen.
 ///
@@ -30,12 +31,18 @@ class InvoicesScreen extends StatelessWidget {
         elevation: 0,
         title: Text(isOverdue ? 'Overdue Invoices' : 'Invoices'),
       ),
-      body: Center(
-        child: Text(
-          isOverdue
-              ? 'Overdue invoices list coming soon'
-              : 'Invoices list coming soon',
-          style: const TextStyle(color: AppColors.grayText),
+      body: SafeArea(
+        child: CenteredScrollable(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Text(
+              isOverdue
+                  ? 'Overdue invoices list coming soon'
+                  : 'Invoices list coming soon',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.grayText),
+            ),
+          ),
         ),
       ),
     );

@@ -36,9 +36,7 @@ Future<void> _pumpOrderDetailScreen(
 
 void main() {
   group('Price Breakdown card', () {
-    testWidgets('Order Detail screen renders PRICE BREAKDOWN', (
-      tester,
-    ) async {
+    testWidgets('Order Detail screen renders PRICE BREAKDOWN', (tester) async {
       await _pumpOrderDetailScreen(tester);
       expect(find.text('PRICE BREAKDOWN'), findsOneWidget);
     });
@@ -97,9 +95,7 @@ void main() {
       expect(find.text('FABRIC SPECS'), findsOneWidget);
     });
 
-    testWidgets('Tapping FABRIC SPECS opens the bottom sheet', (
-      tester,
-    ) async {
+    testWidgets('Tapping FABRIC SPECS opens the bottom sheet', (tester) async {
       await _pumpOrderDetailScreen(tester);
 
       await tester.tap(find.text('FABRIC SPECS'));
@@ -158,20 +154,19 @@ void main() {
       expect(find.text('VIEW ORDER TIMELINE'), findsOneWidget);
     });
 
-    testWidgets(
-      'Tapping ORDER HISTORY shows the placeholder snackbar safely',
-      (tester) async {
-        await _pumpOrderDetailScreen(tester);
+    testWidgets('Tapping ORDER HISTORY shows the placeholder snackbar safely', (
+      tester,
+    ) async {
+      await _pumpOrderDetailScreen(tester);
 
-        await tester.tap(
-          find.byKey(const ValueKey('order-detail-order-history-button')),
-        );
-        await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('order-detail-order-history-button')),
+      );
+      await tester.pump();
 
-        expect(find.text('Order history coming soon'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(find.text('Order history coming soon'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets(
       'No crash for an order with no dedicated history/timeline data',

@@ -10,7 +10,9 @@ import 'package:anc_fabrics/widgets/status_badge.dart';
 Future<void> _pumpBadge(WidgetTester tester, OrderStatus status) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(body: Center(child: StatusBadge(status: status))),
+      home: Scaffold(
+        body: Center(child: StatusBadge(status: status)),
+      ),
     ),
   );
 }

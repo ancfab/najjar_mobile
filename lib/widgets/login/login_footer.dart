@@ -29,11 +29,12 @@ class LoginFooter extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 16,
+          runSpacing: 4,
           children: [
             _FooterLink(text: 'Privacy Policy', onTap: onPrivacyPolicyTap),
-            const SizedBox(width: 16),
             _FooterLink(text: 'Terms of Service', onTap: onTermsOfServiceTap),
           ],
         ),

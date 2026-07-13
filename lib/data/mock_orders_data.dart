@@ -127,7 +127,8 @@ const int _kGeneratedOrderCount = 243;
 final List<FabricOrder> _generatedMockFabricOrders = List.generate(
   _kGeneratedOrderCount,
   (index) {
-    final pair = _generatedTypeStatusPairs[index % _generatedTypeStatusPairs.length];
+    final pair =
+        _generatedTypeStatusPairs[index % _generatedTypeStatusPairs.length];
     final orderNumber = 9200 + index;
     final orderDate = DateTime(2023, 1, 1).add(Duration(days: index * 3));
     final meters = 60 + (index % 40) * 5;
@@ -164,8 +165,7 @@ final List<FabricOrder> kMockFabricOrders = List.unmodifiable([
 /// TODO: Confirm the official fabric type/category values with the
 /// backend/API team before connecting live data.
 List<String> get kMockFabricTypes =>
-    kMockFabricOrders.map((order) => order.fabricType).toSet().toList()
-      ..sort();
+    kMockFabricOrders.map((order) => order.fabricType).toSet().toList()..sort();
 
 // ---------------------------------------------------------------------------
 // Order Detail mock data (Price Breakdown card + Fabric Specs bottom sheet).

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/country_codes.dart';
 import '../models/country_code.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 /// Reusable, searchable country dial-code picker.
 ///
@@ -55,7 +56,7 @@ class CountryCodePicker extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               onTap: enabled ? () => _openPicker(context) : null,
               child: Container(
-                height: 52,
+                constraints: const BoxConstraints(minHeight: 52),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
@@ -141,116 +142,125 @@ class _CountryCodeSearchSheetState extends State<_CountryCodeSearchSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+        child: ResponsiveMaxWidth(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                'Select country code',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textNavy,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchController,
-                autofocus: false,
-                textInputAction: TextInputAction.search,
-                onChanged: _onSearchChanged,
-                style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
-                decoration: InputDecoration(
-                  hintText: 'Search by country, code, or ISO',
-                  hintStyle: const TextStyle(
-                    color: AppColors.grayText,
-                    fontSize: 14,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    color: AppColors.grayText,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.background,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.primaryNavy),
+                Text(
+                  'Select country code',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textNavy,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: _results.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Center(
-                          child: Text(
-                            'No countries found',
-                            style: TextStyle(
-                              color: AppColors.grayText,
-                              fontSize: 14,
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchController,
+                  autofocus: false,
+                  textInputAction: TextInputAction.search,
+                  onChanged: _onSearchChanged,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppColors.textNavy,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search by country, code, or ISO',
+                    hintStyle: const TextStyle(
+                      color: AppColors.grayText,
+                      fontSize: 14,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: AppColors.grayText,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: AppColors.primaryNavy,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: _results.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 32),
+                          child: Center(
+                            child: Text(
+                              'No countries found',
+                              style: TextStyle(
+                                color: AppColors.grayText,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: _results.length,
+                          separatorBuilder: (_, _) =>
+                              const Divider(height: 1, color: AppColors.border),
+                          itemBuilder: (context, index) {
+                            final country = _results[index];
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Text(
+                                country.flag,
+                                style: const TextStyle(fontSize: 22),
+                              ),
+                              title: Text(
+                                country.name,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  color: AppColors.textNavy,
+                                ),
+                              ),
+                              trailing: Text(
+                                country.dialCode,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryNavy,
+                                ),
+                              ),
+                              onTap: () => Navigator.of(context).pop(country),
+                            );
+                          },
                         ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: _results.length,
-                        separatorBuilder: (_, _) =>
-                            const Divider(height: 1, color: AppColors.border),
-                        itemBuilder: (context, index) {
-                          final country = _results[index];
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Text(
-                              country.flag,
-                              style: const TextStyle(fontSize: 22),
-                            ),
-                            title: Text(
-                              country.name,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                color: AppColors.textNavy,
-                              ),
-                            ),
-                            trailing: Text(
-                              country.dialCode,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primaryNavy,
-                              ),
-                            ),
-                            onTap: () => Navigator.of(context).pop(country),
-                          );
-                        },
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

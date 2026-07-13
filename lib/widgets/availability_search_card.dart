@@ -78,8 +78,8 @@ class AvailabilitySearchCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 44,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
                   child: TextField(
                     controller: controller,
                     enabled: !isLoading,
@@ -149,7 +149,10 @@ class AvailabilitySearchCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               errorText!,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.dangerRed),
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.dangerRed,
+              ),
             ),
           ] else if (resultText != null) ...[
             const SizedBox(height: 8),

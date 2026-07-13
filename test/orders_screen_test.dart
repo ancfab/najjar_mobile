@@ -116,9 +116,7 @@ void main() {
     });
   }
 
-  testWidgets('Pull-to-refresh reloads orders without errors', (
-    tester,
-  ) async {
+  testWidgets('Pull-to-refresh reloads orders without errors', (tester) async {
     await _pumpOrdersScreen(tester);
 
     await tester.fling(
@@ -143,14 +141,8 @@ void main() {
       expect(find.text('Status'), findsOneWidget);
       expect(find.text('Date Range'), findsOneWidget);
       expect(find.text('Fabric Type'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('filter-sheet-apply')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('filter-sheet-reset')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('filter-sheet-apply')), findsOneWidget);
+      expect(find.byKey(const ValueKey('filter-sheet-reset')), findsOneWidget);
     });
 
     testWidgets(
@@ -197,10 +189,7 @@ void main() {
       expect(find.text('ORD-8829'), findsOneWidget);
       expect(find.text('ORD-8830'), findsOneWidget);
       expect(find.text('ORD-8831'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('active-filter-status')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('active-filter-status')), findsNothing);
     });
 
     testWidgets('Empty state appears when filters produce no matches', (
@@ -237,34 +226,31 @@ void main() {
       expect(find.text('ORD-8829'), findsOneWidget);
     });
 
-    testWidgets(
-      'Fabric type filter section exists and its source carries the '
-      'backend clarification TODO',
-      (tester) async {
-        await _pumpOrdersScreen(tester);
-        await _openFilterSheet(tester);
+    testWidgets('Fabric type filter section exists and its source carries the '
+        'backend clarification TODO', (tester) async {
+      await _pumpOrdersScreen(tester);
+      await _openFilterSheet(tester);
 
-        expect(find.text('Fabric Type'), findsOneWidget);
-        expect(
-          find.byKey(const ValueKey('filter-sheet-fabric-type-All')),
-          findsOneWidget,
-        );
+      expect(find.text('Fabric Type'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('filter-sheet-fabric-type-All')),
+        findsOneWidget,
+      );
 
-        // Normalize line-wrapped comments (`// ` prefixes + newlines) into a
-        // single string so this doesn't depend on exact source formatting.
-        final source = File('lib/widgets/order_filter_sheet.dart')
-            .readAsStringSync()
-            .replaceAll(RegExp(r'//\s*'), '')
-            .replaceAll(RegExp(r'\s+'), ' ');
-        expect(
-          source.contains(
-            'TODO: Confirm the official fabric type/category values with '
-            'the backend/API team before connecting live data.',
-          ),
-          isTrue,
-        );
-      },
-    );
+      // Normalize line-wrapped comments (`// ` prefixes + newlines) into a
+      // single string so this doesn't depend on exact source formatting.
+      final source = File('lib/widgets/order_filter_sheet.dart')
+          .readAsStringSync()
+          .replaceAll(RegExp(r'//\s*'), '')
+          .replaceAll(RegExp(r'\s+'), ' ');
+      expect(
+        source.contains(
+          'TODO: Confirm the official fabric type/category values with '
+          'the backend/API team before connecting live data.',
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('Header search', () {
@@ -276,10 +262,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('orders-search-open')));
       await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const ValueKey('orders-search-field')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('orders-search-field')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('orders-search-cancel')),
         findsOneWidget,
@@ -338,9 +321,7 @@ void main() {
       expect(find.text('ORD-8831'), findsOneWidget);
     });
 
-    testWidgets('Cancel closes search and clears search text', (
-      tester,
-    ) async {
+    testWidgets('Cancel closes search and clears search text', (tester) async {
       await _pumpOrdersScreen(tester);
 
       await tester.tap(find.byKey(const ValueKey('orders-search-open')));

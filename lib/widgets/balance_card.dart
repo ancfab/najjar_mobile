@@ -10,7 +10,7 @@ class BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 135,
+      constraints: const BoxConstraints(minHeight: 135),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

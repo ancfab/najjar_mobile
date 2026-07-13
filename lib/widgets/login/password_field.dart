@@ -30,8 +30,8 @@ class _PasswordFieldState extends State<PasswordField> {
           ),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 52,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
           child: TextField(
             controller: widget.controller,
             obscureText: _obscure,

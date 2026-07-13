@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 // TODO(mock-data): Placeholder for the most recent scan record. Replace
 // with the real last-scan entry from the scan history/stock service once
@@ -32,18 +33,18 @@ class ScanStockScreen extends StatelessWidget {
   // Opens the full scan history list.
   // TODO: Navigate to a real Scan History screen once it exists.
   void _openScanHistory(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Scan history coming soon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Scan history coming soon')));
   }
 
   // Toggles the camera torch/flash while scanning.
   // TODO: Wire this to the real camera flash control once a scanner
   // dependency is integrated.
   void _toggleFlash(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Flash toggle coming soon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Flash toggle coming soon')));
   }
 
   @override
@@ -66,7 +67,9 @@ class ScanStockScreen extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: _ScanPreviewArea(onCheckAvailability: _checkStockAvailability),
+            child: _ScanPreviewArea(
+              onCheckAvailability: _checkStockAvailability,
+            ),
           ),
           _RecentScanCard(onViewHistory: _openScanHistory),
         ],
@@ -90,35 +93,38 @@ class _ScanPreviewArea extends StatelessWidget {
       // TODO: Replace this solid color with a live camera preview once a
       // scanner dependency is integrated.
       color: AppColors.gradientNavyStart,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _QrFrame(),
-            const SizedBox(height: 24),
-            const Text(
-              'Center the QR code within the frame',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => onCheckAvailability(context),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
+      child: ResponsiveMaxWidth(
+        maxWidth: 480,
+        alignment: Alignment.center,
+        child: CenteredScrollable(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const _QrFrame(),
+              const SizedBox(height: 24),
+              const Text(
+                'Center the QR code within the frame',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () => onCheckAvailability(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                ),
+                child: const Text(
+                  'Check Stock Availability',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
               ),
-              child: const Text(
-                'Check Stock Availability',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -22,7 +22,7 @@ class HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 68,
+      constraints: const BoxConstraints(minHeight: 68),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: const BoxDecoration(
         color: Colors.white,

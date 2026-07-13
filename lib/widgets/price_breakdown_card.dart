@@ -49,11 +49,7 @@ class PriceBreakdownCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1, color: Colors.white24),
           const SizedBox(height: 12),
-          _buildRow(
-            'Total amount',
-            breakdown.totalAmount,
-            emphasized: true,
-          ),
+          _buildRow('Total amount', breakdown.totalAmount, emphasized: true),
           const SizedBox(height: 16),
           _buildInvoiceButton(),
         ],
@@ -103,7 +99,7 @@ class PriceBreakdownCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: onInvoicePressed,
         child: Container(
-          height: 48,
+          constraints: const BoxConstraints(minHeight: 48),
           alignment: Alignment.center,
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,

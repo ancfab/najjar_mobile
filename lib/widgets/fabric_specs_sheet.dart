@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/fabric_specs.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 /// Mobile-friendly bottom sheet showing mock [FabricSpecs] fields for an
 /// order item.
@@ -16,46 +17,55 @@ class FabricSpecsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxSheetHeight = MediaQuery.of(context).size.height * 0.85;
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+      child: ResponsiveMaxWidth(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Fabric Specs',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textNavy,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  specs.fabricName,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.grayText,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildSpecRow('SKU', specs.sku),
+                _buildSpecRow('Color', specs.color),
+                _buildSpecRow('Weight/GSM', specs.weight),
+                _buildSpecRow('Quantity', specs.quantity),
+                if (specs.composition != null)
+                  _buildSpecRow('Composition', specs.composition!),
+              ],
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Fabric Specs',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textNavy,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              specs.fabricName,
-              style: const TextStyle(fontSize: 13, color: AppColors.grayText),
-            ),
-            const SizedBox(height: 16),
-            _buildSpecRow('SKU', specs.sku),
-            _buildSpecRow('Color', specs.color),
-            _buildSpecRow('Weight/GSM', specs.weight),
-            _buildSpecRow('Quantity', specs.quantity),
-            if (specs.composition != null)
-              _buildSpecRow('Composition', specs.composition!),
-          ],
+          ),
         ),
       ),
     );
@@ -104,6 +114,7 @@ class FabricSpecsSheet extends StatelessWidget {
 Future<void> showFabricSpecsSheet(BuildContext context, FabricSpecs specs) {
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

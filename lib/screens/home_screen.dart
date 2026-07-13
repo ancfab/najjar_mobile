@@ -6,6 +6,7 @@ import '../models/home_dashboard_data.dart';
 import '../services/catalogue_lookup_service.dart';
 import '../services/home_dashboard_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 import '../widgets/availability_search_card.dart';
 import '../widgets/balance_card.dart';
 import '../widgets/custom_bottom_nav.dart';
@@ -186,8 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openActiveOrders() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const OrdersScreen(filter: OrderStatusFilter.active),
+        builder: (_) => const OrdersScreen(filter: OrderStatusFilter.active),
       ),
     );
   }
@@ -205,9 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // Scanning in home page using QR code function: opens the Scan Stock
   // screen from the "Scan Fabric Availability" CTA.
   void _openScanStockScreen() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ScanStockScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ScanStockScreen()));
   }
 
   // Pushes a bottom-tab destination screen, then restores the Home tab as
@@ -215,9 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // persistent, so Home is the natural resting state on return).
   Future<void> _openTabScreen(int tabIndex, Widget screen) async {
     setState(() => _selectedNavIndex = tabIndex);
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => screen),
-    );
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
     if (mounted) {
       setState(() => _selectedNavIndex = _navIndexHome);
     }
@@ -263,39 +261,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildDashboardSection(),
-                      const SizedBox(height: 16),
-                      ScanFabricButton(
-                        label: 'Scan Fabric Availability',
-                        onTap: _openScanStockScreen,
-                      ),
-                      const SizedBox(height: 16),
-                      AvailabilitySearchCard(
-                        title: 'Check Availability',
-                        hintText: 'Enter Catalogue Code',
-                        helperText:
-                            'Quickly check availability across all warehouses.',
-                        controller: _catalogueCodeController,
-                        onSearch: searchFabricAvailabilityByCatalogueCode,
-                        isLoading:
-                            _catalogueUiState ==
-                            _CatalogueLookupUiState.loading,
-                        errorText:
-                            _catalogueUiState == _CatalogueLookupUiState.error
-                                ? _catalogueMessage
-                                : null,
-                        resultText:
-                            (_catalogueUiState ==
-                                        _CatalogueLookupUiState.success ||
-                                    _catalogueUiState ==
-                                        _CatalogueLookupUiState.empty)
-                                ? _catalogueMessage
-                                : null,
-                      ),
-                    ],
+                  child: ResponsiveMaxWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildDashboardSection(),
+                        const SizedBox(height: 16),
+                        ScanFabricButton(
+                          label: 'Scan Fabric Availability',
+                          onTap: _openScanStockScreen,
+                        ),
+                        const SizedBox(height: 16),
+                        AvailabilitySearchCard(
+                          title: 'Check Availability',
+                          hintText: 'Enter Catalogue Code',
+                          helperText:
+                              'Quickly check availability across all warehouses.',
+                          controller: _catalogueCodeController,
+                          onSearch: searchFabricAvailabilityByCatalogueCode,
+                          isLoading:
+                              _catalogueUiState ==
+                              _CatalogueLookupUiState.loading,
+                          errorText:
+                              _catalogueUiState == _CatalogueLookupUiState.error
+                              ? _catalogueMessage
+                              : null,
+                          resultText:
+                              (_catalogueUiState ==
+                                      _CatalogueLookupUiState.success ||
+                                  _catalogueUiState ==
+                                      _CatalogueLookupUiState.empty)
+                              ? _catalogueMessage
+                              : null,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

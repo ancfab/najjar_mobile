@@ -31,11 +31,7 @@ _StatusBadgeMeta _metaForStatus(OrderStatus status) {
         AppColors.gradientNavyStart,
       );
     case OrderStatus.processing:
-      return _StatusBadgeMeta(
-        label,
-        AppColors.peach,
-        AppColors.darkRedBrown,
-      );
+      return _StatusBadgeMeta(label, AppColors.peach, AppColors.darkRedBrown);
     case OrderStatus.unknown:
       return _StatusBadgeMeta(
         label,

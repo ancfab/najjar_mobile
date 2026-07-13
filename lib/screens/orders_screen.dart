@@ -5,6 +5,7 @@ import '../models/fabric_order_filter.dart';
 import '../models/paginated_fabric_orders.dart';
 import '../services/mock_orders_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 import '../widgets/order_card.dart';
 import '../widgets/order_filter_sheet.dart';
 import 'order_detail_screen.dart';
@@ -154,9 +155,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
     if (result == null || !mounted) return;
-    _updateFilter(
-      (current) => result.copyWith(searchText: current.searchText),
-    );
+    _updateFilter((current) => result.copyWith(searchText: current.searchText));
   }
 
   void _clearStatusFilter() {
@@ -245,7 +244,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         toolbarHeight: 68,
         titleSpacing: 0,
-        title: _isSearching ? _buildSearchField() : _buildHeaderTitle(),
+        title: ClampedTextScale(
+          child: _isSearching ? _buildSearchField() : _buildHeaderTitle(),
+        ),
         actions: [
           if (_isSearching)
             TextButton(
@@ -272,29 +273,29 @@ class _OrdersScreenState extends State<OrdersScreen> {
         top: false,
         child: RefreshIndicator(
           onRefresh: refreshFabricOrders,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                sliver: SliverToBoxAdapter(child: _buildPageIntro()),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                sliver: SliverToBoxAdapter(child: _buildFilterBar()),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                sliver: _buildOrdersSliver(),
-              ),
-              if (_shouldShowResultsChrome())
+          child: ResponsiveMaxWidth(
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  sliver: SliverToBoxAdapter(
-                    child: _buildPaginationFooter(),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(child: _buildPageIntro()),
                 ),
-            ],
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  sliver: SliverToBoxAdapter(child: _buildFilterBar()),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  sliver: _buildOrdersSliver(),
+                ),
+                if (_shouldShowResultsChrome())
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    sliver: SliverToBoxAdapter(child: _buildPaginationFooter()),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -422,14 +423,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
         _buildOpenFilterButton(),
         if (chips.isNotEmpty) ...[
           const SizedBox(height: 8),
-          SizedBox(
-            height: 36,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final chip in chips) ...[chip, const SizedBox(width: 8)],
-                ],
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 36),
+            child: IntrinsicHeight(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final chip in chips) ...[
+                      chip,
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -783,11 +789,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.inbox_outlined,
-            color: AppColors.grayText,
-            size: 28,
-          ),
+          const Icon(Icons.inbox_outlined, color: AppColors.grayText, size: 28),
           const SizedBox(height: 8),
           Text(
             hasActiveCriteria

@@ -4,6 +4,7 @@ import '../models/fabric_order.dart';
 import '../models/fabric_order_detail.dart';
 import '../services/mock_orders_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 import '../widgets/fabric_specs_sheet.dart';
 import '../widgets/price_breakdown_card.dart';
 import '../widgets/status_badge.dart';
@@ -118,9 +119,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   /// details (once that exists) — then wire up real order status history
   /// data.
   void _openOrderHistory() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order history coming soon')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Order history coming soon')));
   }
 
   @override
@@ -128,10 +129,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
-      body: SafeArea(
-        top: false,
-        child: _buildBody(),
-      ),
+      body: SafeArea(top: false, child: _buildBody()),
     );
   }
 
@@ -189,22 +187,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildBreadcrumb(detail.order),
-          const SizedBox(height: 12),
-          _buildOrderHeader(detail.order),
-          const SizedBox(height: 16),
-          _buildOrderItemsCard(detail),
-          const SizedBox(height: 16),
-          _buildOrderHistoryCard(),
-          const SizedBox(height: 16),
-          PriceBreakdownCard(
-            breakdown: detail.priceBreakdown,
-            onInvoicePressed: _openInvoice,
-          ),
-        ],
+      child: ResponsiveMaxWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildBreadcrumb(detail.order),
+            const SizedBox(height: 12),
+            _buildOrderHeader(detail.order),
+            const SizedBox(height: 16),
+            _buildOrderItemsCard(detail),
+            const SizedBox(height: 16),
+            _buildOrderHistoryCard(),
+            const SizedBox(height: 16),
+            PriceBreakdownCard(
+              breakdown: detail.priceBreakdown,
+              onInvoicePressed: _openInvoice,
+            ),
+          ],
+        ),
       ),
     );
   }

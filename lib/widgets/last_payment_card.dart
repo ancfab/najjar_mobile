@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 class LastPaymentCard extends StatelessWidget {
-  const LastPaymentCard({
-    super.key,
-    required this.amount,
-    required this.date,
-  });
+  const LastPaymentCard({super.key, required this.amount, required this.date});
 
   final String amount;
   final String date;
@@ -15,7 +11,7 @@ class LastPaymentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
+      constraints: const BoxConstraints(minHeight: 72),
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
