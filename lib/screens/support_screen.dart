@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/support_regions_data.dart';
 import '../models/support_region.dart';
 import '../services/phone_launcher.dart';
+import '../services/support_region_service.dart';
 import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
@@ -17,6 +18,12 @@ import 'contact_us_screen.dart';
 /// contact cards (live chat/email, corporate office, direct hotline, and
 /// support hours).
 ///
+/// Region data is loaded through [SupportRegionService] (currently local
+/// [kSupportRegions] data — see that class's doc comment for the CMS/API
+/// contract this is pending on). If the load fails or returns no regions,
+/// the screen falls back to [kSupportRegions] rather than getting stuck or
+/// crashing.
+///
 /// TODO: Contact details (email, office address, hotline numbers, support
 /// hours) are not yet verified for any region — see
 /// `lib/data/support_regions_data.dart` for where to plug in confirmed
@@ -28,10 +35,11 @@ class SupportScreen extends StatefulWidget {
     super.key,
     WhatsAppLauncher? whatsAppLauncher,
     PhoneLauncher? phoneLauncher,
-    List<SupportRegionData>? regions,
+    this.regions,
+    SupportRegionService? regionService,
   }) : whatsAppLauncher = whatsAppLauncher ?? const WhatsAppLauncher(),
        phoneLauncher = phoneLauncher ?? const PhoneLauncher(),
-       regions = regions ?? kSupportRegions;
+       regionService = regionService ?? const SupportRegionService();
 
   /// Injectable so tests can supply a fake launcher instead of touching the
   /// real `url_launcher` plugin.
@@ -41,23 +49,65 @@ class SupportScreen extends StatefulWidget {
   /// real `url_launcher` plugin.
   final PhoneLauncher phoneLauncher;
 
-  /// Injectable so tests can exercise the "WhatsApp number available"
-  /// launch flow with a test-only region, since no production region in
-  /// `kSupportRegions` has a verified `whatsappNumber` yet. Defaults to
-  /// `kSupportRegions`.
-  final List<SupportRegionData> regions;
+  /// Injectable so tests can supply a fixed region list synchronously —
+  /// e.g. to exercise the "WhatsApp number available" launch flow with a
+  /// test-only region, since no production region has a verified
+  /// `whatsappNumber` yet. Null in production, where regions are instead
+  /// loaded asynchronously through [regionService].
+  final List<SupportRegionData>? regions;
+
+  /// Loads region-specific Support content when [regions] isn't supplied
+  /// directly. Defaults to [SupportRegionService].
+  final SupportRegionService regionService;
 
   @override
   State<SupportScreen> createState() => _SupportScreenState();
 }
 
 class _SupportScreenState extends State<SupportScreen> {
-  late SupportRegionId _selectedRegionId = widget.regions.first.id;
+  List<SupportRegionData> _regions = const [];
+  SupportRegionId? _selectedRegionId;
+  bool _isLoadingRegions = true;
   bool _isWhatsAppLaunching = false;
   bool _isPhoneLaunching = false;
 
-  SupportRegionData get _selectedRegion =>
-      widget.regions.firstWhere((region) => region.id == _selectedRegionId);
+  SupportRegionData get _selectedRegion => _regions.firstWhere(
+    (region) => region.id == _selectedRegionId,
+    orElse: () => _regions.first,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    final overrideRegions = widget.regions;
+    if (overrideRegions != null) {
+      _applyLoadedRegions(overrideRegions);
+    } else {
+      _loadRegions();
+    }
+  }
+
+  Future<void> _loadRegions() async {
+    setState(() => _isLoadingRegions = true);
+    List<SupportRegionData> loaded;
+    try {
+      loaded = await widget.regionService.fetchSupportRegions();
+    } catch (_) {
+      // A CMS/API outage falls back to the bundled local data rather than
+      // leaving the Support screen stuck or crashed.
+      loaded = kSupportRegions;
+    }
+    if (!mounted) return;
+    _applyLoadedRegions(loaded.isNotEmpty ? loaded : kSupportRegions);
+  }
+
+  void _applyLoadedRegions(List<SupportRegionData> regions) {
+    setState(() {
+      _regions = regions;
+      _selectedRegionId = regions.first.id;
+      _isLoadingRegions = false;
+    });
+  }
 
   void _selectRegion(SupportRegionId regionId) {
     setState(() => _selectedRegionId = regionId);
@@ -148,51 +198,55 @@ class _SupportScreenState extends State<SupportScreen> {
               children: [
                 _buildIntro(),
                 const SizedBox(height: 20),
-                SupportRegionSelector(
-                  key: const ValueKey('support-region-selector'),
-                  regions: widget.regions,
-                  selectedRegionId: _selectedRegionId,
-                  onRegionSelected: _selectRegion,
-                ),
-                const SizedBox(height: 20),
-                SupportActionCard(
-                  onChatOnWhatsApp: _onChatOnWhatsApp,
-                  onEmailSupport: _onEmailSupport,
-                ),
-                const SizedBox(height: 20),
-                const SupportTextileVisual(),
-                const SizedBox(height: 20),
-                SupportInfoCard(
-                  key: const ValueKey('support-corporate-office-card'),
-                  icon: Icons.apartment_rounded,
-                  label: 'CORPORATE OFFICE',
-                  child: Text(
-                    _selectedRegion.officeAddress ??
-                        'Office details for ${_selectedRegion.displayName} '
-                            'will be added soon.',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textNavy,
-                      height: 1.4,
+                if (_isLoadingRegions)
+                  _buildRegionsLoading()
+                else ...[
+                  SupportRegionSelector(
+                    key: const ValueKey('support-region-selector'),
+                    regions: _regions,
+                    selectedRegionId: _selectedRegionId!,
+                    onRegionSelected: _selectRegion,
+                  ),
+                  const SizedBox(height: 20),
+                  SupportActionCard(
+                    onChatOnWhatsApp: _onChatOnWhatsApp,
+                    onEmailSupport: _onEmailSupport,
+                  ),
+                  const SizedBox(height: 20),
+                  const SupportTextileVisual(),
+                  const SizedBox(height: 20),
+                  SupportInfoCard(
+                    key: const ValueKey('support-corporate-office-card'),
+                    icon: Icons.apartment_rounded,
+                    label: 'CORPORATE OFFICE',
+                    child: Text(
+                      _selectedRegion.officeAddress ??
+                          'Office details for ${_selectedRegion.displayName} '
+                              'will be added soon.',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textNavy,
+                        height: 1.4,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                SupportInfoCard(
-                  key: const ValueKey('support-hotline-card'),
-                  icon: Icons.call_rounded,
-                  label: 'DIRECT HOTLINE',
-                  child: _buildHotlineContent(),
-                ),
-                const SizedBox(height: 16),
-                SupportHoursCard(
-                  key: const ValueKey('support-hours-card'),
-                  scheduleText:
-                      _selectedRegion.supportHours ??
-                      'Support hours for ${_selectedRegion.displayName} '
-                          'will be confirmed soon.',
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  SupportInfoCard(
+                    key: const ValueKey('support-hotline-card'),
+                    icon: Icons.call_rounded,
+                    label: 'DIRECT HOTLINE',
+                    child: _buildHotlineContent(),
+                  ),
+                  const SizedBox(height: 16),
+                  SupportHoursCard(
+                    key: const ValueKey('support-hours-card'),
+                    scheduleText:
+                        _selectedRegion.supportHours ??
+                        'Support hours for ${_selectedRegion.displayName} '
+                            'will be confirmed soon.',
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ],
             ),
           ),
@@ -310,6 +364,14 @@ class _SupportScreenState extends State<SupportScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRegionsLoading() {
+    return const Padding(
+      key: ValueKey('support-regions-loading'),
+      padding: EdgeInsets.symmetric(vertical: 40),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 

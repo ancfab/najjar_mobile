@@ -12,6 +12,7 @@ import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/phone_launcher.dart';
+import 'package:anc_fabrics/services/support_region_service.dart';
 import 'package:anc_fabrics/services/url_launcher_client.dart';
 import 'package:anc_fabrics/services/whatsapp_launcher.dart';
 import 'package:anc_fabrics/utils/phone_number.dart';
@@ -701,6 +702,128 @@ void main() {
     expect(find.byType(ContactUsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  group('Region loading', () {
+    testWidgets(
+      'Shows a loading indicator while regions are being fetched, then the '
+      'loaded region content',
+      (tester) async {
+        final pending = Completer<List<SupportRegionData>>();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SupportScreen(
+              regionService: _ControlledSupportRegionService(pending.future),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('support-regions-loading')),
+          findsOneWidget,
+        );
+        expect(find.byType(SupportRegionSelector), findsNothing);
+
+        pending.complete(kSupportRegions);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('support-regions-loading')),
+          findsNothing,
+        );
+        expect(find.text(kSupportRegions.first.displayName), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'A region service that throws falls back to local support region '
+      'data instead of crashing or getting stuck loading',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SupportScreen(
+              regionService: _ThrowingSupportRegionService(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        for (final region in kSupportRegions) {
+          expect(find.text(region.displayName), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'A region service that resolves with no regions falls back to local '
+      'support region data instead of leaving the screen empty',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SupportScreen(
+              regionService: _EmptySupportRegionService(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        for (final region in kSupportRegions) {
+          expect(find.text(region.displayName), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Passing an explicit regions override skips the region service and '
+      'loads synchronously',
+      (tester) async {
+        final region = SupportRegionData(
+          id: SupportRegionId.uae,
+          displayName: 'OverrideLand',
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: SupportScreen(regions: [region])),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('support-regions-loading')),
+          findsNothing,
+        );
+        expect(find.text('OverrideLand'), findsOneWidget);
+      },
+    );
+  });
+}
+
+/// Fake [SupportRegionService] whose fetch stays pending until the caller
+/// completes [result], used to observe the loading state while the fetch is
+/// still in flight.
+class _ControlledSupportRegionService implements SupportRegionService {
+  _ControlledSupportRegionService(this.result);
+
+  final Future<List<SupportRegionData>> result;
+
+  @override
+  Future<List<SupportRegionData>> fetchSupportRegions() => result;
+}
+
+/// Fake [SupportRegionService] simulating a CMS/API outage.
+class _ThrowingSupportRegionService implements SupportRegionService {
+  @override
+  Future<List<SupportRegionData>> fetchSupportRegions() async {
+    throw Exception('support regions unavailable');
+  }
+}
+
+/// Fake [SupportRegionService] simulating a CMS/API response with no
+/// regions.
+class _EmptySupportRegionService implements SupportRegionService {
+  @override
+  Future<List<SupportRegionData>> fetchSupportRegions() async => [];
 }
 
 /// Fake [UrlLauncherClient] whose native launch stays pending until the
