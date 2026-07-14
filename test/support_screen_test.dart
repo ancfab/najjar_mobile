@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/data/support_regions_data.dart';
+import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/widgets/support_action_card.dart';
@@ -48,7 +50,7 @@ void main() {
     final selector = tester.widget<SupportRegionSelector>(
       find.byType(SupportRegionSelector),
     );
-    expect(selector.selectedRegionId.name, 'uae');
+    expect(selector.selectedRegionId, kSupportRegions.first.id);
   });
 
   testWidgets('Selecting another region updates the selected state', (
@@ -56,29 +58,123 @@ void main() {
   ) async {
     await pumpSupport(tester);
 
-    await tester.tap(find.text('Lebanon'));
+    final lebanon = kSupportRegions.firstWhere(
+      (region) => region.id == SupportRegionId.lebanon,
+    );
+
+    await tester.tap(find.text(lebanon.displayName));
     await tester.pumpAndSettle();
 
     final selector = tester.widget<SupportRegionSelector>(
       find.byType(SupportRegionSelector),
     );
-    expect(selector.selectedRegionId.name, 'lebanon');
+    expect(selector.selectedRegionId, lebanon.id);
     expect(
-      find.text('Office details for Lebanon will be added soon.'),
+      find.text(
+        'Office details for ${lebanon.displayName} will be added soon.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Support hours for ${lebanon.displayName} will be confirmed soon.',
+      ),
       findsOneWidget,
     );
   });
 
-  testWidgets('WhatsApp button shows a message without throwing', (
+  testWidgets(
+    'Selecting multiple regions sequentially leaves no stale information '
+    'from the previous region',
+    (tester) async {
+      await pumpSupport(tester);
+
+      for (final region in kSupportRegions) {
+        await tester.tap(find.text(region.displayName));
+        await tester.pumpAndSettle();
+
+        final selector = tester.widget<SupportRegionSelector>(
+          find.byType(SupportRegionSelector),
+        );
+        expect(selector.selectedRegionId, region.id);
+        expect(
+          find.text(
+            'Office details for ${region.displayName} will be added soon.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            'Support hours for ${region.displayName} will be confirmed '
+            'soon.',
+          ),
+          findsOneWidget,
+        );
+
+        for (final other in kSupportRegions) {
+          if (other.id == region.id) continue;
+          expect(
+            find.text(
+              'Office details for ${other.displayName} will be added soon.',
+            ),
+            findsNothing,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets('Screen remains stable after repeated region changes', (
     tester,
   ) async {
     await pumpSupport(tester);
 
+    for (var i = 0; i < 3; i++) {
+      for (final region in kSupportRegions) {
+        await tester.tap(find.text(region.displayName));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    expect(find.byType(SupportScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('WhatsApp button reflects the currently selected region', (
+    tester,
+  ) async {
+    await pumpSupport(tester);
+
+    final uae = kSupportRegions.first;
     await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
     await tester.pump();
     expect(
-      find.text('WhatsApp support is being set up for this region.'),
+      find.text('WhatsApp support for ${uae.displayName} is being set up.'),
       findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    final lebanon = kSupportRegions.firstWhere(
+      (region) => region.id == SupportRegionId.lebanon,
+    );
+    await tester.tap(find.text(lebanon.displayName));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
+    // The previous SnackBar's hide animation (triggered by
+    // hideCurrentSnackBar in _onChatOnWhatsApp) needs a moment to finish
+    // before the new one is shown, well short of its own auto-dismiss
+    // duration.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text('WhatsApp support for ${lebanon.displayName} is being set up.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('WhatsApp support for ${uae.displayName} is being set up.'),
+      findsNothing,
     );
     expect(tester.takeException(), isNull);
   });

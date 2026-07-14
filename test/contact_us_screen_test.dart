@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/data/support_regions_data.dart';
+import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 
@@ -56,6 +58,35 @@ void main() {
       await pumpContactUs(tester);
 
       expect(find.text('Back to Support'), findsOneWidget);
+    });
+
+    testWidgets('Tapping EMAIL SUPPORT passes the currently selected region to '
+        'ContactUsScreen', (tester) async {
+      await pumpSupport(tester);
+
+      final lebanon = kSupportRegions.firstWhere(
+        (region) => region.id == SupportRegionId.lebanon,
+      );
+      await tester.tap(find.text(lebanon.displayName));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('support-email-button')));
+      await tester.pumpAndSettle();
+
+      final contactUsScreen = tester.widget<ContactUsScreen>(
+        find.byType(ContactUsScreen),
+      );
+      expect(contactUsScreen.region?.id, lebanon.id);
+      expect(
+        find.text(
+          'Office details for ${lebanon.displayName} will be added soon.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Office details for UAE will be added soon.'),
+        findsNothing,
+      );
     });
 
     testWidgets('Tapping Back to Support returns to SupportScreen', (

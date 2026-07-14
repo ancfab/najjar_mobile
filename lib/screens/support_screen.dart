@@ -39,11 +39,14 @@ class _SupportScreenState extends State<SupportScreen> {
   }
 
   void _onChatOnWhatsApp() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('WhatsApp support is being set up for this region.'),
-      ),
-    );
+    final number = _selectedRegion.whatsappNumber;
+    final message = number == null
+        ? 'WhatsApp support for ${_selectedRegion.displayName} is being '
+              'set up.'
+        : 'Chatting on WhatsApp at $number is not yet available.';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _onEmailSupport() {
