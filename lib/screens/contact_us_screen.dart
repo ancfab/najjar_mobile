@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../data/support_regions_data.dart';
 import '../models/contact_subject.dart';
 import '../models/support_region.dart';
+import '../services/contact_support_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
 import '../widgets/contact_form_field.dart';
 import '../widgets/support_info_card.dart';
@@ -13,17 +15,45 @@ import '../widgets/support_info_card.dart';
 /// message, and shows the region-scoped Email/Office details already
 /// modeled by [SupportRegionData].
 ///
-/// TODO: No email-sending backend/API exists yet — see [_handleSubmit],
-/// which currently only shows a placeholder SnackBar once the form
-/// validates. Wire up the real Contact Us submission API there once it
-/// exists.
+/// TODO: No real Contact Us / support-ticketing backend exists yet — see
+/// [ContactSupportService] and its default
+/// [UnavailableContactSupportService], which never reaches a real backend
+/// and always reports the submission as unavailable. Inject a real
+/// [ContactSupportService] implementation via [contactService] once the
+/// backend contract exists.
+///
+/// TODO: No logged-in profile/session anywhere in this project currently
+/// exposes a real customer name or email (see `lib/data/mock_user.dart`,
+/// which only holds a hardcoded display name for the Home/Profile
+/// screens, and the Login screen, which never produces a session/profile
+/// object at all). [initialName]/[initialEmail] exist so a real
+/// profile/session source can prefill this form later without further
+/// changes here; until then they're only exercised by tests.
 class ContactUsScreen extends StatefulWidget {
-  const ContactUsScreen({super.key, this.region});
+  const ContactUsScreen({
+    super.key,
+    this.region,
+    this.contactService = const UnavailableContactSupportService(),
+    this.initialName,
+    this.initialEmail,
+  });
 
   /// The Support region selected on the landing screen, so this screen can
   /// show region-scoped contact details instead of generic/unrelated ones.
   /// Falls back to the first configured region when not supplied.
   final SupportRegionData? region;
+
+  /// Injectable so tests can supply a fake/in-memory service instead of
+  /// depending on a real backend, which doesn't exist yet. Defaults to
+  /// [UnavailableContactSupportService], the explicitly non-production
+  /// placeholder.
+  final ContactSupportService contactService;
+
+  /// Prefill values for the customer's name/email, sourced from a
+  /// logged-in profile/session once one exists. Null in production today
+  /// since no such source exists — see the class-level TODO above.
+  final String? initialName;
+  final String? initialEmail;
 
   @override
   State<ContactUsScreen> createState() => _ContactUsScreenState();
@@ -40,12 +70,47 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   final _workEmailFocusNode = FocusNode();
   final _messageFocusNode = FocusNode();
 
-  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
   ContactSubject? _selectedSubject;
   bool _isSubmitting = false;
+  bool _nameEditedByUser = false;
+  bool _emailEditedByUser = false;
+  AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
 
   SupportRegionData get _region => widget.region ?? kSupportRegions.first;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyProfilePrefill(widget.initialName, widget.initialEmail);
+  }
+
+  @override
+  void didUpdateWidget(covariant ContactUsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialName != oldWidget.initialName ||
+        widget.initialEmail != oldWidget.initialEmail) {
+      _applyProfilePrefill(widget.initialName, widget.initialEmail);
+    }
+  }
+
+  /// Prefills the name/email fields from a logged-in profile/session, once
+  /// one exists (see the class-level TODO). Only overwrites a field that
+  /// the customer hasn't touched and hasn't already typed something into,
+  /// so late-arriving profile data can never clobber an in-progress edit.
+  void _applyProfilePrefill(String? name, String? email) {
+    final trimmedName = name?.trim() ?? '';
+    if (!_nameEditedByUser &&
+        trimmedName.isNotEmpty &&
+        _fullNameController.text.isEmpty) {
+      _fullNameController.text = trimmedName;
+    }
+    final trimmedEmail = email?.trim() ?? '';
+    if (!_emailEditedByUser &&
+        trimmedEmail.isNotEmpty &&
+        _workEmailController.text.isEmpty) {
+      _workEmailController.text = trimmedEmail;
+    }
+  }
 
   @override
   void dispose() {
@@ -62,48 +127,67 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     Navigator.of(context).maybePop();
   }
 
-  /// Validates the form and, once valid, shows a placeholder "not connected
-  /// yet" SnackBar instead of pretending an email was sent.
-  ///
-  /// TODO: Replace this placeholder with a real submission call (e.g. to a
-  /// Contact Us / email-support API) once that backend exists. The form
-  /// data is available via [_fullNameController], [_workEmailController],
-  /// [_selectedSubject], and [_messageController].
-  void _handleSubmit() {
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _handleSubmit() async {
     if (_isSubmitting) return;
 
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) {
+      setState(() => _autovalidateMode = AutovalidateMode.onUserInteraction);
       _focusFirstInvalidField();
       return;
     }
 
+    final request = ContactRequest(
+      name: _fullNameController.text.trim(),
+      email: _workEmailController.text.trim(),
+      subject: _selectedSubject!,
+      message: _messageController.text.trim(),
+      regionId: _region.id,
+    );
+
     setState(() => _isSubmitting = true);
     FocusScope.of(context).unfocus();
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Email support submission is not connected yet.'),
-        ),
-      );
-
-    // Guard only briefly against duplicate rapid taps; there is no real
-    // network call to await yet.
-    Future.delayed(const Duration(milliseconds: 500), () {
+    try {
+      final result = await widget.contactService.submit(request);
       if (!mounted) return;
-      setState(() => _isSubmitting = false);
-    });
+      switch (result.outcome) {
+        case ContactSubmissionOutcome.success:
+          _showSnackBar(
+            result.message ??
+                "Thanks — we've received your message and will be in touch "
+                    'soon.',
+          );
+        case ContactSubmissionOutcome.failure:
+          _showSnackBar(
+            result.message ??
+                "We couldn't send your message. Please try again.",
+          );
+        case ContactSubmissionOutcome.unavailable:
+          _showSnackBar('Email support submission is not connected yet.');
+      }
+    } catch (error) {
+      // Technical detail only — never the name, email, or message content.
+      debugPrint('Contact Us submission failed: $error');
+      if (!mounted) return;
+      _showSnackBar("We couldn't send your message. Please try again.");
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   void _focusFirstInvalidField() {
-    if (_fullNameController.text.trim().isEmpty) {
+    if (validateRequiredField(_fullNameController.text, '') != null) {
       _fullNameFocusNode.requestFocus();
-    } else if (_workEmailController.text.trim().isEmpty ||
-        !_emailPattern.hasMatch(_workEmailController.text.trim())) {
+    } else if (validateEmailField(_workEmailController.text) != null) {
       _workEmailFocusNode.requestFocus();
-    } else if (_messageController.text.trim().isEmpty) {
+    } else if (validateRequiredField(_messageController.text, '') != null) {
       _messageFocusNode.requestFocus();
     }
   }
@@ -128,6 +212,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             child: ResponsiveMaxWidth(
               child: Form(
                 key: _formKey,
+                autovalidateMode: _autovalidateMode,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -365,12 +450,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
               decoration: _fieldDecoration(hintText: 'Jane Weaver'),
               onFieldSubmitted: (_) => _workEmailFocusNode.requestFocus(),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your full name.';
-                }
-                return null;
-              },
+              onChanged: (_) => _nameEditedByUser = true,
+              validator: (value) =>
+                  validateRequiredField(value, 'Please enter your full name.'),
             ),
           ),
           const SizedBox(height: 20),
@@ -386,16 +468,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
               decoration: _fieldDecoration(hintText: 'jane@textile.co'),
               onFieldSubmitted: (_) => _messageFocusNode.requestFocus(),
-              validator: (value) {
-                final trimmed = value?.trim() ?? '';
-                if (trimmed.isEmpty) {
-                  return 'Please enter your work email.';
-                }
-                if (!_emailPattern.hasMatch(trimmed)) {
-                  return 'Please enter a valid email address.';
-                }
-                return null;
-              },
+              onChanged: (_) => _emailEditedByUser = true,
+              validator: validateEmailField,
             ),
           ),
           const SizedBox(height: 20),
@@ -421,12 +495,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               onChanged: (subject) {
                 setState(() => _selectedSubject = subject);
               },
-              validator: (value) {
-                if (value == null) {
-                  return 'Please select a subject.';
-                }
-                return null;
-              },
+              validator: validateSubjectField,
             ),
           ),
           const SizedBox(height: 20),
@@ -444,12 +513,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               decoration: _fieldDecoration(
                 hintText: 'Tell us more about your project requirements...',
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a message.';
-                }
-                return null;
-              },
+              validator: (value) =>
+                  validateRequiredField(value, 'Please enter a message.'),
             ),
           ),
           const SizedBox(height: 24),
