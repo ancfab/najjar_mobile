@@ -11,6 +11,8 @@ import 'package:anc_fabrics/data/support_regions_data.dart';
 import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/phone_launcher.dart';
+import 'package:anc_fabrics/services/url_launcher_client.dart';
 import 'package:anc_fabrics/services/whatsapp_launcher.dart';
 import 'package:anc_fabrics/utils/phone_number.dart';
 import 'package:anc_fabrics/widgets/support_action_card.dart';
@@ -412,6 +414,272 @@ void main() {
       await tester.tap(button);
       await tester.tap(button);
       await tester.tap(button);
+
+      expect(client.attemptedUris, hasLength(1));
+
+      inFlight.complete(true);
+      await tester.pumpAndSettle();
+
+      expect(client.attemptedUris, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Hotline tap-to-call flow', () {
+    final singleNumberRegion = SupportRegionData(
+      id: SupportRegionId.uae,
+      displayName: 'PhoneLand',
+      hotlineNumbers: const ['+961 1 275 019'],
+    );
+    final multiNumberRegion = SupportRegionData(
+      id: SupportRegionId.uae,
+      displayName: 'MultiLand',
+      hotlineNumbers: const ['+971 4 123 4567', '+971 4 987 6543'],
+    );
+
+    Future<void> pumpSupportWithPhoneRegions(
+      WidgetTester tester,
+      List<SupportRegionData> regions,
+      PhoneLauncher launcher,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SupportScreen(regions: regions, phoneLauncher: launcher),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // The hotline card sits below the fold at the default test viewport, so
+    // every tap needs to scroll it into view first.
+    Finder hotlineFinder(String number) =>
+        find.byKey(ValueKey('support-hotline-number-$number'));
+
+    Future<void> tapHotlineNumber(WidgetTester tester, String number) async {
+      final finder = hotlineFinder(number);
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Hotline numbers render for the default region', (
+      tester,
+    ) async {
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: FakeUrlLauncherClient()));
+
+      await tester.ensureVisible(
+        hotlineFinder(singleNumberRegion.hotlineNumbers.first),
+      );
+      expect(
+        hotlineFinder(singleNumberRegion.hotlineNumbers.first),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Tapping a hotline number launches a tel: URI with that exact '
+        'normalized number, preserving the leading + and stripping display '
+        'formatting', (tester) async {
+      final client = FakeUrlLauncherClient(telResult: true);
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: client));
+
+      await tapHotlineNumber(tester, singleNumberRegion.hotlineNumbers.first);
+
+      expect(client.attemptedUris, hasLength(1));
+      expect(client.attemptedUris.single.toString(), 'tel:+9611275019');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('No country code is guessed for a local hotline number', (
+      tester,
+    ) async {
+      final client = FakeUrlLauncherClient(telResult: true);
+      final localRegion = SupportRegionData(
+        id: SupportRegionId.oman,
+        displayName: 'LocalLand',
+        hotlineNumbers: const ['(01) 234 567'],
+      );
+      await pumpSupportWithPhoneRegions(tester, [
+        localRegion,
+      ], PhoneLauncher(client: client));
+
+      await tapHotlineNumber(tester, localRegion.hotlineNumbers.first);
+
+      expect(client.attemptedUris.single.toString(), 'tel:01234567');
+    });
+
+    testWidgets(
+      'With multiple hotline numbers, tapping the second launches only the '
+      'second number',
+      (tester) async {
+        final client = FakeUrlLauncherClient(telResult: true);
+        await pumpSupportWithPhoneRegions(tester, [
+          multiNumberRegion,
+        ], PhoneLauncher(client: client));
+
+        await tapHotlineNumber(tester, multiNumberRegion.hotlineNumbers[1]);
+
+        expect(client.attemptedUris, hasLength(1));
+        expect(client.attemptedUris.single.toString(), 'tel:+97149876543');
+      },
+    );
+
+    testWidgets('Launch success shows no failure SnackBar', (tester) async {
+      final client = FakeUrlLauncherClient(telResult: true);
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: client));
+
+      await tapHotlineNumber(tester, singleNumberRegion.hotlineNumbers.first);
+
+      expect(
+        find.text('Unable to open the phone dialer. Please try again.'),
+        findsNothing,
+      );
+      expect(find.text('This hotline number is not available.'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Launch returning false shows a user-friendly failure '
+        'message', (tester) async {
+      final client = FakeUrlLauncherClient(telResult: false);
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: client));
+
+      await tapHotlineNumber(tester, singleNumberRegion.hotlineNumbers.first);
+
+      expect(
+        find.text('Unable to open the phone dialer. Please try again.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Launch throwing shows a user-friendly failure message', (
+      tester,
+    ) async {
+      final client = FakeUrlLauncherClient(
+        telResult: Exception('dialer launch failed'),
+      );
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: client));
+
+      await tapHotlineNumber(tester, singleNumberRegion.hotlineNumbers.first);
+
+      expect(
+        find.text('Unable to open the phone dialer. Please try again.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'An invalid hotline number never calls the launcher and shows the '
+      'unavailable message',
+      (tester) async {
+        final client = FakeUrlLauncherClient();
+        const invalidRegion = SupportRegionData(
+          id: SupportRegionId.iraq,
+          displayName: 'InvalidLand',
+          // Formatting characters only, with no usable digits — text is
+          // non-empty (unlike '') so the tap can hit-test the row.
+          hotlineNumbers: ['(--)'],
+        );
+        await pumpSupportWithPhoneRegions(tester, [
+          invalidRegion,
+        ], PhoneLauncher(client: client));
+
+        await tapHotlineNumber(tester, invalidRegion.hotlineNumbers.first);
+
+        expect(client.attemptedUris, isEmpty);
+        expect(
+          find.text('This hotline number is not available.'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets("Selecting another region before tapping uses the new region's "
+        "hotline number, not the previous region's", (tester) async {
+      final client = FakeUrlLauncherClient(telResult: true);
+      final regionA = SupportRegionData(
+        id: SupportRegionId.uae,
+        displayName: 'HotlineRegionA',
+        hotlineNumbers: const ['+971 4 123 4567'],
+      );
+      final regionB = SupportRegionData(
+        id: SupportRegionId.lebanon,
+        displayName: 'HotlineRegionB',
+        hotlineNumbers: const ['+961 1 275 019'],
+      );
+      await pumpSupportWithPhoneRegions(tester, [
+        regionA,
+        regionB,
+      ], PhoneLauncher(client: client));
+
+      await tester.tap(find.text(regionB.displayName));
+      await tester.pumpAndSettle();
+
+      await tapHotlineNumber(tester, regionB.hotlineNumbers.first);
+
+      expect(client.attemptedUris, hasLength(1));
+      expect(client.attemptedUris.single.toString(), 'tel:+9611275019');
+    });
+
+    testWidgets(
+      'Repeated region changes do not leave stale hotline numbers behind',
+      (tester) async {
+        final client = FakeUrlLauncherClient(telResult: true);
+        final regionA = SupportRegionData(
+          id: SupportRegionId.uae,
+          displayName: 'HotlineRegionA',
+          hotlineNumbers: const ['+971 4 123 4567'],
+        );
+        final regionB = SupportRegionData(
+          id: SupportRegionId.lebanon,
+          displayName: 'HotlineRegionB',
+          hotlineNumbers: const ['+961 1 275 019'],
+        );
+        await pumpSupportWithPhoneRegions(tester, [
+          regionA,
+          regionB,
+        ], PhoneLauncher(client: client));
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.text(regionB.displayName));
+          await tester.pumpAndSettle();
+          expect(hotlineFinder(regionA.hotlineNumbers.first), findsNothing);
+
+          await tester.tap(find.text(regionA.displayName));
+          await tester.pumpAndSettle();
+          expect(hotlineFinder(regionB.hotlineNumbers.first), findsNothing);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Rapid repeated taps only trigger a single dialer launch', (
+      tester,
+    ) async {
+      final inFlight = Completer<bool>();
+      final client = _ControlledUrlLauncherClient(inFlight.future);
+      await pumpSupportWithPhoneRegions(tester, [
+        singleNumberRegion,
+      ], PhoneLauncher(client: client));
+
+      final number = hotlineFinder(singleNumberRegion.hotlineNumbers.first);
+      await tester.ensureVisible(number);
+      await tester.pumpAndSettle();
+      await tester.tap(number);
+      await tester.tap(number);
+      await tester.tap(number);
 
       expect(client.attemptedUris, hasLength(1));
 

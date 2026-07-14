@@ -23,3 +23,26 @@ String? normalizeWhatsAppNumber(String? raw) {
 
   return digitsOnly;
 }
+
+/// Normalizes a phone number into the form suitable for a `tel:` URI.
+///
+/// Unlike [normalizeWhatsAppNumber], a leading `+` (and the international
+/// country code it precedes) is preserved rather than stripped, since
+/// `tel:` URIs may include it. Spaces, hyphens, parentheses, and other
+/// display-only separators are removed either way. A number with no
+/// leading `+` is treated as local and returned digits-only — no country
+/// code is ever guessed or added.
+///
+/// Returns `null` for `null`, empty, or otherwise unusable input (e.g. a
+/// bare `+` or a string with no digits at all).
+String? normalizePhoneNumberForTel(String? raw) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+
+  final hasLeadingPlus = trimmed.startsWith('+');
+  final digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digitsOnly.length < 3) return null;
+
+  return hasLeadingPlus ? '+$digitsOnly' : digitsOnly;
+}

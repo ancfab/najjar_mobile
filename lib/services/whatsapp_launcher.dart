@@ -1,26 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../utils/phone_number.dart';
-
-/// Thin wrapper around the `url_launcher` plugin's static functions so the
-/// Support screen's WhatsApp launch flow can be exercised in tests without
-/// invoking the real platform plugin.
-abstract class UrlLauncherClient {
-  Future<bool> launch(Uri uri);
-}
-
-class UrlLauncherClientImpl implements UrlLauncherClient {
-  const UrlLauncherClientImpl();
-
-  @override
-  Future<bool> launch(Uri uri) {
-    return url_launcher.launchUrl(
-      uri,
-      mode: url_launcher.LaunchMode.externalApplication,
-    );
-  }
-}
+import 'url_launcher_client.dart';
 
 /// How a [WhatsAppLauncher.open] attempt resolved.
 enum WhatsAppLaunchOutcome {

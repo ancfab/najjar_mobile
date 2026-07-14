@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/support_regions_data.dart';
 import '../models/support_region.dart';
+import '../services/phone_launcher.dart';
 import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
@@ -19,21 +20,26 @@ import 'contact_us_screen.dart';
 /// TODO: Contact details (email, office address, hotline numbers, support
 /// hours) are not yet verified for any region — see
 /// `lib/data/support_regions_data.dart` for where to plug in confirmed
-/// values, and this screen's `_onCallHotline` for where to wire up a real
-/// `url_launcher` call once hotline behavior is defined. WhatsApp is
-/// already wired to `WhatsAppLauncher`, but still shows a "not yet
-/// available" message per region until `whatsappNumber` is populated.
+/// values. WhatsApp is already wired to `WhatsAppLauncher` and hotline
+/// numbers are wired to `PhoneLauncher`, but both still show a "not yet
+/// available" message per region until real contact numbers are populated.
 class SupportScreen extends StatefulWidget {
   const SupportScreen({
     super.key,
     WhatsAppLauncher? whatsAppLauncher,
+    PhoneLauncher? phoneLauncher,
     List<SupportRegionData>? regions,
   }) : whatsAppLauncher = whatsAppLauncher ?? const WhatsAppLauncher(),
+       phoneLauncher = phoneLauncher ?? const PhoneLauncher(),
        regions = regions ?? kSupportRegions;
 
   /// Injectable so tests can supply a fake launcher instead of touching the
   /// real `url_launcher` plugin.
   final WhatsAppLauncher whatsAppLauncher;
+
+  /// Injectable so tests can supply a fake launcher instead of touching the
+  /// real `url_launcher` plugin.
+  final PhoneLauncher phoneLauncher;
 
   /// Injectable so tests can exercise the "WhatsApp number available"
   /// launch flow with a test-only region, since no production region in
@@ -48,6 +54,7 @@ class SupportScreen extends StatefulWidget {
 class _SupportScreenState extends State<SupportScreen> {
   late SupportRegionId _selectedRegionId = widget.regions.first.id;
   bool _isWhatsAppLaunching = false;
+  bool _isPhoneLaunching = false;
 
   SupportRegionData get _selectedRegion =>
       widget.regions.firstWhere((region) => region.id == _selectedRegionId);
@@ -99,10 +106,24 @@ class _SupportScreenState extends State<SupportScreen> {
     );
   }
 
-  void _onCallHotline(String number) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Calling $number is not yet available.')),
-    );
+  Future<void> _onCallHotline(String number) async {
+    if (_isPhoneLaunching) return;
+
+    setState(() => _isPhoneLaunching = true);
+    try {
+      final result = await widget.phoneLauncher.call(number);
+      if (!mounted) return;
+      switch (result.outcome) {
+        case PhoneLaunchOutcome.launched:
+          break;
+        case PhoneLaunchOutcome.unavailable:
+          _showSnackBar('This hotline number is not available.');
+        case PhoneLaunchOutcome.failed:
+          _showSnackBar('Unable to open the phone dialer. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isPhoneLaunching = false);
+    }
   }
 
   @override
@@ -309,17 +330,21 @@ class _SupportScreenState extends State<SupportScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final number in numbers)
-          InkWell(
-            key: ValueKey('support-hotline-number-$number'),
-            onTap: () => _onCallHotline(number),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                number,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textNavy,
+          Semantics(
+            button: true,
+            label: 'Call $number',
+            child: InkWell(
+              key: ValueKey('support-hotline-number-$number'),
+              onTap: () => _onCallHotline(number),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  number,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textNavy,
+                  ),
                 ),
               ),
             ),

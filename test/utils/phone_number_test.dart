@@ -49,4 +49,43 @@ void main() {
       expect(normalizeWhatsAppNumber('+'), isNull);
     });
   });
+
+  group('normalizePhoneNumberForTel', () {
+    test('preserves the leading + and strips spaces', () {
+      expect(normalizePhoneNumberForTel('+961 1 275 019'), '+9611275019');
+    });
+
+    test('preserves the leading + and strips hyphens', () {
+      expect(normalizePhoneNumberForTel('+971-4-123-4567'), '+97141234567');
+    });
+
+    test('strips parentheses and other display formatting', () {
+      expect(normalizePhoneNumberForTel('+1 (555) 123-4567'), '+15551234567');
+    });
+
+    test('normalizes a local number without a leading + and without guessing '
+        'a country code', () {
+      expect(normalizePhoneNumberForTel('(01) 234 567'), '01234567');
+    });
+
+    test('returns null for null input', () {
+      expect(normalizePhoneNumberForTel(null), isNull);
+    });
+
+    test('returns null for an empty string', () {
+      expect(normalizePhoneNumberForTel(''), isNull);
+    });
+
+    test('returns null for a blank string', () {
+      expect(normalizePhoneNumberForTel('   '), isNull);
+    });
+
+    test('returns null for a + with no digits', () {
+      expect(normalizePhoneNumberForTel('+'), isNull);
+    });
+
+    test('returns null for formatting characters with no digits', () {
+      expect(normalizePhoneNumberForTel('(--)'), isNull);
+    });
+  });
 }

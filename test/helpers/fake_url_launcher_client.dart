@@ -1,25 +1,30 @@
-// Shared fake UrlLauncherClient for tests that exercise WhatsAppLauncher
-// (directly or via SupportScreen) without invoking the real url_launcher
-// plugin.
+// Shared fake UrlLauncherClient for tests that exercise WhatsAppLauncher or
+// PhoneLauncher (directly or via SupportScreen) without invoking the real
+// url_launcher plugin.
 
-import 'package:anc_fabrics/services/whatsapp_launcher.dart';
+import 'package:anc_fabrics/services/url_launcher_client.dart';
 
 class FakeUrlLauncherClient implements UrlLauncherClient {
-  FakeUrlLauncherClient({this.nativeResult, this.webResult});
+  FakeUrlLauncherClient({this.nativeResult, this.webResult, this.telResult});
 
   /// `true`/`false` to resolve the launch call, or an [Exception] to throw
-  /// from it, keyed by whether the URI targets the native `whatsapp://`
-  /// scheme or the `https://wa.me/` web fallback.
+  /// from it, keyed by which URI scheme is targeted: the native
+  /// `whatsapp://` scheme, the `https://wa.me/` web fallback, or a `tel:`
+  /// dialer URI.
   final Object? nativeResult;
   final Object? webResult;
+  final Object? telResult;
 
   final List<Uri> attemptedUris = [];
 
   @override
   Future<bool> launch(Uri uri) async {
     attemptedUris.add(uri);
-    final isNative = uri.scheme == 'whatsapp';
-    final outcome = isNative ? nativeResult : webResult;
+    final Object? outcome = switch (uri.scheme) {
+      'whatsapp' => nativeResult,
+      'tel' => telResult,
+      _ => webResult,
+    };
     if (outcome is Exception) throw outcome;
     return outcome as bool? ?? false;
   }
