@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/support_regions_data.dart';
 import '../models/support_region.dart';
+import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../widgets/support_action_card.dart';
@@ -15,35 +16,76 @@ import 'contact_us_screen.dart';
 /// contact cards (live chat/email, corporate office, direct hotline, and
 /// support hours).
 ///
-/// TODO: Contact details (WhatsApp, email, office address, hotline
-/// numbers, support hours) are not yet verified for any region — see
+/// TODO: Contact details (email, office address, hotline numbers, support
+/// hours) are not yet verified for any region — see
 /// `lib/data/support_regions_data.dart` for where to plug in confirmed
-/// values, and this screen's `_onChatOnWhatsApp`/`_onCallHotline` for
-/// where to wire up real `url_launcher` calls once those values and the
-/// package are added.
+/// values, and this screen's `_onCallHotline` for where to wire up a real
+/// `url_launcher` call once hotline behavior is defined. WhatsApp is
+/// already wired to `WhatsAppLauncher`, but still shows a "not yet
+/// available" message per region until `whatsappNumber` is populated.
 class SupportScreen extends StatefulWidget {
-  const SupportScreen({super.key});
+  const SupportScreen({
+    super.key,
+    WhatsAppLauncher? whatsAppLauncher,
+    List<SupportRegionData>? regions,
+  }) : whatsAppLauncher = whatsAppLauncher ?? const WhatsAppLauncher(),
+       regions = regions ?? kSupportRegions;
+
+  /// Injectable so tests can supply a fake launcher instead of touching the
+  /// real `url_launcher` plugin.
+  final WhatsAppLauncher whatsAppLauncher;
+
+  /// Injectable so tests can exercise the "WhatsApp number available"
+  /// launch flow with a test-only region, since no production region in
+  /// `kSupportRegions` has a verified `whatsappNumber` yet. Defaults to
+  /// `kSupportRegions`.
+  final List<SupportRegionData> regions;
 
   @override
   State<SupportScreen> createState() => _SupportScreenState();
 }
 
 class _SupportScreenState extends State<SupportScreen> {
-  SupportRegionId _selectedRegionId = kSupportRegions.first.id;
+  late SupportRegionId _selectedRegionId = widget.regions.first.id;
+  bool _isWhatsAppLaunching = false;
 
   SupportRegionData get _selectedRegion =>
-      kSupportRegions.firstWhere((region) => region.id == _selectedRegionId);
+      widget.regions.firstWhere((region) => region.id == _selectedRegionId);
 
   void _selectRegion(SupportRegionId regionId) {
     setState(() => _selectedRegionId = regionId);
   }
 
-  void _onChatOnWhatsApp() {
-    final number = _selectedRegion.whatsappNumber;
-    final message = number == null
-        ? 'WhatsApp support for ${_selectedRegion.displayName} is being '
-              'set up.'
-        : 'Chatting on WhatsApp at $number is not yet available.';
+  Future<void> _onChatOnWhatsApp() async {
+    if (_isWhatsAppLaunching) return;
+
+    // Read the region fresh at tap time (not captured earlier) so a region
+    // switch before this async work resolves can't use stale contact data.
+    final region = _selectedRegion;
+    final number = region.whatsappNumber;
+    if (number == null || number.trim().isEmpty) {
+      _showSnackBar(
+        'WhatsApp support is not available for ${region.displayName} yet.',
+      );
+      return;
+    }
+
+    setState(() => _isWhatsAppLaunching = true);
+    try {
+      final result = await widget.whatsAppLauncher.open(number);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(
+          "Couldn't open WhatsApp for ${region.displayName}. Please try "
+          'again later.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isWhatsAppLaunching = false);
+    }
+  }
+
+  void _showSnackBar(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
@@ -87,7 +129,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 const SizedBox(height: 20),
                 SupportRegionSelector(
                   key: const ValueKey('support-region-selector'),
-                  regions: kSupportRegions,
+                  regions: widget.regions,
                   selectedRegionId: _selectedRegionId,
                   onRegionSelected: _selectRegion,
                 ),
