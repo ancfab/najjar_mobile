@@ -12,7 +12,10 @@ const String kSampleInvoiceNumber = '#INV-8821';
 /// TODO: Replace with the real Invoice Details API once the endpoint and
 /// response shape are confirmed. This is the only sample invoice available
 /// until then.
-const List<Invoice> kMockInvoices = [
+///
+/// Not `const` because [InvoiceTimelineEvent.occurredAt] holds `DateTime`
+/// values, and `DateTime` has no const constructor.
+final List<Invoice> kMockInvoices = [
   Invoice(
     invoiceNumber: kSampleInvoiceNumber,
     status: InvoiceStatus.paid,
@@ -27,5 +30,41 @@ const List<Invoice> kMockInvoices = [
     dueDate: 'Oct 28, 2023',
     paymentMethod: 'Bank Transfer',
     paymentReferenceMasked: '4492',
+    items: [
+      InvoiceLineItem(
+        name: 'Egyptian Cotton Sateen (600TC)',
+        description: 'Midnight Blue Dye Finish, 50m Roll',
+        quantity: 12,
+        unit: 'Rolls',
+        unitPrice: 850.0,
+      ),
+      InvoiceLineItem(
+        name: 'Brushed Twill Weave',
+        description: 'Industrial Strength Heavy-Weight, 30m Roll',
+        quantity: 5,
+        unit: 'Rolls',
+        unitPrice: 410.0,
+      ),
+    ],
+    // Flat sample tax amount — see [Invoice.taxAmount] for why this is not a
+    // real tax rule.
+    taxAmount: 612.50,
+    // TODO: Replace with timeline events from the real Invoice API/
+    // accounting backend once confirmed — this fixed mock list is the only
+    // source of Payment Timeline data for now. Newest-first order.
+    timelineEvents: [
+      InvoiceTimelineEvent(
+        title: 'Payment Received',
+        occurredAt: DateTime(2023, 10, 16, 9, 12),
+      ),
+      InvoiceTimelineEvent(
+        title: 'Invoice Sent',
+        occurredAt: DateTime(2023, 10, 14, 14, 45),
+      ),
+      InvoiceTimelineEvent(
+        title: 'Invoice Generated',
+        occurredAt: DateTime(2023, 10, 14, 13, 20),
+      ),
+    ],
   ),
 ];

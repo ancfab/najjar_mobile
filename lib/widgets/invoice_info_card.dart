@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import 'invoice_info_section.dart';
+import 'invoice_line_items_table.dart';
 import 'invoice_payment_method_row.dart';
 import 'invoice_status_badge.dart';
+import 'payment_timeline.dart';
 
 /// Bordered white card showing an invoice's key details: status/number/
-/// issued date summary, Billed To, Due Date, and Payment Method.
+/// issued date summary, Billed To, Due Date, Payment Method, and the
+/// line-items table with its Subtotal/Tax/Total Amount summary.
 class InvoiceInfoCard extends StatelessWidget {
   const InvoiceInfoCard({
     super.key,
@@ -59,6 +62,14 @@ class InvoiceInfoCard extends StatelessWidget {
               maskedReference: invoice.paymentReferenceMasked,
             ),
           ),
+          const SizedBox(height: 20),
+          InvoiceLineItemsTable(invoice: invoice),
+          if (invoice.timelineEvents.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 20),
+            PaymentTimeline(events: invoice.timelineEvents),
+          ],
         ],
       ),
     );

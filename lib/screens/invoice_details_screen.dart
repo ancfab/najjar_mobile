@@ -13,11 +13,12 @@ import 'profile_screen.dart';
 
 /// Invoice Details screen: breadcrumb + title, Print/Download PDF actions,
 /// and the invoice information card (status/number/issued date, Billed To,
-/// Due Date, Payment Method).
+/// Due Date, Payment Method, line-items table, and Subtotal/Tax/Total
+/// Amount summary).
 ///
-/// This is only the first section of the Invoice Details screen — later
-/// tasks will add invoice line items, totals, notes, payment history, and a
-/// footer once their screenshots/scope are provided.
+/// These are only the first sections of the Invoice Details screen — later
+/// tasks will add notes, payment history, and a footer once their
+/// screenshots/scope are provided.
 ///
 /// TODO: Replace mock invoice fetching with the real Invoice Details API
 /// once the endpoint is confirmed. All fetching on this screen is

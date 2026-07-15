@@ -1,7 +1,7 @@
 // Widget checks for the Invoice Details screen: title, breadcrumb, PAID
 // status badge, invoice number/issued date, Print/Download PDF actions,
-// Billed To/Due Date/Payment Method sections, narrow-width overflow safety,
-// and scrolling to the Payment Method section.
+// Billed To/Due Date/Payment Method sections, the Payment Timeline section,
+// narrow-width overflow safety, and scrolling to the Payment Method section.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,6 +94,133 @@ void main() {
     });
   });
 
+  group('Line-items table', () {
+    testWidgets('Renders the four column headers', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+
+      expect(find.text('ITEM DETAILS'), findsOneWidget);
+      expect(find.text('QTY'), findsOneWidget);
+      expect(find.text('UNIT PRICE'), findsOneWidget);
+      expect(find.text('TOTAL'), findsOneWidget);
+    });
+
+    testWidgets('Renders the first line item', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+
+      expect(find.text('Egyptian Cotton Sateen (600TC)'), findsOneWidget);
+      expect(find.text('Midnight Blue Dye Finish, 50m Roll'), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
+      expect(find.text('\$850.00'), findsOneWidget);
+      expect(find.text('\$10,200.00'), findsOneWidget);
+      // "Rolls" is the unit for both line items.
+      expect(find.text('Rolls'), findsNWidgets(2));
+    });
+
+    testWidgets('Renders the second line item', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+
+      expect(find.text('Brushed Twill Weave'), findsOneWidget);
+      expect(
+        find.text('Industrial Strength Heavy-Weight, 30m Roll'),
+        findsOneWidget,
+      );
+      expect(find.text('5'), findsOneWidget);
+      expect(find.text('\$410.00'), findsOneWidget);
+      expect(find.text('\$2,050.00'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Line totals are quantity times unit price, not independently '
+      'hardcoded',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+
+        // 12 x $850.00 and 5 x $410.00.
+        expect(find.text('\$10,200.00'), findsOneWidget);
+        expect(find.text('\$2,050.00'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Renders Subtotal calculated from the line item totals', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(tester);
+
+      expect(find.text('Subtotal'), findsOneWidget);
+      // $10,200.00 + $2,050.00.
+      expect(find.text('\$12,250.00'), findsOneWidget);
+    });
+
+    testWidgets('Renders Tax and Total Amount, where total is subtotal + tax', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(tester);
+
+      expect(find.text('Tax'), findsOneWidget);
+      expect(find.text('\$612.50'), findsOneWidget);
+      expect(find.text('Total Amount'), findsOneWidget);
+      // $12,250.00 + $612.50.
+      expect(find.text('\$12,862.50'), findsOneWidget);
+    });
+  });
+
+  group('Payment Timeline', () {
+    testWidgets('Renders the heading and all three events in newest-first '
+        'order', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+      await tester.scrollUntilVisible(
+        find.text('Payment Timeline'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(find.text('Payment Timeline'), findsOneWidget);
+
+      expect(find.text('Payment Received'), findsOneWidget);
+      expect(find.text('Oct 16, 2023 - 09:12 AM'), findsOneWidget);
+      expect(find.text('Invoice Sent'), findsOneWidget);
+      expect(find.text('Oct 14, 2023 - 02:45 PM'), findsOneWidget);
+      expect(find.text('Invoice Generated'), findsOneWidget);
+      expect(find.text('Oct 14, 2023 - 01:20 PM'), findsOneWidget);
+
+      // Newest-first: "Payment Received" appears above "Invoice Sent",
+      // which appears above "Invoice Generated".
+      final paymentReceivedY = tester
+          .getTopLeft(find.text('Payment Received'))
+          .dy;
+      final invoiceSentY = tester.getTopLeft(find.text('Invoice Sent')).dy;
+      final invoiceGeneratedY = tester
+          .getTopLeft(find.text('Invoice Generated'))
+          .dy;
+      expect(paymentReceivedY, lessThan(invoiceSentY));
+      expect(invoiceSentY, lessThan(invoiceGeneratedY));
+    });
+
+    testWidgets(
+      'Renders exactly three completed checkmarks and connectors only '
+      'between events',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+        await tester.scrollUntilVisible(
+          find.text('Payment Timeline'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.byIcon(Icons.check), findsNWidgets(3));
+        expect(
+          find.byKey(const ValueKey('payment-timeline-marker')),
+          findsNWidgets(3),
+        );
+        // 3 events => 2 connectors (none after the last event).
+        expect(
+          find.byKey(const ValueKey('payment-timeline-connector')),
+          findsNWidgets(2),
+        );
+      },
+    );
+  });
+
   group('Print and Download PDF actions', () {
     testWidgets('Renders the Print and Download PDF buttons', (tester) async {
       await _pumpInvoiceDetailsScreen(tester);
@@ -149,19 +276,54 @@ void main() {
       });
     }
 
-    testWidgets('Can scroll down to the Payment Method section', (
-      tester,
-    ) async {
-      await _pumpInvoiceDetailsScreen(tester, width: 320);
+    testWidgets(
+      'Can scroll from the header down to the Payment Timeline',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester, width: 320);
 
-      await tester.scrollUntilVisible(
-        find.text('PAYMENT METHOD'),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
+        expect(find.text('Invoice Details'), findsOneWidget);
 
-      expect(find.text('PAYMENT METHOD'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        await tester.scrollUntilVisible(
+          find.text('PAYMENT METHOD'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('PAYMENT METHOD'), findsOneWidget);
+
+        await tester.scrollUntilVisible(
+          find.text('Total Amount'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Total Amount'), findsOneWidget);
+
+        await tester.scrollUntilVisible(
+          find.text('Payment Timeline'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Payment Timeline'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Long item descriptions wrap without clipping on a narrow viewport',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester, width: 320);
+
+        await tester.scrollUntilVisible(
+          find.text('Industrial Strength Heavy-Weight, 30m Roll'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(
+          find.text('Industrial Strength Heavy-Weight, 30m Roll'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }
