@@ -3,10 +3,17 @@
 // Billed To/Due Date/Payment Method sections, the Payment Timeline section,
 // narrow-width overflow safety, and scrolling to the Payment Method section.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/screens/invoice_details_screen.dart';
+import 'package:anc_fabrics/services/invoice_document_actions.dart';
+import 'package:anc_fabrics/services/invoice_pdf_service.dart';
+
+import 'helpers/fake_invoice_document_actions.dart';
+import 'helpers/fake_invoice_pdf_service.dart';
 
 /// The mock Invoice Details fetch has a simulated 400ms network delay;
 /// `pumpAndSettle` alone won't wait for that bare `Future.delayed` since it
@@ -20,6 +27,8 @@ Future<void> _pumpInvoiceDetailsScreen(
   WidgetTester tester, {
   String invoiceNumber = '#INV-8821',
   double width = 390,
+  InvoicePdfService? pdfService,
+  InvoiceDocumentActions? documentActions,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -27,7 +36,13 @@ Future<void> _pumpInvoiceDetailsScreen(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(home: InvoiceDetailsScreen(invoiceNumber: invoiceNumber)),
+    MaterialApp(
+      home: InvoiceDetailsScreen(
+        invoiceNumber: invoiceNumber,
+        pdfService: pdfService,
+        documentActions: documentActions,
+      ),
+    ),
   );
   await _settleFetch(tester);
 }
@@ -237,31 +252,179 @@ void main() {
       expect(find.text('Download PDF'), findsOneWidget);
     });
 
-    testWidgets('Tapping Print shows the placeholder message safely', (
+    testWidgets(
+      'Tapping Print generates the PDF and calls printPdf with a sanitized '
+      'filename',
+      (tester) async {
+        final pdfService = FakeInvoicePdfService();
+        final documentActions = FakeInvoiceDocumentActions();
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          pdfService: pdfService,
+          documentActions: documentActions,
+        );
+
+        await tester.tap(find.text('Print'));
+        await tester.pumpAndSettle();
+
+        expect(pdfService.generatedFor, hasLength(1));
+        expect(pdfService.generatedFor.single.invoiceNumber, '#INV-8821');
+        expect(documentActions.printCalls, hasLength(1));
+        expect(documentActions.printCalls.single.filename, 'invoice-INV-8821.pdf');
+        expect(documentActions.saveCalls, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Tapping Download PDF generates the PDF and calls savePdf with a '
+      'sanitized filename',
+      (tester) async {
+        final pdfService = FakeInvoicePdfService();
+        final documentActions = FakeInvoiceDocumentActions();
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          pdfService: pdfService,
+          documentActions: documentActions,
+        );
+
+        await tester.tap(find.text('Download PDF'));
+        await tester.pumpAndSettle();
+
+        expect(pdfService.generatedFor, hasLength(1));
+        expect(documentActions.saveCalls, hasLength(1));
+        expect(documentActions.saveCalls.single.filename, 'invoice-INV-8821.pdf');
+        expect(documentActions.printCalls, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Shows a loading spinner on Print and disables both buttons while '
+      'the PDF is being prepared, then restores them',
+      (tester) async {
+        final pendingPrint = Completer<bool>();
+        final documentActions = FakeInvoiceDocumentActions(
+          pendingPrint: pendingPrint,
+        );
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          documentActions: documentActions,
+        );
+
+        await tester.tap(find.text('Print'));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('invoice-action-print-loading')),
+          findsOneWidget,
+        );
+        expect(find.text('Print'), findsNothing);
+        // Download PDF is disabled too, but tapping still shouldn't crash.
+        await tester.tap(find.text('Download PDF'));
+        await tester.pump();
+        expect(documentActions.saveCalls, isEmpty);
+
+        pendingPrint.complete(true);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('invoice-action-print-loading')),
+          findsNothing,
+        );
+        expect(find.text('Print'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Ignores a second Print tap while the first is still in flight',
+      (tester) async {
+        final pdfService = FakeInvoicePdfService();
+        final pendingPrint = Completer<bool>();
+        final documentActions = FakeInvoiceDocumentActions(
+          pendingPrint: pendingPrint,
+        );
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          pdfService: pdfService,
+          documentActions: documentActions,
+        );
+
+        await tester.tap(find.text('Print'));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('invoice-action-print-button')));
+        await tester.pump();
+
+        expect(pdfService.generatedFor, hasLength(1));
+        expect(documentActions.printCalls, hasLength(1));
+
+        pendingPrint.complete(true);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('Shows a cancellation message when the print dialog is dismissed', (
       tester,
     ) async {
-      await _pumpInvoiceDetailsScreen(tester);
+      await _pumpInvoiceDetailsScreen(
+        tester,
+        documentActions: FakeInvoiceDocumentActions(printResult: false),
+      );
 
       await tester.tap(find.text('Print'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Printing was cancelled.'), findsOneWidget);
+    });
+
+    testWidgets('Shows a cancellation message when the save sheet is dismissed', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(
+        tester,
+        documentActions: FakeInvoiceDocumentActions(saveResult: false),
+      );
+
+      await tester.tap(find.text('Download PDF'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Download was cancelled.'), findsOneWidget);
+    });
+
+    testWidgets('Shows a failure message when PDF generation throws', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(
+        tester,
+        pdfService: FakeInvoicePdfService(bytes: Exception('boom')),
+      );
+
+      await tester.tap(find.text('Print'));
+      await tester.pumpAndSettle();
 
       expect(
-        find.text('Invoice printing is not available yet.'),
+        find.text('Unable to print the invoice. Please try again.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Tapping Download PDF shows the placeholder message safely', (
+    testWidgets('Shows a failure message when the native save flow throws', (
       tester,
     ) async {
-      await _pumpInvoiceDetailsScreen(tester);
+      await _pumpInvoiceDetailsScreen(
+        tester,
+        documentActions: FakeInvoiceDocumentActions(
+          saveResult: Exception('boom'),
+        ),
+      );
 
       await tester.tap(find.text('Download PDF'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(
-        find.text('Invoice PDF download is not available yet.'),
+        find.text('Unable to prepare the invoice PDF. Please try again.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

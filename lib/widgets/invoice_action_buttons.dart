@@ -10,15 +10,31 @@ class InvoiceActionButtons extends StatelessWidget {
     super.key,
     required this.onPrint,
     required this.onDownloadPdf,
+    this.isPrinting = false,
+    this.isDownloading = false,
   });
 
   /// Called when Print is tapped. See the Invoice Details screen's handler
-  /// for the current placeholder-vs-real-printing behavior.
+  /// for how the invoice PDF is prepared and handed to the native print
+  /// flow.
   final VoidCallback onPrint;
 
   /// Called when Download PDF is tapped. See the Invoice Details screen's
-  /// handler for the current placeholder-vs-real-download behavior.
+  /// handler for how the invoice PDF is prepared and handed to the native
+  /// save/share flow.
   final VoidCallback onDownloadPdf;
+
+  /// Whether the invoice PDF is currently being prepared for printing.
+  /// Shows a spinner in place of the icon/label and disables both buttons
+  /// so a second PDF preparation can't be triggered mid-flight.
+  final bool isPrinting;
+
+  /// Whether the invoice PDF is currently being prepared for download.
+  /// Shows a spinner in place of the icon/label and disables both buttons
+  /// so a second PDF preparation can't be triggered mid-flight.
+  final bool isDownloading;
+
+  bool get _isBusy => isPrinting || isDownloading;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +54,7 @@ class InvoiceActionButtons extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: onPrint,
+        onTap: _isBusy ? null : onPrint,
         child: Container(
           constraints: const BoxConstraints(minHeight: 48),
           alignment: Alignment.center,
@@ -47,25 +63,39 @@ class InvoiceActionButtons extends StatelessWidget {
             border: Border.all(color: AppColors.darkTeal),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.print_outlined, color: AppColors.darkTeal, size: 18),
-              SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Print',
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                  style: TextStyle(
+          child: isPrinting
+              ? const SizedBox(
+                  key: ValueKey('invoice-action-print-loading'),
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
                     color: AppColors.darkTeal,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
                   ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.print_outlined,
+                      color: AppColors.darkTeal,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Print',
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                        style: TextStyle(
+                          color: AppColors.darkTeal,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -78,30 +108,44 @@ class InvoiceActionButtons extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: onDownloadPdf,
+        onTap: _isBusy ? null : onDownloadPdf,
         child: Container(
           constraints: const BoxConstraints(minHeight: 48),
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.download_outlined, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Download PDF',
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                  style: TextStyle(
+          child: isDownloading
+              ? const SizedBox(
+                  key: ValueKey('invoice-action-download-pdf-loading'),
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
                   ),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.download_outlined,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Download PDF',
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

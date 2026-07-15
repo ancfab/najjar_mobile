@@ -1,9 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
 import '../models/invoice.dart';
+import '../services/invoice_document_actions.dart';
+import '../services/invoice_pdf_service.dart';
 import '../services/mock_invoice_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/filename.dart';
 import '../utils/responsive.dart';
 import '../widgets/invoice_action_buttons.dart';
 import '../widgets/invoice_breadcrumb.dart';
@@ -28,7 +33,12 @@ class InvoiceDetailsScreen extends StatefulWidget {
     super.key,
     required this.invoiceNumber,
     MockInvoiceService? invoiceService,
-  }) : invoiceService = invoiceService ?? const MockInvoiceService();
+    InvoicePdfService? pdfService,
+    InvoiceDocumentActions? documentActions,
+  }) : invoiceService = invoiceService ?? const MockInvoiceService(),
+       pdfService = pdfService ?? const LocalInvoicePdfService(),
+       documentActions =
+           documentActions ?? const PrintingInvoiceDocumentActions();
 
   /// [Invoice.invoiceNumber] of the invoice to load (e.g. "#INV-8821").
   final String invoiceNumber;
@@ -37,16 +47,36 @@ class InvoiceDetailsScreen extends StatefulWidget {
   /// implementation; overridable so tests can inject a fake.
   final MockInvoiceService invoiceService;
 
+  /// Prepares the PDF bytes shared by Print and Download PDF. Defaults to
+  /// on-device generation; overridable so tests can inject a fake.
+  final InvoicePdfService pdfService;
+
+  /// Hands prepared PDF bytes to the native print/save flows. Defaults to
+  /// the real `printing`-plugin-backed implementation; overridable so
+  /// tests can inject a fake instead of invoking the real platform plugin.
+  final InvoiceDocumentActions documentActions;
+
   @override
   State<InvoiceDetailsScreen> createState() => _InvoiceDetailsScreenState();
 }
 
+/// Which invoice PDF action is currently being prepared, if any. Only one
+/// can be active at a time — see [_InvoiceDetailsScreenState._activePdfAction].
+enum _InvoicePdfAction { print, download }
+
 class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   late final MockInvoiceService _invoiceService = widget.invoiceService;
+  late final InvoicePdfService _pdfService = widget.pdfService;
+  late final InvoiceDocumentActions _documentActions = widget.documentActions;
 
   Invoice? _invoice;
   bool _isLoading = true;
   String? _error;
+
+  /// Non-null while an invoice PDF is being generated and handed to the
+  /// native print/save flow, so both buttons can show a loading state and
+  /// reject a second tap until this resolves.
+  _InvoicePdfAction? _activePdfAction;
 
   @override
   void initState() {
@@ -96,36 +126,68 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     );
   }
 
-  /// Handles the Print button tap.
-  ///
-  /// No invoice printing integration exists yet anywhere in this app, so
-  /// this shows a safe placeholder message instead of invoking a printer.
-  ///
-  /// TODO: Wire up real invoice printing once a printing package (e.g.
-  /// `printing`) and the invoice's print-ready layout/PDF source are
-  /// confirmed with product/backend.
-  void _printInvoice() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invoice printing is not available yet.')),
+  /// Handles the Print button tap: generates the invoice PDF (shared with
+  /// Download PDF) and opens the native print dialog.
+  Future<void> _printInvoice() async {
+    await _runPdfAction(
+      action: _InvoicePdfAction.print,
+      perform: (bytes, filename) =>
+          _documentActions.printPdf(bytes, filename),
+      cancelledMessage: 'Printing was cancelled.',
+      failureMessage: 'Unable to print the invoice. Please try again.',
     );
   }
 
-  /// Handles the Download PDF button tap.
-  ///
-  /// No PDF generation/download integration exists yet anywhere in this
-  /// app, so this shows a safe placeholder message instead of fetching or
-  /// generating a fake file.
-  ///
-  /// TODO: Wire up real invoice PDF download once the backend/API team
-  /// confirms the PDF source (generated client-side vs. a backend endpoint
-  /// returning a file/URL) and the required file-saving permissions/
-  /// package (e.g. `path_provider`).
-  void _downloadInvoicePdf() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Invoice PDF download is not available yet.'),
-      ),
+  /// Handles the Download PDF button tap: generates the invoice PDF (shared
+  /// with Print) and opens the native save/share sheet so the user can
+  /// export it.
+  Future<void> _downloadInvoicePdf() async {
+    await _runPdfAction(
+      action: _InvoicePdfAction.download,
+      perform: (bytes, filename) => _documentActions.savePdf(bytes, filename),
+      cancelledMessage: 'Download was cancelled.',
+      failureMessage: 'Unable to prepare the invoice PDF. Please try again.',
     );
+  }
+
+  /// Shared Print/Download PDF flow: generates the invoice PDF once, hands
+  /// it to [perform] (the native print or save flow), and manages the
+  /// loading state/snackbar feedback both actions need identically.
+  ///
+  /// Guards against duplicate requests (an action already in flight is
+  /// ignored) and always restores the buttons afterwards, whether [perform]
+  /// succeeds, is cancelled by the user, or throws.
+  Future<void> _runPdfAction({
+    required _InvoicePdfAction action,
+    required Future<bool> Function(Uint8List bytes, String filename) perform,
+    required String cancelledMessage,
+    required String failureMessage,
+  }) async {
+    final invoice = _invoice;
+    if (invoice == null || _activePdfAction != null) return;
+
+    setState(() => _activePdfAction = action);
+    try {
+      final bytes = await _pdfService.generate(invoice);
+      final filename = invoicePdfFilename(invoice.invoiceNumber);
+      final completed = await perform(bytes, filename);
+      if (!mounted) return;
+      if (!completed) {
+        _showSnackBar(cancelledMessage);
+      }
+    } catch (error) {
+      debugPrint('Invoice PDF action failed: $error');
+      if (!mounted) return;
+      _showSnackBar(failureMessage);
+    } finally {
+      if (mounted) setState(() => _activePdfAction = null);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Handles tapping the Billed To email link.
@@ -264,6 +326,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             InvoiceActionButtons(
               onPrint: _printInvoice,
               onDownloadPdf: _downloadInvoicePdf,
+              isPrinting: _activePdfAction == _InvoicePdfAction.print,
+              isDownloading: _activePdfAction == _InvoicePdfAction.download,
             ),
             const SizedBox(height: 16),
             InvoiceInfoCard(invoice: invoice, onEmailTap: _emailBilledContact),
