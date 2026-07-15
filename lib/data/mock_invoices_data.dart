@@ -56,6 +56,13 @@ final List<Invoice> kMockInvoices = [
     clientVisibleNote:
         'Thank you for your continued business. Please reference invoice '
         '#INV-8821 in any correspondence regarding this payment.',
+    // TODO(api): Replace this temporary mock logistics information with the
+    // confirmed Invoice API/backend fields and status codes once the contract is
+    // available.
+    logisticsInfo: InvoiceLogisticsInfo(
+      statusLabel: 'In Production',
+      estimatedDeliveryDate: DateTime(2023, 10, 30),
+    ),
     // TODO: Replace with timeline events from the real Invoice API/
     // accounting backend once confirmed — this fixed mock list is the only
     // source of Payment Timeline data for now. Newest-first order.

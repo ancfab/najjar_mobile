@@ -13,6 +13,17 @@ const List<String> _monthAbbreviations = [
   'Dec',
 ];
 
+/// Formats [dateTime] as `"MMM d, yyyy"` (e.g. `"Oct 16, 2023"`), date-only
+/// with no time component.
+///
+/// TODO: Switch to locale-aware formatting (e.g. via `package:intl`) once
+/// the app's locale requirements are confirmed — this assumes a fixed
+/// `en_US`-style format.
+String formatDateOnly(DateTime dateTime) {
+  final month = _monthAbbreviations[dateTime.month - 1];
+  return '$month ${dateTime.day}, ${dateTime.year}';
+}
+
 /// Formats [dateTime] as `"MMM d, yyyy - hh:mm a"` (e.g. `"Oct 16, 2023 -
 /// 09:12 AM"`), with a 12-hour, leading-zero hour and no seconds or
 /// timezone.
@@ -26,10 +37,6 @@ const List<String> _monthAbbreviations = [
 /// the app's locale requirements are confirmed — this assumes a fixed
 /// `en_US`-style format.
 String formatEventTimestamp(DateTime dateTime) {
-  final month = _monthAbbreviations[dateTime.month - 1];
-  final day = dateTime.day;
-  final year = dateTime.year;
-
   final hour24 = dateTime.hour;
   final period = hour24 >= 12 ? 'PM' : 'AM';
   var hour12 = hour24 % 12;
@@ -37,5 +44,5 @@ String formatEventTimestamp(DateTime dateTime) {
   final hour = hour12.toString().padLeft(2, '0');
   final minute = dateTime.minute.toString().padLeft(2, '0');
 
-  return '$month $day, $year - $hour:$minute $period';
+  return '${formatDateOnly(dateTime)} - $hour:$minute $period';
 }

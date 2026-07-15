@@ -109,6 +109,66 @@ void main() {
     });
   });
 
+  group('Logistics Status card', () {
+    testWidgets(
+      'Renders as a separate card after the complete Invoice information '
+      'card, with the STATUS and EST. DELIVERY fields',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+        await tester.scrollUntilVisible(
+          find.text('Logistics Status'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.text('Logistics Status'), findsOneWidget);
+        expect(find.text('STATUS'), findsOneWidget);
+        expect(find.text('In Production'), findsOneWidget);
+        expect(find.text('EST. DELIVERY'), findsOneWidget);
+        expect(find.text('Oct 30, 2023'), findsOneWidget);
+
+        // The Logistics Status card must render below the Total Amount row
+        // (the last row of the complete Invoice information card), not
+        // interleaved inside it.
+        final totalAmountY = tester.getTopLeft(find.text('Total Amount')).dy;
+        final logisticsHeadingY = tester
+            .getTopLeft(find.text('Logistics Status'))
+            .dy;
+        expect(logisticsHeadingY, greaterThan(totalAmountY));
+      },
+    );
+
+    testWidgets(
+      'The PAID status badge remains visible and unrelated to the '
+      'Logistics Status card',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+        await tester.scrollUntilVisible(
+          find.text('Logistics Status'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.text('PAID'), findsOneWidget);
+        expect(find.text('Logistics Status'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Can scroll from the header down to the Logistics Status '
+        'card', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester, width: 320);
+
+      await tester.scrollUntilVisible(
+        find.text('Logistics Status'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(find.text('Logistics Status'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('Line-items table', () {
     testWidgets('Renders the four column headers', (tester) async {
       await _pumpInvoiceDetailsScreen(tester);

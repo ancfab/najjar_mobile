@@ -57,6 +57,27 @@ class InvoiceTimelineEvent {
   final DateTime occurredAt;
 }
 
+/// Temporary Invoice Details logistics/shipment info: a free-text status
+/// label (e.g. "In Production") and an estimated delivery date, shown on
+/// [InvoiceLogisticsStatusCard]. [statusLabel] is a plain string rather than
+/// an enum — see the TODO below for why.
+class InvoiceLogisticsInfo {
+  const InvoiceLogisticsInfo({this.statusLabel, this.estimatedDeliveryDate});
+
+  // TODO(product): Confirm the complete client-visible logistics status list
+  // and localization rules before replacing this temporary display label with
+  // a typed status enum or backend status-code mapping.
+  /// Display-only logistics status text (e.g. "In Production"). Null/blank
+  /// means no status is shown.
+  final String? statusLabel;
+
+  // TODO(product): Confirm whether this value represents an estimated,
+  // promised, or committed delivery date and whether timezone conversion is
+  // required before displaying backend data.
+  /// Estimated delivery date. Null means no estimate is shown.
+  final DateTime? estimatedDeliveryDate;
+}
+
 /// A single invoice's Invoice Details data.
 ///
 /// Only the fields needed for the current Invoice Details screen sections
@@ -80,6 +101,7 @@ class Invoice {
     required this.taxAmount,
     this.timelineEvents = const [],
     this.clientVisibleNote,
+    this.logisticsInfo,
   });
 
   /// e.g. "#INV-8821".
@@ -132,6 +154,11 @@ class Invoice {
   // back-office-only. If confirmed as back-office-only, stop exposing this
   // field in the mobile app and remove InvoiceNotesSection from InvoiceInfoCard.
   final String? clientVisibleNote;
+
+  /// Logistics Status card fields (status label + estimated delivery date)
+  /// shown on the Invoice Details screen. Null means the section renders
+  /// nothing — see [InvoiceLogisticsInfo] for why this is mock/temporary.
+  final InvoiceLogisticsInfo? logisticsInfo;
 
   /// Sum of every line item's [InvoiceLineItem.lineTotal].
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.lineTotal);

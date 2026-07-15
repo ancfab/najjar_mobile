@@ -13,6 +13,7 @@ import '../utils/responsive.dart';
 import '../widgets/invoice_action_buttons.dart';
 import '../widgets/invoice_breadcrumb.dart';
 import '../widgets/invoice_info_card.dart';
+import '../widgets/invoice_logistics_status_card.dart';
 import 'invoices_screen.dart';
 import 'profile_screen.dart';
 
@@ -331,6 +332,13 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             ),
             const SizedBox(height: 16),
             InvoiceInfoCard(invoice: invoice, onEmailTap: _emailBilledContact),
+            // TODO(product): Revisit this visibility rule when the confirmed
+            // backend contract defines whether partial logistics information
+            // should be shown.
+            if (invoice.logisticsInfo != null) ...[
+              const SizedBox(height: 16),
+              InvoiceLogisticsStatusCard(logistics: invoice.logisticsInfo),
+            ],
           ],
         ),
       ),
