@@ -79,6 +79,7 @@ class Invoice {
     required this.items,
     required this.taxAmount,
     this.timelineEvents = const [],
+    this.clientVisibleNote,
   });
 
   /// e.g. "#INV-8821".
@@ -123,6 +124,14 @@ class Invoice {
   /// change; the Payment Timeline section itself renders nothing when this
   /// is empty.
   final List<InvoiceTimelineEvent> timelineEvents;
+
+  /// Free-text note shown in the Invoice Details screen's Internal Notes
+  /// section. Null/empty means no note is displayed.
+  ///
+  // TODO(product): Confirm whether invoice notes are client-visible or
+  // back-office-only. If confirmed as back-office-only, stop exposing this
+  // field in the mobile app and remove InvoiceNotesSection from InvoiceInfoCard.
+  final String? clientVisibleNote;
 
   /// Sum of every line item's [InvoiceLineItem.lineTotal].
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.lineTotal);

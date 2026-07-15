@@ -236,6 +236,25 @@ void main() {
     );
   });
 
+  group('Internal Notes', () {
+    testWidgets('Renders the heading and the mock invoice note', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(tester);
+      await tester.scrollUntilVisible(
+        find.text('Internal Notes'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(find.text('Internal Notes'), findsOneWidget);
+      expect(
+        find.textContaining('Thank you for your continued business'),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('Print and Download PDF actions', () {
     testWidgets('Renders the Print and Download PDF buttons', (tester) async {
       await _pumpInvoiceDetailsScreen(tester);

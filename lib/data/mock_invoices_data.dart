@@ -49,6 +49,13 @@ final List<Invoice> kMockInvoices = [
     // Flat sample tax amount — see [Invoice.taxAmount] for why this is not a
     // real tax rule.
     taxAmount: 612.50,
+    // TODO(product): Confirm whether invoice notes are client-visible or
+    // back-office-only. If confirmed as back-office-only, stop exposing this
+    // field in the mobile app and remove InvoiceNotesSection from
+    // InvoiceInfoCard.
+    clientVisibleNote:
+        'Thank you for your continued business. Please reference invoice '
+        '#INV-8821 in any correspondence regarding this payment.',
     // TODO: Replace with timeline events from the real Invoice API/
     // accounting backend once confirmed — this fixed mock list is the only
     // source of Payment Timeline data for now. Newest-first order.

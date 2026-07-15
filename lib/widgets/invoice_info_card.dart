@@ -4,6 +4,7 @@ import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import 'invoice_info_section.dart';
 import 'invoice_line_items_table.dart';
+import 'invoice_notes_section.dart';
 import 'invoice_payment_method_row.dart';
 import 'invoice_status_badge.dart';
 import 'payment_timeline.dart';
@@ -69,6 +70,16 @@ class InvoiceInfoCard extends StatelessWidget {
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 20),
             PaymentTimeline(events: invoice.timelineEvents),
+          ],
+          // TODO(product): Confirm whether invoice notes are client-visible
+          // or back-office-only. If confirmed as back-office-only, stop
+          // exposing this field in the mobile app and remove
+          // InvoiceNotesSection from InvoiceInfoCard.
+          if (invoice.clientVisibleNote?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 20),
+            InvoiceNotesSection(note: invoice.clientVisibleNote),
           ],
         ],
       ),
