@@ -69,15 +69,18 @@ void main() {
       expect(material.color, const Color(0xFF1E9E6B));
     });
 
-    testWidgets('Tapping INVOICE shows the placeholder snackbar safely', (
+    testWidgets('Tapping INVOICE navigates to the Invoice Details screen', (
       tester,
     ) async {
       await _pumpOrderDetailScreen(tester);
 
       await tester.tap(find.text('INVOICE'));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      // The Invoice Details screen's mock fetch has its own simulated
+      // network delay.
+      await _settleFetch(tester);
 
-      expect(find.text('Invoice details coming soon'), findsOneWidget);
+      expect(find.text('Invoice Details'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

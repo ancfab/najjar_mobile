@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/mock_invoices_data.dart';
 import '../models/fabric_order.dart';
 import '../models/fabric_order_detail.dart';
 import '../services/mock_orders_service.dart';
@@ -8,6 +9,7 @@ import '../utils/responsive.dart';
 import '../widgets/fabric_specs_sheet.dart';
 import '../widgets/price_breakdown_card.dart';
 import '../widgets/status_badge.dart';
+import 'invoice_details_screen.dart';
 
 /// Order Detail screen for a single Fabric Order: breadcrumb + order
 /// summary, an Order Items card (hosting the Fabric Specs action), the
@@ -94,15 +96,20 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   /// Handles the Invoice button tap on the Price Breakdown card.
   ///
-  /// No Invoice Details screen/route exists yet in this app (the current
-  /// Invoices screen is a placeholder list, not a per-order detail view),
-  /// so this shows a safe placeholder snackbar instead of navigating.
+  /// Navigates to the Invoice Details screen. No confirmed mapping from a
+  /// Fabric Order to its invoice exists yet (no backend Order/Invoice
+  /// linkage), so every order currently opens the same sample invoice —
+  /// consistent with the rest of this mock-backed app until that linkage is
+  /// defined.
   ///
-  /// TODO: Navigate to Invoice Details once the invoice details screen/
-  /// route and API contract are confirmed.
+  /// TODO: Pass the order's real invoice number once the backend/API team
+  /// confirms how Fabric Orders link to their Invoice.
   void _openInvoice() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invoice details coming soon')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const InvoiceDetailsScreen(invoiceNumber: kSampleInvoiceNumber),
+      ),
     );
   }
 
