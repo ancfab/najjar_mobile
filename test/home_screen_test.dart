@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/profile_screen.dart';
@@ -128,5 +129,78 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(BalanceCard), findsOneWidget);
+  });
+
+  group('Current Balance card navigation', () {
+    testWidgets('Home screen renders the Current Balance card', (tester) async {
+      await _pumpHomeScreen(tester, 390);
+
+      expect(find.byType(BalanceCard), findsOneWidget);
+    });
+
+    testWidgets('Tapping the Current Balance card opens AccountBalanceScreen', (
+      tester,
+    ) async {
+      await _pumpHomeScreen(tester, 390);
+
+      await tester.tap(find.byType(BalanceCard));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AccountBalanceScreen), findsOneWidget);
+    });
+
+    testWidgets('Back navigation from AccountBalanceScreen returns to Home', (
+      tester,
+    ) async {
+      await _pumpHomeScreen(tester, 390);
+
+      await tester.tap(find.byType(BalanceCard));
+      await tester.pumpAndSettle();
+      expect(find.byType(AccountBalanceScreen), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.byType(AccountBalanceScreen), findsNothing);
+    });
+
+    testWidgets(
+      'Selecting Home from AccountBalanceScreen bottom nav returns to Home '
+      'without creating a duplicate Home screen',
+      (tester) async {
+        await _pumpHomeScreen(tester, 390);
+
+        await tester.tap(find.byType(BalanceCard));
+        await tester.pumpAndSettle();
+        expect(find.byType(AccountBalanceScreen), findsOneWidget);
+
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(HomeScreen), findsOneWidget);
+        expect(find.byType(AccountBalanceScreen), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Repeated opening and returning does not create navigation errors',
+      (tester) async {
+        await _pumpHomeScreen(tester, 390);
+
+        for (var i = 0; i < 3; i++) {
+          await tester.tap(find.byType(BalanceCard));
+          await tester.pumpAndSettle();
+          expect(find.byType(AccountBalanceScreen), findsOneWidget);
+
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(find.byType(HomeScreen), findsOneWidget);
+        }
+
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

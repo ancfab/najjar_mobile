@@ -12,7 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
+import 'package:anc_fabrics/screens/orders_screen.dart';
+import 'package:anc_fabrics/screens/profile_screen.dart';
+import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
+import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
@@ -518,6 +522,51 @@ void main() {
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('Support'), findsOneWidget);
       expect(find.text('Profile'), findsOneWidget);
+    });
+
+    testWidgets('Reuses CustomBottomNav with exactly four destinations', (
+      tester,
+    ) async {
+      await _pumpAccountBalanceScreen(tester);
+
+      expect(find.byType(CustomBottomNav), findsOneWidget);
+      expect(find.byType(CustomBottomNavItem), findsNWidgets(4));
+      expect(find.text('Account Balance'), findsNothing);
+    });
+
+    testWidgets(
+      'Selecting Home is safe when there is no screen to pop back to',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AccountBalanceScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Selecting Orders, Support, and Profile pushes each screen', (
+      tester,
+    ) async {
+      await _pumpAccountBalanceScreen(tester);
+
+      await tester.tap(find.text('Orders'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OrdersScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Support'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SupportScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileScreen), findsOneWidget);
     });
   });
 
