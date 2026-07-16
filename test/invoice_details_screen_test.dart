@@ -109,62 +109,103 @@ void main() {
     });
   });
 
-  group('Logistics Status card', () {
+  group('Logistics card', () {
     testWidgets(
-      'Renders as a separate card after the complete Invoice information '
+      'Renders as a separate card, immediately after the Payment Timeline '
       'card, with the STATUS and EST. DELIVERY fields',
       (tester) async {
         await _pumpInvoiceDetailsScreen(tester);
         await tester.scrollUntilVisible(
-          find.text('Logistics Status'),
+          find.byKey(const ValueKey('invoice-logistics-card')),
           300,
           scrollable: find.byType(Scrollable).first,
         );
 
-        expect(find.text('Logistics Status'), findsOneWidget);
+        expect(find.text('Logistics'), findsOneWidget);
+        expect(find.text('Logistics Status'), findsNothing);
         expect(find.text('STATUS'), findsOneWidget);
         expect(find.text('In Production'), findsOneWidget);
         expect(find.text('EST. DELIVERY'), findsOneWidget);
         expect(find.text('Oct 30, 2023'), findsOneWidget);
 
-        // The Logistics Status card must render below the Total Amount row
-        // (the last row of the complete Invoice information card), not
-        // interleaved inside it.
-        final totalAmountY = tester.getTopLeft(find.text('Total Amount')).dy;
-        final logisticsHeadingY = tester
-            .getTopLeft(find.text('Logistics Status'))
+        // The Logistics card must render below the Payment Timeline card,
+        // not interleaved inside it or inside the main Invoice information
+        // card.
+        final paymentTimelineY = tester
+            .getTopLeft(find.byKey(const ValueKey('payment-timeline-card')))
             .dy;
-        expect(logisticsHeadingY, greaterThan(totalAmountY));
+        final logisticsY = tester
+            .getTopLeft(find.byKey(const ValueKey('invoice-logistics-card')))
+            .dy;
+        expect(logisticsY, greaterThan(paymentTimelineY));
       },
     );
 
+    testWidgets('STATUS and EST. DELIVERY are separate, stacked, full-width '
+        'boxes, not side by side', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('invoice-logistics-card')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      final statusBox = tester.getRect(
+        find.byKey(const ValueKey('invoice-logistics-status-box')),
+      );
+      final deliveryBox = tester.getRect(
+        find.byKey(const ValueKey('invoice-logistics-delivery-box')),
+      );
+
+      expect(deliveryBox.top, greaterThanOrEqualTo(statusBox.bottom));
+      expect(statusBox.left, deliveryBox.left);
+      expect(statusBox.width, deliveryBox.width);
+    });
+
+    testWidgets('Renders a small status dot before the status text', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('invoice-logistics-card')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(
+        find.byKey(const ValueKey('invoice-logistics-status-dot')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
       'The PAID status badge remains visible and unrelated to the '
-      'Logistics Status card',
+      'Logistics card',
       (tester) async {
         await _pumpInvoiceDetailsScreen(tester);
         await tester.scrollUntilVisible(
-          find.text('Logistics Status'),
+          find.byKey(const ValueKey('invoice-logistics-card')),
           300,
           scrollable: find.byType(Scrollable).first,
         );
 
         expect(find.text('PAID'), findsOneWidget);
-        expect(find.text('Logistics Status'), findsOneWidget);
+        expect(find.text('Logistics'), findsOneWidget);
       },
     );
 
-    testWidgets('Can scroll from the header down to the Logistics Status '
-        'card', (tester) async {
+    testWidgets('Can scroll from the header down to the Logistics card', (
+      tester,
+    ) async {
       await _pumpInvoiceDetailsScreen(tester, width: 320);
 
       await tester.scrollUntilVisible(
-        find.text('Logistics Status'),
+        find.byKey(const ValueKey('invoice-logistics-card')),
         300,
         scrollable: find.byType(Scrollable).first,
       );
 
-      expect(find.text('Logistics Status'), findsOneWidget);
+      expect(find.text('Logistics'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -240,6 +281,26 @@ void main() {
   });
 
   group('Payment Timeline', () {
+    testWidgets(
+      'Renders as a separate card, outside the main Invoice information '
+      'card, below the Total Amount row',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('payment-timeline-card')),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        expect(find.text('Payment Timeline'), findsOneWidget);
+        final totalAmountY = tester.getTopLeft(find.text('Total Amount')).dy;
+        final paymentTimelineY = tester
+            .getTopLeft(find.byKey(const ValueKey('payment-timeline-card')))
+            .dy;
+        expect(paymentTimelineY, greaterThan(totalAmountY));
+      },
+    );
+
     testWidgets('Renders the heading and all three events in newest-first '
         'order', (tester) async {
       await _pumpInvoiceDetailsScreen(tester);
@@ -313,6 +374,25 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'Renders after the Logistics card, not between Payment Timeline and '
+      'Logistics',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(tester);
+        await tester.scrollUntilVisible(
+          find.text('Internal Notes'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+        final logisticsY = tester
+            .getTopLeft(find.byKey(const ValueKey('invoice-logistics-card')))
+            .dy;
+        final notesY = tester.getTopLeft(find.text('Internal Notes')).dy;
+        expect(notesY, greaterThan(logisticsY));
+      },
+    );
   });
 
   group('Print and Download PDF actions', () {

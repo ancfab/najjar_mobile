@@ -3,33 +3,36 @@ import 'package:flutter/material.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_time_format.dart';
-import 'invoice_info_section.dart';
 
-/// Bordered white card showing an invoice's Logistics Status fields: STATUS
-/// and EST. DELIVERY. Rendered as its own card in [InvoiceDetailsScreen],
-/// separate from and after [InvoiceInfoCard] — it is not part of, and must
-/// not be confused with, the invoice's payment [InvoiceStatus]/PAID badge.
+/// Bordered white card showing an invoice's Logistics fields: STATUS and
+/// EST. DELIVERY, each in its own full-width, stacked field box. Rendered as
+/// its own card in [InvoiceDetailsScreen], immediately after the Payment
+/// Timeline card — it is not part of, and must not be confused with, the
+/// invoice's payment [InvoiceStatus]/PAID badge.
 ///
-/// Matches [InvoiceInfoCard]'s container styling (white background, border
-/// radius, subtle grey border, no shadow) so the two cards read as one
-/// visual system.
+/// Matches [InvoiceInfoCard]/`PaymentTimeline`'s outer card styling (white
+/// background, border radius, subtle grey border, no shadow) so all of the
+/// screen's cards read as one visual system.
 ///
 /// Reusable: takes the logistics info through the constructor rather than
-/// reading invoice data directly, matching [PaymentTimeline]'s convention.
+/// reading invoice data directly, matching `PaymentTimeline`'s convention.
 /// Renders nothing when [logistics] is null or has no fields set. A missing
-/// individual field (status or delivery date) is omitted entirely — label,
-/// value, and spacing — rather than shown with a placeholder like "—" or
-/// "N/A", since a blank field isn't a confirmed real-world case yet.
+/// individual field (status or delivery date) is omitted entirely — box,
+/// label, value, and spacing — rather than shown with a placeholder like
+/// "—" or "N/A", since a blank field isn't a confirmed real-world case yet.
 class InvoiceLogisticsStatusCard extends StatelessWidget {
   const InvoiceLogisticsStatusCard({super.key, required this.logistics});
 
   final InvoiceLogisticsInfo? logistics;
 
-  /// Card content width (available width inside the card's padding) below
-  /// which STATUS and EST. DELIVERY stack vertically instead of sitting
-  /// side-by-side, so long status text or a large system text scale never
-  /// overflows a narrow phone width.
-  static const double _stackedLayoutBreakpoint = 260;
+  /// Outer card padding, matching `PaymentTimeline`'s.
+  static const double _cardPadding = 28;
+
+  /// Inner field-box padding.
+  static const double _fieldBoxPadding = 20;
+
+  /// Vertical gap between the STATUS and EST. DELIVERY field boxes.
+  static const double _fieldBoxSpacing = 18;
 
   @override
   Widget build(BuildContext context) {
@@ -40,25 +43,9 @@ class InvoiceLogisticsStatusCard extends StatelessWidget {
     final hasDelivery = estimatedDeliveryDate != null;
     if (!hasStatus && !hasDelivery) return const SizedBox.shrink();
 
-    final statusField = hasStatus
-        ? InvoiceInfoSection(
-            label: 'STATUS',
-            child: _ValueText(statusLabel, key: const ValueKey('invoice-logistics-status')),
-          )
-        : null;
-    final deliveryField = hasDelivery
-        ? InvoiceInfoSection(
-            label: 'EST. DELIVERY',
-            child: _ValueText(
-              formatDateOnly(estimatedDeliveryDate),
-              key: const ValueKey('invoice-logistics-est-delivery'),
-            ),
-          )
-        : null;
-
     return Container(
-      key: const ValueKey('invoice-logistics-status-card'),
-      padding: const EdgeInsets.all(16),
+      key: const ValueKey('invoice-logistics-card'),
+      padding: const EdgeInsets.all(_cardPadding),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -68,7 +55,7 @@ class InvoiceLogisticsStatusCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Logistics Status',
+            'Logistics',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
@@ -76,47 +63,21 @@ class InvoiceLogisticsStatusCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              // Only worth a two-column layout when there are two fields to
-              // place side by side; a lone field just renders as-is either
-              // way.
-              final canFitTwoColumns =
-                  statusField != null &&
-                  deliveryField != null &&
-                  constraints.maxWidth >= _stackedLayoutBreakpoint;
-
-              if (canFitTwoColumns) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: statusField),
-                    const SizedBox(width: 12),
-                    Expanded(child: deliveryField),
-                  ],
-                );
-              }
-
-              final fields = [?statusField, ?deliveryField];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < fields.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 16),
-                    fields[i],
-                  ],
-                ],
-              );
-            },
-          ),
+          if (hasStatus) _StatusBox(statusLabel: statusLabel),
+          if (hasStatus && hasDelivery)
+            const SizedBox(height: _fieldBoxSpacing),
+          if (hasDelivery)
+            _DeliveryBox(estimatedDeliveryDate: estimatedDeliveryDate),
         ],
       ),
     );
   }
 }
 
-class _ValueText extends StatelessWidget {
-  const _ValueText(this.text, {super.key});
+/// Uppercase, dark-grey, semibold field label shared by [_StatusBox] and
+/// [_DeliveryBox] (e.g. "STATUS", "EST. DELIVERY").
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel(this.text);
 
   final String text;
 
@@ -125,9 +86,114 @@ class _ValueText extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-        fontSize: 15,
+        fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: AppColors.textNavy,
+        letterSpacing: 1.0,
+        color: AppColors.grayText,
+      ),
+    );
+  }
+}
+
+/// Light-grey, full-width, bordered field box shared by [_StatusBox] and
+/// [_DeliveryBox].
+class _FieldBox extends StatelessWidget {
+  const _FieldBox({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(
+        InvoiceLogisticsStatusCard._fieldBoxPadding,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// STATUS field box: label, then a small teal dot beside the (bold, teal)
+/// status value. Deliberately not a colored pill/badge — see
+/// [InvoiceLogisticsInfo] for why the full status list/styling isn't
+/// confirmed yet, and this must stay visually distinct from the invoice's
+/// payment PAID badge.
+class _StatusBox extends StatelessWidget {
+  const _StatusBox({required this.statusLabel});
+
+  final String statusLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FieldBox(
+      key: const ValueKey('invoice-logistics-status-box'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _FieldLabel('STATUS'),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                key: const ValueKey('invoice-logistics-status-dot'),
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: AppColors.darkTeal,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusLabel,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.darkTeal,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// EST. DELIVERY field box: label, then the formatted delivery date below
+/// it, bold and dark near-black.
+class _DeliveryBox extends StatelessWidget {
+  const _DeliveryBox({required this.estimatedDeliveryDate});
+
+  final DateTime estimatedDeliveryDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FieldBox(
+      key: const ValueKey('invoice-logistics-delivery-box'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _FieldLabel('EST. DELIVERY'),
+          const SizedBox(height: 10),
+          Text(
+            formatDateOnly(estimatedDeliveryDate),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }

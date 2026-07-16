@@ -4,9 +4,14 @@ import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_time_format.dart';
 
-/// "Payment Timeline" section: a left-aligned heading followed by a vertical
-/// stack of completed [InvoiceTimelineEvent]s, connected by a thin grey line
-/// between (but never below) markers.
+/// Bordered white card showing the invoice's "Payment Timeline": a
+/// left-aligned heading followed by a vertical stack of completed
+/// [InvoiceTimelineEvent]s, connected by a thin grey line between (but never
+/// below) markers.
+///
+/// Rendered as its own card in [InvoiceDetailsScreen], separate from and
+/// after [InvoiceInfoCard], matching that card's white background/border/
+/// radius so the two read as one visual system.
 ///
 /// Reusable: takes its event list through the constructor rather than
 /// reading invoice data directly, so it isn't tied to the Invoice Details
@@ -19,28 +24,41 @@ class PaymentTimeline extends StatelessWidget {
   /// whatever order it's given).
   final List<InvoiceTimelineEvent> events;
 
+  /// Internal card padding, larger than [InvoiceInfoCard]'s to match the
+  /// more spacious card styling used for this and the Logistics card.
+  static const double _cardPadding = 28;
+
   @override
   Widget build(BuildContext context) {
     if (events.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Payment Timeline',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textNavy,
+    return Container(
+      key: const ValueKey('payment-timeline-card'),
+      padding: const EdgeInsets.all(_cardPadding),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Payment Timeline',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textNavy,
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < events.length; i++)
-          _PaymentTimelineItem(
-            event: events[i],
-            isLast: i == events.length - 1,
-          ),
-      ],
+          const SizedBox(height: 16),
+          for (var i = 0; i < events.length; i++)
+            _PaymentTimelineItem(
+              event: events[i],
+              isLast: i == events.length - 1,
+            ),
+        ],
+      ),
     );
   }
 }

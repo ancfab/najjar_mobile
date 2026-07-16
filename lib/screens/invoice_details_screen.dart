@@ -14,6 +14,8 @@ import '../widgets/invoice_action_buttons.dart';
 import '../widgets/invoice_breadcrumb.dart';
 import '../widgets/invoice_info_card.dart';
 import '../widgets/invoice_logistics_status_card.dart';
+import '../widgets/invoice_notes_section.dart';
+import '../widgets/payment_timeline.dart';
 import 'invoices_screen.dart';
 import 'profile_screen.dart';
 
@@ -332,12 +334,24 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             ),
             const SizedBox(height: 16),
             InvoiceInfoCard(invoice: invoice, onEmailTap: _emailBilledContact),
+            if (invoice.timelineEvents.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              PaymentTimeline(events: invoice.timelineEvents),
+            ],
             // TODO(product): Revisit this visibility rule when the confirmed
             // backend contract defines whether partial logistics information
             // should be shown.
             if (invoice.logisticsInfo != null) ...[
               const SizedBox(height: 16),
               InvoiceLogisticsStatusCard(logistics: invoice.logisticsInfo),
+            ],
+            // TODO(product): Confirm whether invoice notes are client-visible
+            // or back-office-only. If confirmed as back-office-only, stop
+            // exposing this field in the mobile app and remove
+            // InvoiceNotesSection from InvoiceDetailsScreen.
+            if (invoice.clientVisibleNote?.trim().isNotEmpty ?? false) ...[
+              const SizedBox(height: 16),
+              InvoiceNotesSection(note: invoice.clientVisibleNote),
             ],
           ],
         ),

@@ -4,14 +4,16 @@ import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import 'invoice_info_section.dart';
 import 'invoice_line_items_table.dart';
-import 'invoice_notes_section.dart';
 import 'invoice_payment_method_row.dart';
 import 'invoice_status_badge.dart';
-import 'payment_timeline.dart';
 
 /// Bordered white card showing an invoice's key details: status/number/
 /// issued date summary, Billed To, Due Date, Payment Method, and the
 /// line-items table with its Subtotal/Tax/Total Amount summary.
+///
+/// Payment Timeline, Logistics, and Internal Notes render as their own
+/// separate cards after this one on the Invoice Details screen — they are
+/// not part of this card. See `InvoiceDetailsScreen._buildBody`.
 class InvoiceInfoCard extends StatelessWidget {
   const InvoiceInfoCard({
     super.key,
@@ -65,22 +67,6 @@ class InvoiceInfoCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           InvoiceLineItemsTable(invoice: invoice),
-          if (invoice.timelineEvents.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            const Divider(height: 1, color: AppColors.border),
-            const SizedBox(height: 20),
-            PaymentTimeline(events: invoice.timelineEvents),
-          ],
-          // TODO(product): Confirm whether invoice notes are client-visible
-          // or back-office-only. If confirmed as back-office-only, stop
-          // exposing this field in the mobile app and remove
-          // InvoiceNotesSection from InvoiceInfoCard.
-          if (invoice.clientVisibleNote?.trim().isNotEmpty ?? false) ...[
-            const SizedBox(height: 20),
-            const Divider(height: 1, color: AppColors.border),
-            const SizedBox(height: 20),
-            InvoiceNotesSection(note: invoice.clientVisibleNote),
-          ],
         ],
       ),
     );
