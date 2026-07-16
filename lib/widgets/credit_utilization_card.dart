@@ -120,10 +120,10 @@ class _CreditRow extends StatelessWidget {
               formatCurrency(amount),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textNavy,
+                color: barColor,
               ),
             ),
           ],

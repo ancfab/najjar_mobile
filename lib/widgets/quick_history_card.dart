@@ -53,15 +53,21 @@ class QuickHistoryCard extends StatelessWidget {
                   ),
                 ),
               ),
-              IconButton(
-                key: const ValueKey('quick-history-see-all-button'),
-                icon: const Icon(Icons.chevron_right_rounded),
-                color: AppColors.grayText,
-                tooltip: 'See all',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: onSeeAll,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: const ValueKey('quick-history-see-all-button'),
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: onSeeAll,
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: AppColors.primaryNavy,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

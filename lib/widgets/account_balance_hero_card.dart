@@ -105,34 +105,38 @@ class AccountBalanceHeroCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
+              Align(
+                alignment: Alignment.centerLeft,
                 child: ElevatedButton(
                   key: const ValueKey('account-balance-export-pdf-button'),
                   onPressed: isExporting ? null : onExportPdf,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primaryNavy,
-                    disabledBackgroundColor: Colors.white,
-                    disabledForegroundColor: AppColors.primaryNavy,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: AppColors.gradientNavyStart,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppColors.gradientNavyStart,
+                    disabledForegroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                   child: isExporting
                       ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             SizedBox(
                               key: ValueKey(
                                 'account-balance-export-pdf-loading',
                               ),
-                              height: 18,
-                              width: 18,
+                              height: 16,
+                              width: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                color: AppColors.primaryNavy,
+                                color: Colors.white,
                               ),
                             ),
                             SizedBox(width: 8),
@@ -147,9 +151,13 @@ class AccountBalanceHeroCard extends StatelessWidget {
                           ],
                         )
                       : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.upload_file_rounded, size: 18),
+                            Icon(
+                              Icons.upload_file_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                             SizedBox(width: 8),
                             Flexible(
                               child: Text(
