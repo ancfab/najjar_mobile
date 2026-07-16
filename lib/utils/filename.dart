@@ -9,3 +9,13 @@ String invoicePdfFilename(String invoiceNumber) {
   final base = sanitized.isEmpty ? 'invoice' : sanitized;
   return 'invoice-$base.pdf';
 }
+
+/// Builds a filesystem-safe `account-statement-<yyyy-MM-dd>.pdf` filename
+/// from [generatedAt], safe to hand to native print/share/save flows on
+/// both Android and iOS.
+String accountStatementPdfFilename(DateTime generatedAt) {
+  final year = generatedAt.year.toString().padLeft(4, '0');
+  final month = generatedAt.month.toString().padLeft(2, '0');
+  final day = generatedAt.day.toString().padLeft(2, '0');
+  return 'account-statement-$year-$month-$day.pdf';
+}

@@ -17,6 +17,7 @@ class AccountBalanceHeroCard extends StatelessWidget {
     required this.percentChange,
     required this.changePeriodLabel,
     required this.onExportPdf,
+    this.isExporting = false,
   });
 
   final double balance;
@@ -29,6 +30,11 @@ class AccountBalanceHeroCard extends StatelessWidget {
   final String changePeriodLabel;
 
   final VoidCallback onExportPdf;
+
+  /// Whether the account statement PDF is currently being generated. Shows
+  /// a spinner in place of the icon and relabels the button "Generating...",
+  /// and disables it so a second export can't be triggered mid-flight.
+  final bool isExporting;
 
   @override
   Widget build(BuildContext context) {
@@ -101,19 +107,60 @@ class AccountBalanceHeroCard extends StatelessWidget {
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
                   key: const ValueKey('account-balance-export-pdf-button'),
-                  onPressed: onExportPdf,
-                  icon: const Icon(Icons.upload_file_rounded, size: 18),
-                  label: const Text('Export PDF'),
+                  onPressed: isExporting ? null : onExportPdf,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primaryNavy,
+                    disabledBackgroundColor: Colors.white,
+                    disabledForegroundColor: AppColors.primaryNavy,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                  child: isExporting
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              key: ValueKey(
+                                'account-balance-export-pdf-loading',
+                              ),
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: AppColors.primaryNavy,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Generating...',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.upload_file_rounded, size: 18),
+                            SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Export PDF',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ],

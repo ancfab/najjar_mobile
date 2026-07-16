@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
 import '../models/account_balance_summary.dart';
+import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
+import '../services/account_statement_exporter.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../utils/user_initials.dart';
@@ -37,12 +39,22 @@ const int _navIndexProfile = 3;
 /// TODO(api): Replace mock account-balance summary and credit-utilization
 /// data after the backend endpoint and response contract are confirmed.
 class AccountBalanceScreen extends StatefulWidget {
-  const AccountBalanceScreen({super.key, AccountBalanceService? service})
-    : service = service ?? const MockAccountBalanceService();
+  const AccountBalanceScreen({
+    super.key,
+    AccountBalanceService? service,
+    AccountStatementExporter? exporter,
+  }) : service = service ?? const MockAccountBalanceService(),
+       exporter = exporter ?? const LocalAccountStatementPdfExporter();
 
   /// Account balance data seam. Defaults to the mock implementation;
   /// overridable so tests can inject a fake.
   final AccountBalanceService service;
+
+  /// Export PDF seam: generates the account statement PDF and hands it to
+  /// the native share/save/print flow. Defaults to on-device generation;
+  /// overridable so tests can inject a fake instead of invoking the real
+  /// platform plugin.
+  final AccountStatementExporter exporter;
 
   @override
   State<AccountBalanceScreen> createState() => _AccountBalanceScreenState();
@@ -50,6 +62,7 @@ class AccountBalanceScreen extends StatefulWidget {
 
 class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   late final AccountBalanceService _service = widget.service;
+  late final AccountStatementExporter _exporter = widget.exporter;
 
   AccountBalanceSummary? _summary;
   CreditUtilizationData? _creditUtilization;
@@ -60,6 +73,11 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   BalanceHistoryRange _selectedRange = BalanceHistoryRange.thirtyDays;
   List<BalanceHistoryPoint> _historyPoints = const [];
   bool _isHistoryLoading = true;
+
+  /// Whether the account statement PDF is currently being generated and
+  /// handed to the native share sheet, so the Export PDF button can show a
+  /// loading state and reject a second tap until this resolves.
+  bool _isExportingPdf = false;
 
   @override
   void initState() {
@@ -154,17 +172,43 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     }
   }
 
-  // No PDF generation/download contract exists yet for Account Balance
-  // statements (unlike invoices, which already have one via
-  // InvoicePdfService/InvoiceDocumentActions), so this shows a safe
-  // placeholder instead of inventing one.
-  //
-  // TODO(api): Connect Export PDF after the PDF generation/download contract
-  // is confirmed. Do not invent an endpoint.
-  void _exportPdf() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('PDF export is not connected yet.')),
-    );
+  /// Handles the Export PDF tap: generates an account statement PDF from
+  /// currently available screen data and opens the native share/save/print
+  /// sheet. Guards against duplicate taps while a generation is in flight
+  /// and always restores the button afterwards, whether export succeeds or
+  /// throws.
+  Future<void> _exportPdf() async {
+    if (_isExportingPdf) return;
+    final summary = _summary;
+    final utilization = _creditUtilization;
+    if (summary == null || utilization == null) return;
+
+    setState(() => _isExportingPdf = true);
+    try {
+      await _exporter.export(
+        AccountStatementData(
+          summary: summary,
+          creditUtilization: utilization,
+          selectedRange: _selectedRange,
+          quickHistory: _quickHistory,
+          generatedAt: DateTime.now(),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Account statement export failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not generate the account statement. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
+    }
   }
 
   void _openTransactionDetails(AccountTransaction transaction) {
@@ -303,6 +347,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               percentChange: summary.percentChangeFromLastMonth,
               changePeriodLabel: summary.changePeriodLabel,
               onExportPdf: _exportPdf,
+              isExporting: _isExportingPdf,
             ),
             const SizedBox(height: 16),
             CreditUtilizationCard(data: utilization),

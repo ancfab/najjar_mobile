@@ -1,21 +1,27 @@
 // Widget checks for the Account Balance screen: hero card figures, credit
 // utilization figures and note, the Balance History range selector/chart,
 // the Quick History list (rendering, styling, row/see-all navigation), the
-// Export PDF placeholder action, bottom navigation, and narrow-width
-// overflow safety.
+// Export PDF flow (loading state, duplicate-tap guard, success/failure
+// handling, and the data handed to the exporter), bottom navigation, and
+// narrow-width overflow safety.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 
 import 'helpers/fake_account_balance_service.dart';
+import 'helpers/fake_account_statement_exporter.dart';
 
 Future<void> _pumpAccountBalanceScreen(
   WidgetTester tester, {
   double width = 390,
   FakeAccountBalanceService? service,
+  FakeAccountStatementExporter? exporter,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -26,6 +32,7 @@ Future<void> _pumpAccountBalanceScreen(
     MaterialApp(
       home: AccountBalanceScreen(
         service: service ?? FakeAccountBalanceService(),
+        exporter: exporter ?? FakeAccountStatementExporter(),
       ),
     ),
   );
@@ -328,16 +335,175 @@ void main() {
   });
 
   group('Export PDF', () {
+    testWidgets('Tapping Export PDF invokes the injected exporter', (
+      tester,
+    ) async {
+      final exporter = FakeAccountStatementExporter();
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      expect(exporter.exportedData, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Shows Generating... while export is pending', (tester) async {
+      final pending = Completer<void>();
+      final exporter = FakeAccountStatementExporter(pending: pending);
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pump();
+
+      expect(find.text('Generating...'), findsOneWidget);
+      expect(find.text('Export PDF'), findsNothing);
+
+      pending.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Disables the button while export is pending', (tester) async {
+      final pending = Completer<void>();
+      final exporter = FakeAccountStatementExporter(pending: pending);
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pump();
+
+      final button = tester.widget<ElevatedButton>(
+        find.byKey(const ValueKey('account-balance-export-pdf-button')),
+      );
+      expect(button.onPressed, isNull);
+
+      pending.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Repeated taps while pending do not invoke duplicate exports', (
+      tester,
+    ) async {
+      final pending = Completer<void>();
+      final exporter = FakeAccountStatementExporter(pending: pending);
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      final exportButton = find.byKey(
+        const ValueKey('account-balance-export-pdf-button'),
+      );
+      await tester.tap(exportButton);
+      await tester.pump();
+      await tester.tap(exportButton, warnIfMissed: false);
+      await tester.tap(exportButton, warnIfMissed: false);
+      await tester.pump();
+
+      expect(exporter.exportedData, hasLength(1));
+
+      pending.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Successful export restores the normal Export PDF state', (
+      tester,
+    ) async {
+      final exporter = FakeAccountStatementExporter();
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Export PDF'), findsOneWidget);
+      expect(find.text('Generating...'), findsNothing);
+      final button = tester.widget<ElevatedButton>(
+        find.byKey(const ValueKey('account-balance-export-pdf-button')),
+      );
+      expect(button.onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Failed export restores the normal Export PDF state', (
+      tester,
+    ) async {
+      final exporter = FakeAccountStatementExporter(
+        error: Exception('platform failure'),
+      );
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Export PDF'), findsOneWidget);
+      expect(find.text('Generating...'), findsNothing);
+      final button = tester.widget<ElevatedButton>(
+        find.byKey(const ValueKey('account-balance-export-pdf-button')),
+      );
+      expect(button.onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Failed export shows the expected SnackBar', (tester) async {
+      final exporter = FakeAccountStatementExporter(
+        error: Exception('platform failure'),
+      );
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Could not generate the account statement. Please try again.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Exporter receives the correct balance summary data', (
+      tester,
+    ) async {
+      final exporter = FakeAccountStatementExporter();
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      final data = exporter.exportedData.single;
+      expect(data.summary.currentBalance, 42850.00);
+      expect(data.summary.percentChangeFromLastMonth, 12.4);
+      expect(data.creditUtilization.availableCredit, 57150.00);
+      expect(data.creditUtilization.usedCredit, 42850.00);
+      expect(data.creditUtilization.totalCredit, 100000.00);
+    });
+
+    testWidgets('Exporter receives the selected Balance History range', (
+      tester,
+    ) async {
+      final exporter = FakeAccountStatementExporter();
+      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+
+      await tester.tap(find.text('90 Days'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      final data = exporter.exportedData.single;
+      expect(data.selectedRange, BalanceHistoryRange.ninetyDays);
+    });
+
     testWidgets(
-      'Tapping Export PDF shows a placeholder message without crashing',
+      'Exporter receives the Quick History transactions shown on screen',
       (tester) async {
-        await _pumpAccountBalanceScreen(tester);
+        final exporter = FakeAccountStatementExporter();
+        await _pumpAccountBalanceScreen(tester, exporter: exporter);
 
         await tester.tap(find.text('Export PDF'));
         await tester.pumpAndSettle();
 
-        expect(find.text('PDF export is not connected yet.'), findsOneWidget);
-        expect(tester.takeException(), isNull);
+        final data = exporter.exportedData.single;
+        expect(data.quickHistory.map((t) => t.id), [
+          'txn-loom-supply-42',
+          'txn-client-deposit',
+          'txn-service-fee',
+        ]);
       },
     );
   });
