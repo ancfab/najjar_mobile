@@ -14,6 +14,7 @@ import '../widgets/home_header.dart';
 import '../widgets/last_payment_card.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/scan_fabric_button.dart';
+import 'account_balance_screen.dart';
 import 'invoices_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
@@ -183,6 +184,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Opens the Account Balance drill-down from the balance hero card.
+  void _openAccountBalance() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AccountBalanceScreen()));
+  }
+
   // Opens the Active Orders drill-down from the summary metric card.
   void _openActiveOrders() {
     Navigator.of(context).push(
@@ -327,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        BalanceCard(amount: data.currentBalance),
+        BalanceCard(amount: data.currentBalance, onTap: _openAccountBalance),
         const SizedBox(height: 12),
         MetricCard(
           icon: Icons.receipt_long_rounded,

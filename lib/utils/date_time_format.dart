@@ -24,6 +24,18 @@ String formatDateOnly(DateTime dateTime) {
   return '$month ${dateTime.day}, ${dateTime.year}';
 }
 
+/// Formats [dateTime] as `"MMM d"` (e.g. `"Oct 16"`), with no year — used
+/// for compact chart axis labels and range subtitles where the year is
+/// shown separately (see [formatDateOnly]).
+///
+/// TODO: Switch to locale-aware formatting (e.g. via `package:intl`) once
+/// the app's locale requirements are confirmed — this assumes a fixed
+/// `en_US`-style format.
+String formatMonthDay(DateTime dateTime) {
+  final month = _monthAbbreviations[dateTime.month - 1];
+  return '$month ${dateTime.day}';
+}
+
 /// Formats [dateTime] as `"MMM d, yyyy - hh:mm a"` (e.g. `"Oct 16, 2023 -
 /// 09:12 AM"`), with a 12-hour, leading-zero hour and no seconds or
 /// timezone.

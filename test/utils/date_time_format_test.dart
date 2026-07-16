@@ -39,4 +39,14 @@ void main() {
       );
     });
   });
+
+  group('formatMonthDay', () {
+    test('formats a date without the year', () {
+      expect(formatMonthDay(DateTime(2023, 10, 1)), 'Oct 1');
+    });
+
+    test('formats a different month and day', () {
+      expect(formatMonthDay(DateTime(2023, 8, 2)), 'Aug 2');
+    });
+  });
 }
