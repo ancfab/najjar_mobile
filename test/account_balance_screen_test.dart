@@ -1,6 +1,7 @@
 // Widget checks for the Account Balance screen: hero card figures, credit
 // utilization figures and note, the Balance History range selector/chart,
-// the Export PDF placeholder action, bottom navigation, and narrow-width
+// the Quick History list (rendering, styling, row/see-all navigation), the
+// Export PDF placeholder action, bottom navigation, and narrow-width
 // overflow safety.
 
 import 'package:flutter/material.dart';
@@ -188,6 +189,144 @@ void main() {
     });
   });
 
+  group('Quick History card', () {
+    testWidgets(
+      'Renders below the Balance History card with all mock transactions',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        expect(find.text('QUICK HISTORY'), findsOneWidget);
+
+        final balanceHistoryTop = tester.getTopLeft(
+          find.byKey(const ValueKey('balance-history-card')),
+        );
+        final quickHistoryTop = tester.getTopLeft(
+          find.byKey(const ValueKey('quick-history-card')),
+        );
+        expect(quickHistoryTop.dy, greaterThan(balanceHistoryTop.dy));
+
+        expect(find.text('Loom Supply #42'), findsOneWidget);
+        expect(find.text('Client Deposit'), findsOneWidget);
+        expect(find.text('Service Fee'), findsOneWidget);
+        expect(find.text('-\$2,400'), findsOneWidget);
+        expect(find.text('+\$15,000'), findsOneWidget);
+        expect(find.text('-\$120'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Credit amounts use the teal color and debit amounts use the dark debit color',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        final creditText = tester.widget<Text>(find.text('+\$15,000'));
+        expect(creditText.style?.color, AppColors.darkTeal);
+
+        final debitText = tester.widget<Text>(find.text('-\$2,400'));
+        expect(debitText.style?.color, AppColors.darkRedBrown);
+
+        final feeText = tester.widget<Text>(find.text('-\$120'));
+        expect(feeText.style?.color, AppColors.darkRedBrown);
+      },
+    );
+
+    testWidgets(
+      'Tapping a row opens Transaction Details with the selected transaction',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        final row = find.byKey(
+          const ValueKey('quick-history-row-txn-client-deposit'),
+        );
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Transaction Details'), findsOneWidget);
+
+        final detailsCard = find.byKey(
+          const ValueKey('account-transaction-details-card'),
+        );
+        expect(
+          find.descendant(
+            of: detailsCard,
+            matching: find.text('Client Deposit'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: detailsCard, matching: find.text('+\$15,000')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: detailsCard, matching: find.text('Credit')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: detailsCard,
+            matching: find.text('REF-20231026-CD'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Tapping a debit row opens Transaction Details showing Debit status',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        final row = find.byKey(
+          const ValueKey('quick-history-row-txn-loom-supply-42'),
+        );
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        final detailsCard = find.byKey(
+          const ValueKey('account-transaction-details-card'),
+        );
+        expect(
+          find.descendant(
+            of: detailsCard,
+            matching: find.text('Loom Supply #42'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: detailsCard, matching: find.text('-\$2,400')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: detailsCard, matching: find.text('Debit')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Tapping See all shows the temporary placeholder SnackBar', (
+      tester,
+    ) async {
+      await _pumpAccountBalanceScreen(tester);
+
+      final seeAllButton = find.byKey(
+        const ValueKey('quick-history-see-all-button'),
+      );
+      await tester.ensureVisible(seeAllButton);
+      await tester.tap(seeAllButton);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Full transaction history is not available yet.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('Export PDF', () {
     testWidgets(
       'Tapping Export PDF shows a placeholder message without crashing',
@@ -213,15 +352,6 @@ void main() {
       expect(find.text('Orders'), findsOneWidget);
       expect(find.text('Support'), findsOneWidget);
       expect(find.text('Profile'), findsOneWidget);
-    });
-  });
-
-  group('Scope restriction', () {
-    testWidgets('Does not render a Quick History section', (tester) async {
-      await _pumpAccountBalanceScreen(tester);
-
-      expect(find.text('Quick History'), findsNothing);
-      expect(find.textContaining('QUICK HISTORY'), findsNothing);
     });
   });
 

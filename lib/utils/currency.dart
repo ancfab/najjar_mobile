@@ -30,3 +30,25 @@ String formatCurrency(num amount) {
 
   return '${isNegative ? '-' : ''}\$$buffer.$decimalPart';
 }
+
+/// Formats [amount] as a signed, whole-dollar currency string for compact
+/// transaction rows (e.g. `-2400` -> `"-$2,400"`, `15000` -> `"+$15,000"`).
+///
+/// Always shows an explicit `+`/`-` sign and no decimal places, unlike
+/// [formatCurrency] — matches the Quick History design's transaction-amount
+/// format, where whole-dollar figures with a clear credit/debit sign read
+/// better than cents.
+String formatSignedCurrency(num amount) {
+  final isNegative = amount < 0;
+  final whole = amount.abs().round().toString();
+
+  final buffer = StringBuffer();
+  for (var i = 0; i < whole.length; i++) {
+    if (i > 0 && (whole.length - i) % 3 == 0) {
+      buffer.write(',');
+    }
+    buffer.write(whole[i]);
+  }
+
+  return '${isNegative ? '-' : '+'}\$$buffer';
+}

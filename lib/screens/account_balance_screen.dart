@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
 import '../models/account_balance_summary.dart';
+import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
@@ -14,6 +15,8 @@ import '../widgets/avatar_initials_badge.dart';
 import '../widgets/balance_history_card.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/custom_bottom_nav.dart';
+import '../widgets/quick_history_card.dart';
+import 'account_transaction_details_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'support_screen.dart';
@@ -27,8 +30,9 @@ const int _navIndexOrders = 1;
 const int _navIndexSupport = 2;
 const int _navIndexProfile = 3;
 
-/// Account Balance screen: global balance hero card, credit utilization,
-/// and a Balance History chart with a 30-day/90-day/1-year range selector.
+/// Account Balance screen: global balance hero card, credit utilization, a
+/// Balance History chart with a 30-day/90-day/1-year range selector, and a
+/// Quick History list of recent transactions.
 ///
 /// TODO(api): Replace mock account-balance summary and credit-utilization
 /// data after the backend endpoint and response contract are confirmed.
@@ -49,6 +53,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
 
   AccountBalanceSummary? _summary;
   CreditUtilizationData? _creditUtilization;
+  List<AccountTransaction> _quickHistory = const [];
   bool _isLoading = true;
   String? _error;
 
@@ -71,10 +76,12 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     try {
       final summary = await _service.fetchSummary();
       final utilization = await _service.fetchCreditUtilization();
+      final quickHistory = await _service.fetchQuickHistory();
       if (!mounted) return;
       setState(() {
         _summary = summary;
         _creditUtilization = utilization;
+        _quickHistory = quickHistory;
         _isLoading = false;
       });
     } catch (_) {
@@ -157,6 +164,28 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   void _exportPdf() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('PDF export is not connected yet.')),
+    );
+  }
+
+  void _openTransactionDetails(AccountTransaction transaction) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            AccountTransactionDetailsScreen(transaction: transaction),
+      ),
+    );
+  }
+
+  // No full transaction-history screen exists yet anywhere in the app, so
+  // "See all" shows a safe placeholder instead of inventing one.
+  //
+  // TODO(scope): Replace this placeholder when the full transaction-history
+  // screen and route are confirmed as part of the project scope.
+  void _openFullTransactionHistory() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Full transaction history is not available yet.'),
+      ),
     );
   }
 
@@ -283,6 +312,12 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               selectedRange: _selectedRange,
               onRangeChanged: _handleRangeChanged,
               isLoading: _isHistoryLoading,
+            ),
+            const SizedBox(height: 16),
+            QuickHistoryCard(
+              transactions: _quickHistory,
+              onTransactionTap: _openTransactionDetails,
+              onSeeAll: _openFullTransactionHistory,
             ),
           ],
         ),

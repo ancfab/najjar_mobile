@@ -1,5 +1,6 @@
 import '../data/mock_account_balance_data.dart';
 import '../models/account_balance_summary.dart';
+import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
@@ -20,6 +21,8 @@ abstract class AccountBalanceService {
   Future<List<BalanceHistoryPoint>> fetchBalanceHistory(
     BalanceHistoryRange range,
   );
+
+  Future<List<AccountTransaction>> fetchQuickHistory();
 }
 
 /// Mock implementation returning deterministic sample data with a simulated
@@ -45,5 +48,11 @@ class MockAccountBalanceService implements AccountBalanceService {
   ) async {
     await Future.delayed(const Duration(milliseconds: 400));
     return kMockBalanceHistoryByRange[range]!;
+  }
+
+  @override
+  Future<List<AccountTransaction>> fetchQuickHistory() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    return kMockQuickHistoryTransactions;
   }
 }
