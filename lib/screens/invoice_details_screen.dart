@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import '../data/mock_user.dart';
 import '../models/invoice.dart';
 import '../services/invoice_document_actions.dart';
 import '../services/invoice_pdf_service.dart';
@@ -16,8 +15,8 @@ import '../widgets/invoice_info_card.dart';
 import '../widgets/invoice_logistics_status_card.dart';
 import '../widgets/invoice_notes_section.dart';
 import '../widgets/payment_timeline.dart';
+import 'edit_profile_screen.dart';
 import 'invoices_screen.dart';
-import 'profile_screen.dart';
 
 /// Invoice Details screen: breadcrumb + title, Print/Download PDF actions,
 /// and the invoice information card (status/number/issued date, Billed To,
@@ -122,11 +121,9 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   }
 
   void _openProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ProfileScreen(userName: kCurrentUserName),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
   }
 
   /// Handles the Print button tap: generates the invoice PDF (shared with

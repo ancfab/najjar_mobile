@@ -19,8 +19,8 @@ import '../widgets/credit_utilization_card.dart';
 import '../widgets/custom_bottom_nav.dart';
 import '../widgets/quick_history_card.dart';
 import 'account_transaction_details_screen.dart';
+import 'edit_profile_screen.dart';
 import 'orders_screen.dart';
-import 'profile_screen.dart';
 import 'support_screen.dart';
 
 // Bottom tab bar indexes, matching HomeScreen's. Account Balance itself
@@ -137,11 +137,9 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   }
 
   void _openProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ProfileScreen(userName: kCurrentUserName),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
   }
 
   // Handles bottom tab bar taps. Home returns to the screen this was pushed
@@ -163,11 +161,9 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
         ).push(MaterialPageRoute(builder: (_) => const SupportScreen()));
         break;
       case _navIndexProfile:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const ProfileScreen(userName: kCurrentUserName),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
         break;
     }
   }

@@ -15,9 +15,9 @@ import '../widgets/last_payment_card.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/scan_fabric_button.dart';
 import 'account_balance_screen.dart';
+import 'edit_profile_screen.dart';
 import 'invoices_screen.dart';
 import 'orders_screen.dart';
-import 'profile_screen.dart';
 import 'scan_stock_screen.dart';
 import 'support_screen.dart';
 
@@ -166,13 +166,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Opens the Profile screen from the header avatar/name tap.
+  // Opens the Profile (Edit Profile) screen from the header avatar/name tap.
   void _openProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ProfileScreen(userName: kCurrentUserName),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
   }
 
   // Handles the header gear icon tap.
@@ -242,10 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _openTabScreen(_navIndexSupport, const SupportScreen());
         break;
       case _navIndexProfile:
-        _openTabScreen(
-          _navIndexProfile,
-          const ProfileScreen(userName: kCurrentUserName),
-        );
+        _openTabScreen(_navIndexProfile, const EditProfileScreen());
         break;
     }
   }

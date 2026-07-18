@@ -28,6 +28,30 @@ String? validateEmailField(String? value) {
   return null;
 }
 
+/// Matches phone numbers made up of an optional leading `+` plus digits,
+/// spaces, hyphens, and parentheses — permissive enough to accept any
+/// country's display format (including an embedded country code like
+/// `+1 (555) 902-3481`) without enforcing one specific national pattern.
+final RegExp _phoneAllowedCharacters = RegExp(r'^\+?[0-9\s\-()]+$');
+
+/// Validates a phone number field: rejects blank input, characters other
+/// than digits/`+`/spaces/hyphens/parentheses, and digit counts outside the
+/// 7-15 range international numbers (with their country code, if included)
+/// fall into.
+String? validatePhoneField(String? value) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isEmpty) {
+    return 'Please enter your phone number.';
+  }
+  final digitCount = trimmed.replaceAll(RegExp(r'[^0-9]'), '').length;
+  if (!_phoneAllowedCharacters.hasMatch(trimmed) ||
+      digitCount < 7 ||
+      digitCount > 15) {
+    return 'Please enter a valid phone number.';
+  }
+  return null;
+}
+
 /// Requires an explicit subject selection — the dropdown's placeholder
 /// hint ("Select a subject") is not itself a selectable value, so a `null`
 /// selection is the only invalid state to check for here.

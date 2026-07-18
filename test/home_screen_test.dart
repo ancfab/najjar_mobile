@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
+import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
-import 'package:anc_fabrics/screens/profile_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/widgets/balance_card.dart';
@@ -69,7 +69,7 @@ void main() {
 
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
-    expect(find.byType(ProfileScreen), findsOneWidget);
+    expect(find.byType(EditProfileScreen), findsOneWidget);
   });
 
   testWidgets('Catalogue lookup shows a validation error on empty input', (

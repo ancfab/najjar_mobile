@@ -12,8 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
+import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
-import 'package:anc_fabrics/screens/profile_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
@@ -566,7 +566,7 @@ void main() {
 
       await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
-      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.byType(EditProfileScreen), findsOneWidget);
     });
   });
 

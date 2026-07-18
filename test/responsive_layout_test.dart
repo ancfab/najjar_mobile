@@ -13,11 +13,11 @@ import 'package:anc_fabrics/main.dart';
 import 'package:anc_fabrics/models/fabric_order_filter.dart';
 import 'package:anc_fabrics/models/fabric_specs.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
+import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/invoices_screen.dart';
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
-import 'package:anc_fabrics/screens/profile_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/widgets/country_code_picker.dart';
@@ -407,14 +407,14 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
 
+  group('Edit Profile screen', () {
     testWidgets(
-      'Profile screen has no overflow at small width + 1.5x text scale',
+      'No overflow at small width + 1.5x text scale',
       (tester) async {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
-        await tester.pumpWidget(
-          const MaterialApp(home: ProfileScreen(userName: 'Ismail Al Rashid')),
-        );
+        await tester.pumpWidget(const MaterialApp(home: EditProfileScreen()));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       },

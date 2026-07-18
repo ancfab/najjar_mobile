@@ -90,6 +90,53 @@ void main() {
     });
   });
 
+  group('validatePhoneField', () {
+    test('returns a required message for null input', () {
+      expect(validatePhoneField(null), 'Please enter your phone number.');
+    });
+
+    test('returns a required message for empty input', () {
+      expect(validatePhoneField(''), 'Please enter your phone number.');
+    });
+
+    test('returns a required message for whitespace-only input', () {
+      expect(validatePhoneField('   '), 'Please enter your phone number.');
+    });
+
+    test('rejects letters', () {
+      expect(
+        validatePhoneField('abc123'),
+        'Please enter a valid phone number.',
+      );
+    });
+
+    test('rejects too few digits', () {
+      expect(validatePhoneField('12345'), 'Please enter a valid phone number.');
+    });
+
+    test('rejects too many digits', () {
+      expect(
+        validatePhoneField('1234567890123456'),
+        'Please enter a valid phone number.',
+      );
+    });
+
+    test('accepts a plain international number', () {
+      expect(validatePhoneField('+9613123456'), isNull);
+    });
+
+    test(
+      'accepts a number formatted with spaces, hyphens, and parentheses',
+      () {
+        expect(validatePhoneField('+1 (555) 902-3481'), isNull);
+      },
+    );
+
+    test('trims surrounding whitespace before validating', () {
+      expect(validatePhoneField('  +1 (555) 902-3481  '), isNull);
+    });
+  });
+
   group('validateSubjectField', () {
     test('returns a message when no subject is selected', () {
       expect(validateSubjectField(null), 'Please select a subject.');
