@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
 
+import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/session_service.dart';
 import 'theme/app_colors.dart';
 
-void main() {
-  runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Startup auth gate: reads the persisted session (not just in-memory
+  // state) before the first frame, so a relaunch after logout opens on
+  // Login rather than briefly showing — or worse, staying on — an
+  // authenticated screen.
+  final isLoggedIn = await const SharedPreferencesSessionService().isLoggedIn();
+  runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.isLoggedIn = false});
+
+  /// Whether a previously-established session is still active, as
+  /// determined by [SessionService.isLoggedIn] before the widget tree is
+  /// built. Defaults to false (Login) so widget tests that construct
+  /// MyApp() directly — bypassing main()'s async startup check — see the
+  /// same behavior as a fresh, logged-out install.
+  final bool isLoggedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +38,7 @@ class MyApp extends StatelessWidget {
           surface: AppColors.background,
         ),
       ),
-      home: const LoginScreen(),
+      home: isLoggedIn ? const HomeScreen() : const LoginScreen(),
     );
   }
 }

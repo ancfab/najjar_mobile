@@ -1,8 +1,11 @@
 // Widget checks for the Edit Profile screen: header/back button, avatar +
 // camera overlay, client info, prefilled form fields (including multiline
 // Business Address), Save Changes submission against a fake in-memory
-// service, the Logout placeholder, bottom navigation (Profile selected),
-// scroll-to-Logout on a small viewport, and real back navigation.
+// service, Logout against a fake session service (session clearing,
+// navigation, stack removal, loading/disabled state, duplicate-tap
+// guarding, failure feedback, and unsaved-edit interaction), bottom
+// navigation (Profile selected), scroll-to-Logout on a small viewport, and
+// real back navigation.
 
 import 'dart:async';
 
@@ -11,12 +14,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/data/mock_profile_data.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
+import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/profile_service.dart';
+import 'package:anc_fabrics/services/session_service.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_profile_service.dart';
+import 'helpers/fake_session_service.dart';
 
 void main() {
   Future<void> pumpEditProfile(
@@ -24,6 +30,7 @@ void main() {
     double width = 390,
     double height = 800,
     FakeProfileService? service,
+    FakeSessionService? sessionService,
   }) async {
     tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1.0;
@@ -32,10 +39,49 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: EditProfileScreen(service: service ?? FakeProfileService()),
+        home: EditProfileScreen(
+          service: service ?? FakeProfileService(),
+          sessionService: sessionService ?? FakeSessionService(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  // Pushes EditProfileScreen on top of a stand-in "Home" screen, the way it
+  // is really reached, so tests can assert on real navigation: popping back
+  // to the previous screen, or — for logout — that the whole stack beneath
+  // it is removed rather than just this one route.
+  Future<void> pumpPushedEditProfile(
+    WidgetTester tester, {
+    FakeProfileService? service,
+    FakeSessionService? sessionService,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(
+                      service: service ?? FakeProfileService(),
+                      sessionService: sessionService ?? FakeSessionService(),
+                    ),
+                  ),
+                ),
+                child: const Text('Open Edit Profile'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open Edit Profile'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EditProfileScreen), findsOneWidget);
   }
 
   // Reads a field's live controller text directly, matching the pattern
@@ -551,20 +597,163 @@ void main() {
       expect(sizedBox.width, double.infinity);
     });
 
-    testWidgets('Tapping Logout shows a placeholder message, not a fake '
-        'success state', (tester) async {
-      await pumpEditProfile(tester);
+    Finder logoutButtonFinder() =>
+        find.byKey(const ValueKey('edit-profile-logout-button'));
 
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('edit-profile-logout-button')),
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('edit-profile-logout-button')),
-      );
+    Future<void> tapLogout(WidgetTester tester) async {
+      await tester.ensureVisible(logoutButtonFinder());
+      await tester.tap(logoutButtonFinder());
+    }
+
+    testWidgets(
+      'Tapping Logout invokes the session service once and routes to Login',
+      (tester) async {
+        final sessionService = FakeSessionService(loggedIn: true);
+        await pumpPushedEditProfile(tester, sessionService: sessionService);
+
+        await tapLogout(tester);
+        await tester.pumpAndSettle();
+
+        expect(sessionService.endSessionCallCount, 1);
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.byType(EditProfileScreen), findsNothing);
+      },
+    );
+
+    testWidgets('Logout clears the stored authenticated session', (
+      tester,
+    ) async {
+      final sessionService = FakeSessionService(loggedIn: true);
+      await pumpEditProfile(tester, sessionService: sessionService);
+      expect(await sessionService.isLoggedIn(), isTrue);
+
+      await tapLogout(tester);
       await tester.pumpAndSettle();
 
-      expect(find.text('Logout is not connected yet.'), findsOneWidget);
+      expect(await sessionService.isLoggedIn(), isFalse);
     });
+
+    testWidgets(
+      'Authenticated routes are removed from the stack: back navigation '
+      "after logout can't return to the previous (Home-like) screen",
+      (tester) async {
+        final sessionService = FakeSessionService(loggedIn: true);
+        await pumpPushedEditProfile(tester, sessionService: sessionService);
+
+        await tapLogout(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.text('Open Edit Profile'), findsNothing);
+        // Nothing left to pop to — this is what stops the Android back
+        // button / iOS back gesture from ever returning to Home, Profile,
+        // or any other authenticated screen.
+        final navigator = tester.state<NavigatorState>(
+          find.byType(Navigator).first,
+        );
+        expect(navigator.canPop(), isFalse);
+      },
+    );
+
+    testWidgets(
+      'Shows a loading state and disables the button while logout is in '
+      'progress, and blocks a second tap from triggering a duplicate '
+      'logout',
+      (tester) async {
+        final pending = Completer<SessionEndResult>();
+        final sessionService = FakeSessionService(
+          loggedIn: true,
+          pending: pending,
+        );
+        await pumpEditProfile(tester, sessionService: sessionService);
+
+        await tapLogout(tester);
+        await tester.pump();
+
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.text('Logout'), findsNothing);
+
+        // Tapping again while the first request is still in flight must
+        // not trigger a second logout.
+        await tester.tap(logoutButtonFinder());
+        await tester.pump();
+        expect(sessionService.endSessionCallCount, 1);
+
+        pending.complete(SessionEndResult.success);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LoginScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('Successful logout does not display an error message', (
+      tester,
+    ) async {
+      final sessionService = FakeSessionService(loggedIn: true);
+      await pumpPushedEditProfile(tester, sessionService: sessionService);
+
+      await tapLogout(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('Failed logout shows user-facing feedback and stays on the '
+        'authenticated screen instead of navigating away', (tester) async {
+      final sessionService = FakeSessionService(
+        loggedIn: true,
+        result: const SessionEndResult(
+          SessionEndOutcome.failure,
+          message: "We couldn't sign you out. Please try again.",
+        ),
+      );
+      await pumpPushedEditProfile(tester, sessionService: sessionService);
+
+      await tapLogout(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("We couldn't sign you out. Please try again."),
+        findsOneWidget,
+      );
+      expect(find.byType(EditProfileScreen), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
+      // Not left disabled/spinning forever after the failure.
+      expect(find.text('Logout'), findsOneWidget);
+      expect(await sessionService.isLoggedIn(), isTrue);
+    });
+
+    testWidgets(
+      'Logout works while the profile form has unsaved edits, and the '
+      "unsaved-changes discard dialog doesn't interfere",
+      (tester) async {
+        final sessionService = FakeSessionService(loggedIn: true);
+        final profileService = FakeProfileService();
+        await pumpPushedEditProfile(
+          tester,
+          service: profileService,
+          sessionService: sessionService,
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-full-name-field')),
+          'Someone Else',
+        );
+        await tester.pump();
+
+        await tapLogout(tester);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('edit-profile-discard-dialog')),
+          findsNothing,
+        );
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(sessionService.endSessionCallCount, 1);
+        // The unsaved edit must not have been silently saved.
+        expect(profileService.submittedRequests, isEmpty);
+      },
+    );
   });
 
   group('Bottom navigation', () {
@@ -660,36 +849,6 @@ void main() {
   });
 
   group('Back navigation', () {
-    Future<void> pumpPushedEditProfile(
-      WidgetTester tester, {
-      FakeProfileService? service,
-    }) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => EditProfileScreen(
-                        service: service ?? FakeProfileService(),
-                      ),
-                    ),
-                  ),
-                  child: const Text('Open Edit Profile'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open Edit Profile'));
-      await tester.pumpAndSettle();
-      expect(find.byType(EditProfileScreen), findsOneWidget);
-    }
-
     testWidgets('Back button pops back to the previous screen', (tester) async {
       await pumpPushedEditProfile(tester);
 

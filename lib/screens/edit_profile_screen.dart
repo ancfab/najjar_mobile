@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../data/mock_profile_data.dart';
 import '../models/user_profile.dart';
 import '../services/profile_service.dart';
+import '../services/session_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
 import '../widgets/contact_form_field.dart';
 import '../widgets/custom_bottom_nav.dart';
+import 'login_screen.dart';
 import 'orders_screen.dart';
 import 'support_screen.dart';
 
@@ -29,7 +31,10 @@ class EditProfileScreen extends StatefulWidget {
     super.key,
     this.profile = kMockUserProfile,
     ProfileService? service,
-  }) : service = service ?? const UnavailableProfileService();
+    SessionService? sessionService,
+  }) : service = service ?? const UnavailableProfileService(),
+       sessionService =
+           sessionService ?? const SharedPreferencesSessionService();
 
   /// Display/prefill data for the avatar section and form fields. Defaults
   /// to the isolated mock profile; overridable so tests can inject fixed
@@ -39,6 +44,10 @@ class EditProfileScreen extends StatefulWidget {
   /// Save-changes seam. Defaults to the explicitly non-production
   /// [UnavailableProfileService]; overridable so tests can inject a fake.
   final ProfileService service;
+
+  /// Logout seam. Defaults to the real SharedPreferences-backed session
+  /// service; overridable so tests can inject a fake.
+  final SessionService sessionService;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -81,6 +90,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late String _initialBusinessAddress;
 
   bool _isSaving = false;
+  bool _isLoggingOut = false;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
 
   List<TextEditingController> get _formControllers => [
@@ -204,12 +214,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // Logout button tap handler.
-  //
-  // TODO(api): Connect logout to the confirmed authentication/session-
-  // clearing flow.
-  void _handleLogout() {
-    _showSnackBar('Logout is not connected yet.');
+  // Logout button tap handler. Clears the authenticated session and routes
+  // to Login, removing every authenticated screen from the stack so back
+  // navigation (system back / iOS back gesture) can't return to Home,
+  // Profile, or any other authenticated screen. Guarded against duplicate
+  // taps while a request is in flight. Logout is an explicit
+  // session-ending action, not normal back navigation, so it deliberately
+  // does not go through `Navigator.pop`/`maybePop` and therefore bypasses
+  // this screen's PopScope/unsaved-changes discard flow entirely — it
+  // works the same whether the form is dirty or not, and never saves
+  // unsaved edits first.
+  Future<void> _handleLogout() async {
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+
+    try {
+      final result = await widget.sessionService.endSession();
+      if (!mounted) return;
+
+      if (!result.succeeded) {
+        setState(() => _isLoggingOut = false);
+        _showSnackBar(
+          result.message ?? "We couldn't sign you out. Please try again.",
+        );
+        return;
+      }
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      // Technical detail only — never shown to the user.
+      debugPrint('Logout failed: $error');
+      if (!mounted) return;
+      setState(() => _isLoggingOut = false);
+      _showSnackBar("We couldn't sign you out. Please try again.");
+    }
   }
 
   // Called whenever something (the back button, a system back gesture, or
@@ -609,21 +650,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       child: InkWell(
         key: const ValueKey('edit-profile-logout-button'),
         borderRadius: BorderRadius.circular(12),
-        onTap: _handleLogout,
+        onTap: _isLoggingOut ? null : _handleLogout,
         child: SizedBox(
           width: double.infinity,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
-            child: const Center(
-              child: Text(
-                'Logout',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
+            child: Center(
+              child: _isLoggingOut
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
             ),
           ),
         ),

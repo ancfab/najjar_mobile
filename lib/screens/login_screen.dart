@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/country_codes.dart';
 import '../models/country_code.dart';
+import '../services/session_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../widgets/country_code_picker.dart';
@@ -15,7 +16,15 @@ import '../widgets/login/secondary_back_button.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, SessionService? sessionService})
+    : sessionService =
+          sessionService ?? const SharedPreferencesSessionService();
+
+  /// Login seam counterpart to [SessionService.endSession]: marks a session
+  /// active once login succeeds, so logout and the app-startup gate have a
+  /// real session to observe. Defaults to the real SharedPreferences-backed
+  /// service; overridable so tests can inject a fake.
+  final SessionService sessionService;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -74,6 +83,14 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     debugPrint('Login attempted for $fullPhoneNumber');
+
+    // TODO(api): This only marks a local session active; it isn't tied to
+    // a real credential yet since the authentication call above is still a
+    // stub. Once real login succeeds against a backend, persist the
+    // returned token(s) here instead of just a boolean flag (see
+    // SessionService).
+    await widget.sessionService.startSession();
+    if (!mounted) return;
 
     Navigator.of(
       context,
