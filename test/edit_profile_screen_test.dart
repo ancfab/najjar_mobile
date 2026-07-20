@@ -1,14 +1,12 @@
 // Widget checks for the Edit Profile screen: header/back button, avatar +
 // camera overlay, client info, prefilled form fields (including multiline
 // Business Address), Save Changes submission against a fake in-memory
-// service, Logout against a fake session service (session clearing,
-// navigation, stack removal, loading/disabled state, duplicate-tap
-// guarding, failure feedback, and unsaved-edit interaction), bottom
-// navigation (Profile selected), scroll-to-Logout on a small viewport, and
-// real back navigation.
+// service, confirmation that Logout is hidden (per the approved Figma, with
+// the implementation preserved behind a disabled flag for later
+// restoration), bottom navigation (Profile selected), responsive/overflow
+// safety, and real back navigation.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/data/mock_profile_data.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
-import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/avatar_image_processor.dart';
@@ -25,7 +22,6 @@ import 'package:anc_fabrics/services/avatar_picker_service.dart';
 import 'package:anc_fabrics/services/avatar_upload_service.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/profile_service.dart';
-import 'package:anc_fabrics/services/session_service.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_avatar_cropper_service.dart';
@@ -75,8 +71,7 @@ void main() {
               avatarCropperService ?? FakeAvatarCropperService(),
           avatarImageProcessor:
               avatarImageProcessor ?? FakeAvatarImageProcessor(),
-          avatarUploadService:
-              avatarUploadService ?? FakeAvatarUploadService(),
+          avatarUploadService: avatarUploadService ?? FakeAvatarUploadService(),
           avatarController: avatarController ?? CurrentUserAvatarController(),
         ),
       ),
@@ -612,9 +607,7 @@ void main() {
           // The camera button's onTap is null while an operation is
           // active, so a second tap must be a no-op rather than opening a
           // second source sheet or invoking the picker again.
-          final gestureDetector = tester.widget<GestureDetector>(
-            cameraButton,
-          );
+          final gestureDetector = tester.widget<GestureDetector>(cameraButton);
           expect(gestureDetector.onTap, isNull);
 
           await tester.tap(cameraButton);
@@ -761,30 +754,27 @@ void main() {
         },
       );
 
-      testWidgets(
-        'Shows a generic error message, not a crash, when the avatar '
-        'service throws',
-        (tester) async {
-          final uploadService = FakeAvatarUploadService(
-            result: Exception('boom'),
-          );
-          await pumpEditProfile(tester, avatarUploadService: uploadService);
+      testWidgets('Shows a generic error message, not a crash, when the avatar '
+          'service throws', (tester) async {
+        final uploadService = FakeAvatarUploadService(
+          result: Exception('boom'),
+        );
+        await pumpEditProfile(tester, avatarUploadService: uploadService);
 
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          await tester.pumpAndSettle();
+        await tester.tap(cameraButton);
+        await tester.pumpAndSettle();
+        await tester.tap(sourceGalleryOption);
+        await tester.pumpAndSettle();
+        await tester.tap(previewUsePhoto);
+        await tester.pumpAndSettle();
 
-          expect(
-            find.text("We couldn't update your photo. Please try again."),
-            findsOneWidget,
-          );
-          expect(avatarShowsImage(tester), isFalse);
-          expect(tester.takeException(), isNull);
-        },
-      );
+        expect(
+          find.text("We couldn't update your photo. Please try again."),
+          findsOneWidget,
+        );
+        expect(avatarShowsImage(tester), isFalse);
+        expect(tester.takeException(), isNull);
+      });
     });
   });
 
@@ -1229,221 +1219,46 @@ void main() {
     );
   });
 
-  group('Logout', () {
-    testWidgets('Renders a red, full-width Logout button', (tester) async {
+  group('Logout (hidden per approved Figma)', () {
+    // The approved Edit Profile Figma has no Logout button, row, or menu
+    // entry. The implementation (SessionService plumbing, _handleLogout,
+    // and _buildLogoutButton in edit_profile_screen.dart) is preserved
+    // behind the disabled `_showLogoutAction` flag for later restoration;
+    // these tests assert only on what's currently rendered.
+    testWidgets('No Logout button, text, or key is rendered', (tester) async {
       await pumpEditProfile(tester);
 
-      final key = const ValueKey('edit-profile-logout-button');
-      expect(find.byKey(key), findsOneWidget);
-      expect(find.text('Logout'), findsOneWidget);
-
-      final material = tester.widget<Material>(
-        find
-            .ancestor(of: find.byKey(key), matching: find.byType(Material))
-            .first,
-      );
-      expect(material.color, const Color(0xFFEE2B2B));
-
-      final sizedBox = tester.widget<SizedBox>(
-        find
-            .descendant(of: find.byKey(key), matching: find.byType(SizedBox))
-            .first,
-      );
-      expect(sizedBox.width, double.infinity);
-    });
-
-    Finder logoutButtonFinder() =>
-        find.byKey(const ValueKey('edit-profile-logout-button'));
-
-    Future<void> tapLogout(WidgetTester tester) async {
-      await tester.ensureVisible(logoutButtonFinder());
-      await tester.tap(logoutButtonFinder());
-    }
-
-    testWidgets(
-      'Logout clears the shared avatar state so a previous avatar never '
-      "leaks into another user's session",
-      (tester) async {
-        final avatarController = CurrentUserAvatarController();
-        final tempFile = await File(
-          '${Directory.systemTemp.path}/edit_profile_logout_avatar_test.jpg',
-        ).writeAsBytes([0, 1, 2, 3]);
-        addTearDown(() async {
-          if (await tempFile.exists()) await tempFile.delete();
-        });
-
-        final sessionService = FakeSessionService(loggedIn: true);
-        await pumpPushedEditProfile(
-          tester,
-          sessionService: sessionService,
-          avatarController: avatarController,
-        );
-
-        // Set after pumping (matching every other setAvatarPath call in
-        // this file, which all happen from within the pumped widget tree)
-        // so the SharedPreferences mock channel is exercised the same way.
-        print('TRACE before setAvatarPath');
-        await avatarController.setAvatarPath(tempFile.path);
-        print('TRACE after setAvatarPath');
-        await tester.pump();
-        print('TRACE after pump');
-
-        await tapLogout(tester);
-        print('TRACE after tapLogout');
-        await tester.pumpAndSettle();
-        print('TRACE after pumpAndSettle');
-
-        expect(avatarController.avatarFile, isNull);
-      },
-    );
-
-    testWidgets(
-      'Tapping Logout invokes the session service once and routes to Login',
-      (tester) async {
-        final sessionService = FakeSessionService(loggedIn: true);
-        await pumpPushedEditProfile(tester, sessionService: sessionService);
-
-        await tapLogout(tester);
-        await tester.pumpAndSettle();
-
-        expect(sessionService.endSessionCallCount, 1);
-        expect(find.byType(LoginScreen), findsOneWidget);
-        expect(find.byType(EditProfileScreen), findsNothing);
-      },
-    );
-
-    testWidgets('Logout clears the stored authenticated session', (
-      tester,
-    ) async {
-      final sessionService = FakeSessionService(loggedIn: true);
-      await pumpEditProfile(tester, sessionService: sessionService);
-      expect(await sessionService.isLoggedIn(), isTrue);
-
-      await tapLogout(tester);
-      await tester.pumpAndSettle();
-
-      expect(await sessionService.isLoggedIn(), isFalse);
-    });
-
-    testWidgets(
-      'Authenticated routes are removed from the stack: back navigation '
-      "after logout can't return to the previous (Home-like) screen",
-      (tester) async {
-        final sessionService = FakeSessionService(loggedIn: true);
-        await pumpPushedEditProfile(tester, sessionService: sessionService);
-
-        await tapLogout(tester);
-        await tester.pumpAndSettle();
-
-        expect(find.byType(LoginScreen), findsOneWidget);
-        expect(find.text('Open Edit Profile'), findsNothing);
-        // Nothing left to pop to — this is what stops the Android back
-        // button / iOS back gesture from ever returning to Home, Profile,
-        // or any other authenticated screen.
-        final navigator = tester.state<NavigatorState>(
-          find.byType(Navigator).first,
-        );
-        expect(navigator.canPop(), isFalse);
-      },
-    );
-
-    testWidgets(
-      'Shows a loading state and disables the button while logout is in '
-      'progress, and blocks a second tap from triggering a duplicate '
-      'logout',
-      (tester) async {
-        final pending = Completer<SessionEndResult>();
-        final sessionService = FakeSessionService(
-          loggedIn: true,
-          pending: pending,
-        );
-        await pumpEditProfile(tester, sessionService: sessionService);
-
-        await tapLogout(tester);
-        await tester.pump();
-
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
-        expect(find.text('Logout'), findsNothing);
-
-        // Tapping again while the first request is still in flight must
-        // not trigger a second logout.
-        await tester.tap(logoutButtonFinder());
-        await tester.pump();
-        expect(sessionService.endSessionCallCount, 1);
-
-        pending.complete(SessionEndResult.success);
-        await tester.pumpAndSettle();
-
-        expect(find.byType(LoginScreen), findsOneWidget);
-      },
-    );
-
-    testWidgets('Successful logout does not display an error message', (
-      tester,
-    ) async {
-      final sessionService = FakeSessionService(loggedIn: true);
-      await pumpPushedEditProfile(tester, sessionService: sessionService);
-
-      await tapLogout(tester);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(SnackBar), findsNothing);
-    });
-
-    testWidgets('Failed logout shows user-facing feedback and stays on the '
-        'authenticated screen instead of navigating away', (tester) async {
-      final sessionService = FakeSessionService(
-        loggedIn: true,
-        result: const SessionEndResult(
-          SessionEndOutcome.failure,
-          message: "We couldn't sign you out. Please try again.",
-        ),
-      );
-      await pumpPushedEditProfile(tester, sessionService: sessionService);
-
-      await tapLogout(tester);
-      await tester.pumpAndSettle();
-
+      expect(find.text('Logout'), findsNothing);
       expect(
-        find.text("We couldn't sign you out. Please try again."),
-        findsOneWidget,
+        find.byKey(const ValueKey('edit-profile-logout-button')),
+        findsNothing,
       );
-      expect(find.byType(EditProfileScreen), findsOneWidget);
-      expect(find.byType(LoginScreen), findsNothing);
-      // Not left disabled/spinning forever after the failure.
-      expect(find.text('Logout'), findsOneWidget);
-      expect(await sessionService.isLoggedIn(), isTrue);
     });
 
     testWidgets(
-      'Logout works while the profile form has unsaved edits, and the '
-      "unsaved-changes discard dialog doesn't interfere",
+      'The three-dot icon stays non-interactive and reveals no Logout entry',
       (tester) async {
-        final sessionService = FakeSessionService(loggedIn: true);
-        final profileService = FakeProfileService();
-        await pumpPushedEditProfile(
-          tester,
-          service: profileService,
-          sessionService: sessionService,
-        );
+        await pumpEditProfile(tester);
 
-        await tester.enterText(
-          find.byKey(const ValueKey('edit-profile-full-name-field')),
-          'Someone Else',
-        );
-        await tester.pump();
-
-        await tapLogout(tester);
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
         await tester.pumpAndSettle();
+
+        expect(find.text('Logout'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Nothing renders below Save Changes other than the bottom navigation',
+      (tester) async {
+        await pumpEditProfile(tester);
 
         expect(
-          find.byKey(const ValueKey('edit-profile-discard-dialog')),
-          findsNothing,
+          find.byKey(const ValueKey('edit-profile-save-button')),
+          findsOneWidget,
         );
-        expect(find.byType(LoginScreen), findsOneWidget);
-        expect(sessionService.endSessionCallCount, 1);
-        // The unsaved edit must not have been silently saved.
-        expect(profileService.submittedRequests, isEmpty);
+        expect(find.byType(CustomBottomNav), findsOneWidget);
+        expect(find.text('Logout'), findsNothing);
       },
     );
   });
@@ -1495,18 +1310,18 @@ void main() {
   });
 
   group('Small viewport scrolling', () {
-    testWidgets('Can scroll to the Logout button without overflow', (
+    testWidgets('Can scroll to the Save Changes button without overflow', (
       tester,
     ) async {
       await pumpEditProfile(tester, width: 320, height: 560);
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('edit-profile-logout-button')),
+        find.byKey(const ValueKey('edit-profile-save-button')),
       );
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(const ValueKey('edit-profile-logout-button')),
+        find.byKey(const ValueKey('edit-profile-save-button')),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);

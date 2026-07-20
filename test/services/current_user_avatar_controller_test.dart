@@ -11,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/session_service.dart';
 
+import '../helpers/valid_avatar_image.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,7 +31,7 @@ void main() {
 
   Future<File> writeAvatarFile(String name) async {
     final file = File('${tempDir.path}/$name');
-    return file.writeAsBytes([1, 2, 3, 4]);
+    return file.writeAsBytes(validAvatarPngBytes);
   }
 
   test('Has no avatar by default', () {
@@ -39,97 +41,94 @@ void main() {
     expect(controller.imageProvider, isNull);
   });
 
-  test('setAvatarPath sets the in-memory avatar and notifies listeners', () async {
-    final controller = CurrentUserAvatarController();
-    final file = await writeAvatarFile('avatar.jpg');
-    var notified = 0;
-    controller.addListener(() => notified++);
-
-    await controller.setAvatarPath(file.path);
-
-    expect(controller.avatarFile?.path, file.path);
-    expect(controller.imageProvider, isNotNull);
-    expect(notified, 1);
-  });
-
-  test('setAvatarPath persists the path for restorePersisted to find', () async {
-    final controller = CurrentUserAvatarController();
-    final file = await writeAvatarFile('avatar.jpg');
-
-    await controller.setAvatarPath(file.path);
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString(SessionStorageKeys.localAvatarPath), file.path);
-  });
-
   test(
-    'restorePersisted restores a previously persisted avatar that still '
-    'exists on disk',
+    'setAvatarPath sets the in-memory avatar and notifies listeners',
     () async {
-      final file = await writeAvatarFile('avatar.jpg');
-      SharedPreferences.setMockInitialValues({
-        SessionStorageKeys.localAvatarPath: file.path,
-      });
-
       final controller = CurrentUserAvatarController();
-      await controller.restorePersisted();
+      final file = await writeAvatarFile('avatar.jpg');
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      await controller.setAvatarPath(file.path);
 
       expect(controller.avatarFile?.path, file.path);
+      expect(controller.imageProvider, isNotNull);
+      expect(notified, 1);
     },
   );
 
   test(
-    'restorePersisted does nothing when the persisted path no longer '
-    'exists on disk (e.g. a stale temp-picker path)',
+    'setAvatarPath persists the path for restorePersisted to find',
     () async {
-      SharedPreferences.setMockInitialValues({
-        SessionStorageKeys.localAvatarPath: '${tempDir.path}/missing.jpg',
-      });
-
       final controller = CurrentUserAvatarController();
-      await controller.restorePersisted();
+      final file = await writeAvatarFile('avatar.jpg');
 
-      expect(controller.avatarFile, isNull);
+      await controller.setAvatarPath(file.path);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(SessionStorageKeys.localAvatarPath), file.path);
     },
   );
 
-  test('restorePersisted does nothing when no path was ever persisted', () async {
-    final controller = CurrentUserAvatarController();
+  test('restorePersisted restores a previously persisted avatar that still '
+      'exists on disk', () async {
+    final file = await writeAvatarFile('avatar.jpg');
+    SharedPreferences.setMockInitialValues({
+      SessionStorageKeys.localAvatarPath: file.path,
+    });
 
+    final controller = CurrentUserAvatarController();
+    await controller.restorePersisted();
+
+    expect(controller.avatarFile?.path, file.path);
+  });
+
+  test('restorePersisted does nothing when the persisted path no longer '
+      'exists on disk (e.g. a stale temp-picker path)', () async {
+    SharedPreferences.setMockInitialValues({
+      SessionStorageKeys.localAvatarPath: '${tempDir.path}/missing.jpg',
+    });
+
+    final controller = CurrentUserAvatarController();
     await controller.restorePersisted();
 
     expect(controller.avatarFile, isNull);
   });
 
   test(
-    'clear removes the in-memory avatar, deletes the underlying file, and '
-    'notifies listeners',
-    () async {
-      final controller = CurrentUserAvatarController();
-      final file = await writeAvatarFile('avatar.jpg');
-      await controller.setAvatarPath(file.path);
-      var notified = 0;
-      controller.addListener(() => notified++);
-
-      await controller.clear();
-
-      expect(controller.avatarFile, isNull);
-      expect(controller.imageProvider, isNull);
-      expect(await file.exists(), isFalse);
-      expect(notified, 1);
-    },
-  );
-
-  test(
-    'clear is safe to call when no avatar was ever set',
+    'restorePersisted does nothing when no path was ever persisted',
     () async {
       final controller = CurrentUserAvatarController();
 
-      await controller.clear();
+      await controller.restorePersisted();
 
       expect(controller.avatarFile, isNull);
     },
   );
+
+  test('clear removes the in-memory avatar, deletes the underlying file, and '
+      'notifies listeners', () async {
+    final controller = CurrentUserAvatarController();
+    final file = await writeAvatarFile('avatar.jpg');
+    await controller.setAvatarPath(file.path);
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    await controller.clear();
+
+    expect(controller.avatarFile, isNull);
+    expect(controller.imageProvider, isNull);
+    expect(await file.exists(), isFalse);
+    expect(notified, 1);
+  });
+
+  test('clear is safe to call when no avatar was ever set', () async {
+    final controller = CurrentUserAvatarController();
+
+    await controller.clear();
+
+    expect(controller.avatarFile, isNull);
+  });
 
   test(
     'A cleared avatar path is not restored by a later restorePersisted '

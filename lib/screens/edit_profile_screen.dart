@@ -33,8 +33,9 @@ const int _navIndexSupport = 2;
 const int _navIndexProfile = 3;
 
 /// Edit Profile screen: avatar with a camera/edit overlay, client info
-/// (ANC ID + last-updated label), a prefilled editable form, a compact
-/// "Save Changes" action, and a full-width "Logout" action.
+/// (ANC ID + last-updated label), a prefilled editable form, and a
+/// full-width "Save Changes" action. A "Logout" action also exists but is
+/// currently hidden — see [_EditProfileScreenState._showLogoutAction].
 ///
 /// TODO(api): Replace mock profile display/prefill data (see
 /// [kMockUserProfile]) once the profile API/backend contract is confirmed.
@@ -109,6 +110,11 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  // TODO(ui): Logout is intentionally hidden to match the approved
+  // Edit Profile Figma. Set _showLogoutAction to true when the product
+  // team requests that logout be restored.
+  static const bool _showLogoutAction = false;
+
   final _formKey = GlobalKey<FormState>();
 
   late final _fullNameController = TextEditingController(
@@ -467,9 +473,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
           TextButton(
             key: const ValueKey('edit-profile-avatar-preview-use-photo'),
-            onPressed: () => Navigator.of(
-              dialogContext,
-            ).pop(_AvatarPreviewAction.usePhoto),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_AvatarPreviewAction.usePhoto),
             child: const Text('Use Photo'),
           ),
         ],
@@ -758,9 +763,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               const SizedBox(height: 28),
               _buildFormFields(),
               const SizedBox(height: 24),
+              _buildDivider(),
+              const SizedBox(height: 24),
               _buildSaveButton(),
-              const SizedBox(height: 32),
-              _buildLogoutButton(),
+              if (_showLogoutAction) ...[
+                const SizedBox(height: 32),
+                _buildLogoutButton(),
+              ],
             ],
           ),
         ),
@@ -989,40 +998,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  // Compact, centered "Save Changes" action, matching the reference's
-  // intrinsic-width button rather than the app's usual full-width buttons.
+  // Thin divider separating the form fields from the Save Changes action,
+  // matching the reference layout.
+  Widget _buildDivider() {
+    return Container(height: 1, color: AppColors.border);
+  }
+
+  // Full-width, centered "Save Changes" action, matching the reference
+  // layout's button width (same as the form fields above it).
   Widget _buildSaveButton() {
-    return Center(
-      child: Material(
-        color: AppColors.primaryNavy,
+    return Material(
+      color: AppColors.primaryNavy,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        key: const ValueKey('edit-profile-save-button'),
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          key: const ValueKey('edit-profile-save-button'),
-          borderRadius: BorderRadius.circular(12),
-          onTap: _isSaving || !_isDirty ? null : _handleSave,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 52),
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-            child: Center(
-              child: _isSaving
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Save Changes',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                      ),
+        onTap: _isSaving || !_isDirty ? null : _handleSave,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Center(
+            child: _isSaving
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
                     ),
-            ),
+                  )
+                : const Text(
+                    'Save Changes',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
           ),
         ),
       ),

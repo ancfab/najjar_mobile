@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
@@ -23,6 +24,7 @@ import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/valid_avatar_image.dart';
 
 Future<void> _pumpAccountBalanceScreen(
   WidgetTester tester, {
@@ -49,6 +51,15 @@ Future<void> _pumpAccountBalanceScreen(
 }
 
 void main() {
+  setUp(() {
+    // CurrentUserAvatarController.setAvatarPath persists the path via
+    // SharedPreferences; without a mock in place, the real plugin's
+    // getInstance() call never resolves in a widget test (no platform to
+    // answer it), hanging avatar-setting tests until they time out instead
+    // of failing fast.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('Renders without exceptions', () {
     testWidgets('Builds successfully with mock data', (tester) async {
       await _pumpAccountBalanceScreen(tester);
@@ -67,37 +78,40 @@ void main() {
       expect(find.text('AS'), findsOneWidget);
     });
 
-    testWidgets(
-      'Reflects a shared avatar image and keeps showing the initials '
-      'fallback when none is set',
-      (tester) async {
-        final avatarController = CurrentUserAvatarController();
-        await _pumpAccountBalanceScreen(
-          tester,
-          avatarController: avatarController,
-        );
+    testWidgets('Reflects a shared avatar image and keeps showing the initials '
+        'fallback when none is set', (tester) async {
+      final avatarController = CurrentUserAvatarController();
+      await _pumpAccountBalanceScreen(
+        tester,
+        avatarController: avatarController,
+      );
 
-        expect(find.text('AS'), findsOneWidget);
-        var badge = tester.widget<AvatarInitialsBadge>(
-          find.byKey(const ValueKey('account-balance-avatar')),
-        );
-        expect(badge.image, isNull);
+      expect(find.text('AS'), findsOneWidget);
+      var badge = tester.widget<AvatarInitialsBadge>(
+        find.byKey(const ValueKey('account-balance-avatar')),
+      );
+      expect(badge.image, isNull);
 
-        final tempFile = await File(
-          '${Directory.systemTemp.path}/account_balance_avatar_test.jpg',
-        ).writeAsBytes([0, 1, 2, 3]);
-        addTearDown(() async {
-          if (await tempFile.exists()) await tempFile.delete();
-        });
-        await avatarController.setAvatarPath(tempFile.path);
-        await tester.pumpAndSettle();
-
-        badge = tester.widget<AvatarInitialsBadge>(
-          find.byKey(const ValueKey('account-balance-avatar')),
+      late File tempFile;
+      await tester.runAsync(() async {
+        tempFile = await writeAndPrecacheAvatarFile(
+          path: '${Directory.systemTemp.path}/account_balance_avatar_test.png',
+          bytes: validAvatarPngBytes,
+          context: tester.element(find.byType(MaterialApp)),
         );
-        expect(badge.image, isNotNull);
-      },
-    );
+      });
+      addTearDown(() async {
+        if (await tempFile.exists()) await tempFile.delete();
+      });
+
+      await avatarController.setAvatarPath(tempFile.path);
+      await tester.pumpAndSettle();
+
+      badge = tester.widget<AvatarInitialsBadge>(
+        find.byKey(const ValueKey('account-balance-avatar')),
+      );
+      expect(badge.image, isNotNull);
+    });
   });
 
   group('Global Account Balance hero card', () {

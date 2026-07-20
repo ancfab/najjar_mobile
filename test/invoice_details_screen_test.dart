@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/screens/invoice_details_screen.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
@@ -16,6 +17,7 @@ import 'package:anc_fabrics/services/invoice_pdf_service.dart';
 
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
+import 'helpers/valid_avatar_image.dart';
 
 /// The mock Invoice Details fetch has a simulated 400ms network delay;
 /// `pumpAndSettle` alone won't wait for that bare `Future.delayed` since it
@@ -52,6 +54,15 @@ Future<void> _pumpInvoiceDetailsScreen(
 }
 
 void main() {
+  setUp(() {
+    // CurrentUserAvatarController.setAvatarPath persists the path via
+    // SharedPreferences; without a mock in place, the real plugin's
+    // getInstance() call never resolves in a widget test (no platform to
+    // answer it), hanging avatar-setting tests until they time out instead
+    // of failing fast.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('Header, breadcrumb, and title', () {
     testWidgets('Renders the Invoice Details title', (tester) async {
       await _pumpInvoiceDetailsScreen(tester);
@@ -89,14 +100,27 @@ void main() {
           ),
         );
         expect(circleAvatar.backgroundImage, isNull);
-        expect(find.descendant(of: avatarFinder, matching: find.byIcon(Icons.person)), findsOneWidget);
+        expect(
+          find.descendant(
+            of: avatarFinder,
+            matching: find.byIcon(Icons.person),
+          ),
+          findsOneWidget,
+        );
 
-        final tempFile = await File(
-          '${Directory.systemTemp.path}/invoice_details_avatar_test.jpg',
-        ).writeAsBytes([0, 1, 2, 3]);
+        late File tempFile;
+        await tester.runAsync(() async {
+          tempFile = await writeAndPrecacheAvatarFile(
+            path:
+                '${Directory.systemTemp.path}/invoice_details_avatar_test.png',
+            bytes: validAvatarPngBytes,
+            context: tester.element(find.byType(MaterialApp)),
+          );
+        });
         addTearDown(() async {
           if (await tempFile.exists()) await tempFile.delete();
         });
+
         await avatarController.setAvatarPath(tempFile.path);
         await tester.pumpAndSettle();
 
@@ -223,21 +247,18 @@ void main() {
       );
     });
 
-    testWidgets(
-      'The PAID status badge remains visible and unrelated to the '
-      'Logistics card',
-      (tester) async {
-        await _pumpInvoiceDetailsScreen(tester);
-        await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('invoice-logistics-card')),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
+    testWidgets('The PAID status badge remains visible and unrelated to the '
+        'Logistics card', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('invoice-logistics-card')),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
 
-        expect(find.text('PAID'), findsOneWidget);
-        expect(find.text('Logistics'), findsOneWidget);
-      },
-    );
+      expect(find.text('PAID'), findsOneWidget);
+      expect(find.text('Logistics'), findsOneWidget);
+    });
 
     testWidgets('Can scroll from the header down to the Logistics card', (
       tester,
@@ -290,17 +311,14 @@ void main() {
       expect(find.text('\$2,050.00'), findsOneWidget);
     });
 
-    testWidgets(
-      'Line totals are quantity times unit price, not independently '
-      'hardcoded',
-      (tester) async {
-        await _pumpInvoiceDetailsScreen(tester);
+    testWidgets('Line totals are quantity times unit price, not independently '
+        'hardcoded', (tester) async {
+      await _pumpInvoiceDetailsScreen(tester);
 
-        // 12 x $850.00 and 5 x $410.00.
-        expect(find.text('\$10,200.00'), findsOneWidget);
-        expect(find.text('\$2,050.00'), findsOneWidget);
-      },
-    );
+      // 12 x $850.00 and 5 x $410.00.
+      expect(find.text('\$10,200.00'), findsOneWidget);
+      expect(find.text('\$2,050.00'), findsOneWidget);
+    });
 
     testWidgets('Renders Subtotal calculated from the line item totals', (
       tester,
@@ -474,7 +492,10 @@ void main() {
         expect(pdfService.generatedFor, hasLength(1));
         expect(pdfService.generatedFor.single.invoiceNumber, '#INV-8821');
         expect(documentActions.printCalls, hasLength(1));
-        expect(documentActions.printCalls.single.filename, 'invoice-INV-8821.pdf');
+        expect(
+          documentActions.printCalls.single.filename,
+          'invoice-INV-8821.pdf',
+        );
         expect(documentActions.saveCalls, isEmpty);
         expect(tester.takeException(), isNull);
       },
@@ -497,7 +518,10 @@ void main() {
 
         expect(pdfService.generatedFor, hasLength(1));
         expect(documentActions.saveCalls, hasLength(1));
-        expect(documentActions.saveCalls.single.filename, 'invoice-INV-8821.pdf');
+        expect(
+          documentActions.saveCalls.single.filename,
+          'invoice-INV-8821.pdf',
+        );
         expect(documentActions.printCalls, isEmpty);
         expect(tester.takeException(), isNull);
       },
@@ -557,7 +581,9 @@ void main() {
 
         await tester.tap(find.text('Print'));
         await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('invoice-action-print-button')));
+        await tester.tap(
+          find.byKey(const ValueKey('invoice-action-print-button')),
+        );
         await tester.pump();
 
         expect(pdfService.generatedFor, hasLength(1));
@@ -568,33 +594,35 @@ void main() {
       },
     );
 
-    testWidgets('Shows a cancellation message when the print dialog is dismissed', (
-      tester,
-    ) async {
-      await _pumpInvoiceDetailsScreen(
-        tester,
-        documentActions: FakeInvoiceDocumentActions(printResult: false),
-      );
+    testWidgets(
+      'Shows a cancellation message when the print dialog is dismissed',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          documentActions: FakeInvoiceDocumentActions(printResult: false),
+        );
 
-      await tester.tap(find.text('Print'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Print'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Printing was cancelled.'), findsOneWidget);
-    });
+        expect(find.text('Printing was cancelled.'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Shows a cancellation message when the save sheet is dismissed', (
-      tester,
-    ) async {
-      await _pumpInvoiceDetailsScreen(
-        tester,
-        documentActions: FakeInvoiceDocumentActions(saveResult: false),
-      );
+    testWidgets(
+      'Shows a cancellation message when the save sheet is dismissed',
+      (tester) async {
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          documentActions: FakeInvoiceDocumentActions(saveResult: false),
+        );
 
-      await tester.tap(find.text('Download PDF'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Download PDF'));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Download was cancelled.'), findsOneWidget);
-    });
+        expect(find.text('Download was cancelled.'), findsOneWidget);
+      },
+    );
 
     testWidgets('Shows a failure message when PDF generation throws', (
       tester,
@@ -643,36 +671,35 @@ void main() {
       });
     }
 
-    testWidgets(
-      'Can scroll from the header down to the Payment Timeline',
-      (tester) async {
-        await _pumpInvoiceDetailsScreen(tester, width: 320);
+    testWidgets('Can scroll from the header down to the Payment Timeline', (
+      tester,
+    ) async {
+      await _pumpInvoiceDetailsScreen(tester, width: 320);
 
-        expect(find.text('Invoice Details'), findsOneWidget);
+      expect(find.text('Invoice Details'), findsOneWidget);
 
-        await tester.scrollUntilVisible(
-          find.text('PAYMENT METHOD'),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
-        expect(find.text('PAYMENT METHOD'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('PAYMENT METHOD'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('PAYMENT METHOD'), findsOneWidget);
 
-        await tester.scrollUntilVisible(
-          find.text('Total Amount'),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
-        expect(find.text('Total Amount'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Total Amount'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Total Amount'), findsOneWidget);
 
-        await tester.scrollUntilVisible(
-          find.text('Payment Timeline'),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
-        expect(find.text('Payment Timeline'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      await tester.scrollUntilVisible(
+        find.text('Payment Timeline'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Payment Timeline'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets(
       'Long item descriptions wrap without clipping on a narrow viewport',
