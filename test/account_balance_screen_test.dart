@@ -6,6 +6,7 @@
 // narrow-width overflow safety.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,9 @@ import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
+import 'package:anc_fabrics/widgets/avatar_initials_badge.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
@@ -26,6 +29,7 @@ Future<void> _pumpAccountBalanceScreen(
   double width = 390,
   FakeAccountBalanceService? service,
   FakeAccountStatementExporter? exporter,
+  CurrentUserAvatarController? avatarController,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -37,6 +41,7 @@ Future<void> _pumpAccountBalanceScreen(
       home: AccountBalanceScreen(
         service: service ?? FakeAccountBalanceService(),
         exporter: exporter ?? FakeAccountStatementExporter(),
+        avatarController: avatarController,
       ),
     ),
   );
@@ -61,6 +66,38 @@ void main() {
       // Derived from the mock signed-in user, "Alex Sterling".
       expect(find.text('AS'), findsOneWidget);
     });
+
+    testWidgets(
+      'Reflects a shared avatar image and keeps showing the initials '
+      'fallback when none is set',
+      (tester) async {
+        final avatarController = CurrentUserAvatarController();
+        await _pumpAccountBalanceScreen(
+          tester,
+          avatarController: avatarController,
+        );
+
+        expect(find.text('AS'), findsOneWidget);
+        var badge = tester.widget<AvatarInitialsBadge>(
+          find.byKey(const ValueKey('account-balance-avatar')),
+        );
+        expect(badge.image, isNull);
+
+        final tempFile = await File(
+          '${Directory.systemTemp.path}/account_balance_avatar_test.jpg',
+        ).writeAsBytes([0, 1, 2, 3]);
+        addTearDown(() async {
+          if (await tempFile.exists()) await tempFile.delete();
+        });
+        await avatarController.setAvatarPath(tempFile.path);
+        await tester.pumpAndSettle();
+
+        badge = tester.widget<AvatarInitialsBadge>(
+          find.byKey(const ValueKey('account-balance-avatar')),
+        );
+        expect(badge.image, isNotNull);
+      },
+    );
   });
 
   group('Global Account Balance hero card', () {

@@ -1,0 +1,131 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+/// Thrown by [AvatarImageProcessor.validate] when a picked file can't be
+/// accepted as an avatar. [message] is safe to show directly to the user.
+class AvatarImageValidationException implements Exception {
+  const AvatarImageValidationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'AvatarImageValidationException: $message';
+}
+
+/// Validates a picked (pre-crop) avatar image before it is handed to the
+/// cropper, isolated behind this abstraction so tests can simulate
+/// validation failures without needing a real corrupt file on disk.
+abstract class AvatarImageProcessor {
+  /// Throws [AvatarImageValidationException] if [path] is not a file this
+  /// app can safely accept as an avatar source. Returns normally when the
+  /// file is valid.
+  Future<void> validate(String path);
+}
+
+/// Real [AvatarImageProcessor]: confirms the file exists, is within a sane
+/// size budget, and decodes as an actual image (rejecting non-image files
+/// and corrupt data) before it's passed to the cropper.
+///
+/// Deliberately does not re-implement EXIF-orientation correction: the
+/// upstream picker (see `AvatarPickerService`) already requests a bounded
+/// `maxWidth`/`maxHeight`, which on both Android and iOS causes the native
+/// picker to decode with the correct orientation applied — so by the time a
+/// path reaches here it is already right-side-up and small enough to
+/// decode safely for validation.
+class DefaultAvatarImageProcessor implements AvatarImageProcessor {
+  const DefaultAvatarImageProcessor();
+
+  /// Generous ceiling on the *pre-crop* source file, well above what the
+  /// picker's own downsampling should ever produce — this only exists to
+  /// reject something unexpectedly huge before it's read into memory.
+  static const int _maxSourceBytes = 20 * 1024 * 1024;
+
+  @override
+  Future<void> validate(String path) async {
+    final file = File(path);
+
+    if (!await file.exists()) {
+      throw const AvatarImageValidationException(
+        "We couldn't find that photo. Please try again.",
+      );
+    }
+
+    final length = await file.length();
+    if (length <= 0) {
+      throw const AvatarImageValidationException(
+        'That file appears to be empty. Please choose another photo.',
+      );
+    }
+    if (length > _maxSourceBytes) {
+      throw const AvatarImageValidationException(
+        'That photo is too large. Please choose a smaller image.',
+      );
+    }
+
+    late final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } on FileSystemException {
+      throw const AvatarImageValidationException(
+        "We couldn't read that photo. Please try again.",
+      );
+    }
+
+    if (!_hasSupportedImageSignature(bytes)) {
+      throw const AvatarImageValidationException(
+        'Please choose a JPG, PNG, or HEIC photo.',
+      );
+    }
+
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      await codec.getNextFrame();
+    } catch (_) {
+      throw const AvatarImageValidationException(
+        "That file isn't a valid image. Please choose another photo.",
+      );
+    }
+  }
+
+  // Sniffs the file's leading bytes for known image format signatures,
+  // rejecting anything else (e.g. a document or renamed non-image file)
+  // before it's decoded.
+  bool _hasSupportedImageSignature(Uint8List bytes) {
+    if (bytes.length < 12) return false;
+
+    // JPEG: FF D8 FF
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true;
+
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return true;
+    }
+
+    // WEBP: "RIFF"...."WEBP"
+    if (bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true;
+    }
+
+    // HEIC/HEIF: box size (4 bytes) + "ftyp" + brand (e.g. "heic", "heix",
+    // "mif1").
+    if (bytes[4] == 0x66 &&
+        bytes[5] == 0x74 &&
+        bytes[6] == 0x79 &&
+        bytes[7] == 0x70) {
+      return true;
+    }
+
+    return false;
+  }
+}

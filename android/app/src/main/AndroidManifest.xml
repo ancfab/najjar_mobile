@@ -1,4 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Avatar upload: camera capture for "Take Photo". No storage
+         permission is requested for "Choose from Gallery" — the gallery
+         picker uses the system Photo Picker / document picker, which needs
+         none. See lib/services/avatar_permission_service.dart and
+         avatar_picker_service.dart. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Android 13+ (API 33) granular media permission, requested via
+         permission_handler's Permission.photos before the gallery picker is
+         launched. permission_handler reports this as already granted on
+         older Android versions, where it isn't required. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Camera is used for avatar capture but isn't essential to the app,
+         so devices without one (e.g. some tablets) can still install it. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <application
         android:label="anc_fabrics"
         android:name="${applicationName}"

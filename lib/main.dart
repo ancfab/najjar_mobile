@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/current_user_avatar_controller.dart';
 import 'services/session_service.dart';
 import 'theme/app_colors.dart';
 
@@ -12,6 +13,12 @@ Future<void> main() async {
   // Login rather than briefly showing — or worse, staying on — an
   // authenticated screen.
   final isLoggedIn = await const SharedPreferencesSessionService().isLoggedIn();
+  if (isLoggedIn) {
+    // Restores the temporary local/mock avatar (see
+    // CurrentUserAvatarController) so it's already in place on the first
+    // authenticated frame instead of popping in after a rebuild.
+    await currentUserAvatarController.restorePersisted();
+  }
   runApp(MyApp(isLoggedIn: isLoggedIn));
 }
 

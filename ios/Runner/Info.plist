@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ANC Fabrics uses your camera so you can take a new profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ANC Fabrics uses your photo library so you can choose a profile photo.</string>
 </dict>
 </plist>

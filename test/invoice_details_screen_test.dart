@@ -4,11 +4,13 @@
 // narrow-width overflow safety, and scrolling to the Payment Method section.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/screens/invoice_details_screen.dart';
+import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/invoice_document_actions.dart';
 import 'package:anc_fabrics/services/invoice_pdf_service.dart';
 
@@ -29,6 +31,7 @@ Future<void> _pumpInvoiceDetailsScreen(
   double width = 390,
   InvoicePdfService? pdfService,
   InvoiceDocumentActions? documentActions,
+  CurrentUserAvatarController? avatarController,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -41,6 +44,7 @@ Future<void> _pumpInvoiceDetailsScreen(
         invoiceNumber: invoiceNumber,
         pdfService: pdfService,
         documentActions: documentActions,
+        avatarController: avatarController,
       ),
     ),
   );
@@ -64,6 +68,47 @@ void main() {
       // in the information card's summary row.
       expect(find.text('#INV-8821'), findsNWidgets(2));
     });
+
+    testWidgets(
+      'Reflects a shared avatar image and keeps showing the person-icon '
+      'fallback when none is set',
+      (tester) async {
+        final avatarController = CurrentUserAvatarController();
+        await _pumpInvoiceDetailsScreen(
+          tester,
+          avatarController: avatarController,
+        );
+
+        final avatarFinder = find.byKey(
+          const ValueKey('invoice-details-avatar'),
+        );
+        var circleAvatar = tester.widget<CircleAvatar>(
+          find.descendant(
+            of: avatarFinder,
+            matching: find.byType(CircleAvatar),
+          ),
+        );
+        expect(circleAvatar.backgroundImage, isNull);
+        expect(find.descendant(of: avatarFinder, matching: find.byIcon(Icons.person)), findsOneWidget);
+
+        final tempFile = await File(
+          '${Directory.systemTemp.path}/invoice_details_avatar_test.jpg',
+        ).writeAsBytes([0, 1, 2, 3]);
+        addTearDown(() async {
+          if (await tempFile.exists()) await tempFile.delete();
+        });
+        await avatarController.setAvatarPath(tempFile.path);
+        await tester.pumpAndSettle();
+
+        circleAvatar = tester.widget<CircleAvatar>(
+          find.descendant(
+            of: avatarFinder,
+            matching: find.byType(CircleAvatar),
+          ),
+        );
+        expect(circleAvatar.backgroundImage, isNotNull);
+      },
+    );
   });
 
   group('Invoice information card', () {

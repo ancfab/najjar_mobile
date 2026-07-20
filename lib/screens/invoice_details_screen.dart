@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../models/invoice.dart';
+import '../services/current_user_avatar_controller.dart';
 import '../services/invoice_document_actions.dart';
 import '../services/invoice_pdf_service.dart';
 import '../services/mock_invoice_service.dart';
@@ -37,6 +38,7 @@ class InvoiceDetailsScreen extends StatefulWidget {
     MockInvoiceService? invoiceService,
     InvoicePdfService? pdfService,
     InvoiceDocumentActions? documentActions,
+    this.avatarController,
   }) : invoiceService = invoiceService ?? const MockInvoiceService(),
        pdfService = pdfService ?? const LocalInvoicePdfService(),
        documentActions =
@@ -58,6 +60,12 @@ class InvoiceDetailsScreen extends StatefulWidget {
   /// tests can inject a fake instead of invoking the real platform plugin.
   final InvoiceDocumentActions documentActions;
 
+  /// Shared current-user avatar state. Defaults (lazily, in State) to the
+  /// app-wide [currentUserAvatarController] singleton; overridable so tests
+  /// can inject a fresh instance instead of sharing that mutable singleton
+  /// across test cases.
+  final CurrentUserAvatarController? avatarController;
+
   @override
   State<InvoiceDetailsScreen> createState() => _InvoiceDetailsScreenState();
 }
@@ -70,6 +78,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   late final MockInvoiceService _invoiceService = widget.invoiceService;
   late final InvoicePdfService _pdfService = widget.pdfService;
   late final InvoiceDocumentActions _documentActions = widget.documentActions;
+  late final CurrentUserAvatarController _avatarController =
+      widget.avatarController ?? currentUserAvatarController;
 
   Invoice? _invoice;
   bool _isLoading = true;
@@ -240,10 +250,23 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
           child: GestureDetector(
             key: const ValueKey('invoice-details-avatar'),
             onTap: _openProfile,
-            child: const CircleAvatar(
-              radius: 16,
-              backgroundColor: AppColors.background,
-              child: Icon(Icons.person, color: AppColors.grayText, size: 18),
+            child: ListenableBuilder(
+              listenable: _avatarController,
+              builder: (context, _) {
+                final image = _avatarController.imageProvider;
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppColors.background,
+                  backgroundImage: image,
+                  child: image == null
+                      ? const Icon(
+                          Icons.person,
+                          color: AppColors.grayText,
+                          size: 18,
+                        )
+                      : null,
+                );
+              },
             ),
           ),
         ),

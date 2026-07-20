@@ -11,11 +11,18 @@ class AvatarInitialsBadge extends StatelessWidget {
     required this.initials,
     this.onTap,
     this.diameter = 32,
+    this.image,
   });
 
   final String initials;
   final VoidCallback? onTap;
   final double diameter;
+
+  /// When set, shown in place of [initials] — e.g. the signed-in user's
+  /// avatar photo. Falls back to [initials] whenever this is null (no
+  /// avatar set, or it failed to load), preserving this badge's existing
+  /// size/shape/styling either way.
+  final ImageProvider? image;
 
   @override
   Widget build(BuildContext context) {
@@ -24,21 +31,26 @@ class AvatarInitialsBadge extends StatelessWidget {
       child: Container(
         width: diameter,
         height: diameter,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.primaryNavy,
           shape: BoxShape.circle,
+          image: image != null
+              ? DecorationImage(image: image!, fit: BoxFit.cover)
+              : null,
         ),
         alignment: Alignment.center,
-        child: Text(
-          initials,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
+        child: image != null
+            ? null
+            : Text(
+                initials,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }

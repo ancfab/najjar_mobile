@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/current_user_avatar_controller.dart';
 import '../theme/app_colors.dart';
 
 class HomeHeader extends StatelessWidget {
@@ -8,6 +9,7 @@ class HomeHeader extends StatelessWidget {
     required this.userName,
     this.onAvatarTap,
     this.onSettingsTap,
+    this.avatarController,
   });
 
   final String userName;
@@ -19,8 +21,15 @@ class HomeHeader extends StatelessWidget {
   /// Called when the settings/gear icon is tapped.
   final VoidCallback? onSettingsTap;
 
+  /// Shared current-user avatar state. Defaults to the app-wide
+  /// [currentUserAvatarController] singleton; overridable so tests can
+  /// inject a fresh instance instead of sharing that mutable singleton
+  /// across test cases.
+  final CurrentUserAvatarController? avatarController;
+
   @override
   Widget build(BuildContext context) {
+    final controller = avatarController ?? currentUserAvatarController;
     return Container(
       constraints: const BoxConstraints(minHeight: 68),
       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -36,15 +45,23 @@ class HomeHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               child: Row(
                 children: [
-                  // TODO: Replace with the real user avatar asset once provided.
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.background,
-                    child: Icon(
-                      Icons.person,
-                      color: AppColors.grayText,
-                      size: 20,
-                    ),
+                  ListenableBuilder(
+                    listenable: controller,
+                    builder: (context, _) {
+                      final image = controller.imageProvider;
+                      return CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.background,
+                        backgroundImage: image,
+                        child: image == null
+                            ? const Icon(
+                                Icons.person,
+                                color: AppColors.grayText,
+                                size: 20,
+                              )
+                            : null,
+                      );
+                    },
                   ),
                   const SizedBox(width: 12),
                   Expanded(

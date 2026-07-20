@@ -1,7 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../data/mock_profile_data.dart';
 import '../models/user_profile.dart';
+import '../services/avatar_cropper_service.dart';
+import '../services/avatar_image_processor.dart';
+import '../services/avatar_permission_service.dart';
+import '../services/avatar_picker_service.dart';
+import '../services/avatar_upload_service.dart';
+import '../services/current_user_avatar_controller.dart';
 import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_colors.dart';
@@ -12,6 +20,10 @@ import '../widgets/custom_bottom_nav.dart';
 import 'login_screen.dart';
 import 'orders_screen.dart';
 import 'support_screen.dart';
+
+/// Result of the "Use Photo" / "Choose Again" / "Cancel" preview step shown
+/// after cropping.
+enum _AvatarPreviewAction { usePhoto, chooseAgain, cancel }
 
 // Bottom tab bar indexes, matching HomeScreen's. This screen is itself the
 // Profile tab's destination, so Profile is kept as the selected tab.
@@ -32,9 +44,26 @@ class EditProfileScreen extends StatefulWidget {
     this.profile = kMockUserProfile,
     ProfileService? service,
     SessionService? sessionService,
+    AvatarPickerService? avatarPickerService,
+    AvatarPermissionService? avatarPermissionService,
+    AvatarCropperService? avatarCropperService,
+    AvatarImageProcessor? avatarImageProcessor,
+    AvatarUploadService? avatarUploadService,
+    this.avatarController,
   }) : service = service ?? const UnavailableProfileService(),
        sessionService =
-           sessionService ?? const SharedPreferencesSessionService();
+           sessionService ?? const SharedPreferencesSessionService(),
+       avatarPickerService =
+           avatarPickerService ?? const ImagePickerAvatarPickerService(),
+       avatarPermissionService =
+           avatarPermissionService ??
+           const PermissionHandlerAvatarPermissionService(),
+       avatarCropperService =
+           avatarCropperService ?? const ImageCropperAvatarCropperService(),
+       avatarImageProcessor =
+           avatarImageProcessor ?? const DefaultAvatarImageProcessor(),
+       avatarUploadService =
+           avatarUploadService ?? const LocalAvatarUploadService();
 
   /// Display/prefill data for the avatar section and form fields. Defaults
   /// to the isolated mock profile; overridable so tests can inject fixed
@@ -48,6 +77,32 @@ class EditProfileScreen extends StatefulWidget {
   /// Logout seam. Defaults to the real SharedPreferences-backed session
   /// service; overridable so tests can inject a fake.
   final SessionService sessionService;
+
+  /// Camera/gallery selection seam. Overridable so tests can inject a fake
+  /// instead of invoking the real platform picker.
+  final AvatarPickerService avatarPickerService;
+
+  /// Camera/gallery permission seam. Overridable so tests can inject a
+  /// fake instead of invoking the real platform permission channel.
+  final AvatarPermissionService avatarPermissionService;
+
+  /// Square-crop seam. Overridable so tests can inject a fake instead of
+  /// invoking the real platform cropper UI.
+  final AvatarCropperService avatarCropperService;
+
+  /// Picked-image validation seam. Overridable so tests can simulate an
+  /// invalid/unreadable file without needing one on disk.
+  final AvatarImageProcessor avatarImageProcessor;
+
+  /// Confirmed-avatar storage seam. Defaults to the explicitly local/mock
+  /// [LocalAvatarUploadService]; overridable so tests can inject a fake.
+  final AvatarUploadService avatarUploadService;
+
+  /// Shared current-user avatar state. Defaults (lazily, in State — see
+  /// [_EditProfileScreenState]) to the app-wide [currentUserAvatarController]
+  /// singleton; overridable so tests can inject a fresh instance instead of
+  /// sharing that mutable singleton across test cases.
+  final CurrentUserAvatarController? avatarController;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -92,6 +147,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isSaving = false;
   bool _isLoggingOut = false;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
+
+  // Resolved lazily (not in the widget's const constructor, since the
+  // default is a mutable app-wide singleton, not a const value) so
+  // production call sites share one avatar state while tests can inject a
+  // fresh instance via `widget.avatarController`.
+  late final CurrentUserAvatarController _avatarController =
+      widget.avatarController ?? currentUserAvatarController;
+
+  // Guards the whole camera-icon-to-confirmation flow (source selection,
+  // permission request, picking, validation, cropping, preview, and the
+  // avatar service call) so repeated taps can't start overlapping
+  // operations. Disables the camera button for the flow's entire duration.
+  bool _isAvatarFlowActive = false;
+
+  // Purely visual: true only while an actual async device/service call is
+  // in flight (permission request, picker, cropper, or the avatar service),
+  // so the camera button shows a spinner in place of its icon. Deliberately
+  // false while the source-selection sheet or the preview dialog is simply
+  // waiting on a user choice — an indeterminate CircularProgressIndicator
+  // animates forever, so leaving it showing during a user-paced modal wait
+  // would never let `pumpAndSettle` (or a real user watching an endlessly
+  // spinning icon) settle.
+  bool _isAvatarBusy = false;
 
   List<TextEditingController> get _formControllers => [
     _fullNameController,
@@ -154,12 +232,277 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  // Camera overlay tap handler.
-  //
-  // TODO(api): Connect profile image selection/upload after the profile
-  // media contract is available.
-  void _handleChangePhoto() {
-    _showSnackBar('Profile photo upload is not available yet.');
+  void _showPermanentlyDeniedSnackBar(AvatarImageSource source) {
+    final label = source == AvatarImageSource.camera
+        ? 'Camera'
+        : 'Photo library';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$label access is turned off for this app. Enable it in '
+            'Settings to continue.',
+          ),
+          action: SnackBarAction(
+            label: 'Open Settings',
+            onPressed: () {
+              widget.avatarPermissionService.openSettings();
+            },
+          ),
+        ),
+      );
+  }
+
+  // Camera overlay tap handler: runs the full take-photo/choose-from-gallery
+  // -> permission -> pick -> validate -> crop -> preview -> confirm flow.
+  // Guarded by `_isAvatarFlowActive` (and the camera button's onPressed
+  // being null while active) so repeated taps can't start overlapping
+  // operations, for the flow's entire duration — including while the
+  // source sheet or preview dialog is simply waiting on the user, not just
+  // while `_isAvatarBusy` (the spinner) is true.
+  Future<void> _handleChangePhoto() async {
+    if (_isAvatarFlowActive) return;
+    setState(() => _isAvatarFlowActive = true);
+    try {
+      await _runAvatarSelectionFlow();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAvatarFlowActive = false;
+          _isAvatarBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _runAvatarSelectionFlow() async {
+    // Loops so "Choose Again" from the preview step can restart from
+    // source selection without leaving the active/guarded state.
+    while (true) {
+      final source = await _showAvatarSourceSheet();
+      if (!mounted || source == null) return;
+
+      setState(() => _isAvatarBusy = true);
+      final validatedPath = await _pickAndValidateImage(source);
+      if (!mounted) return;
+      if (validatedPath == null) {
+        setState(() => _isAvatarBusy = false);
+        return;
+      }
+
+      final croppedPath = await _cropImage(validatedPath);
+      if (!mounted) return;
+      if (croppedPath == null) {
+        setState(() => _isAvatarBusy = false);
+        return;
+      }
+
+      // The preview dialog is this screen's own UI waiting on a user
+      // choice, not a loading state, so the spinner is hidden while it's
+      // open (the camera button stays disabled throughout regardless, via
+      // `_isAvatarFlowActive`).
+      setState(() => _isAvatarBusy = false);
+      final action = await _showAvatarPreviewDialog(croppedPath);
+      if (!mounted) return;
+
+      switch (action) {
+        case _AvatarPreviewAction.usePhoto:
+          setState(() => _isAvatarBusy = true);
+          await _applyAvatar(croppedPath);
+          return;
+        case _AvatarPreviewAction.chooseAgain:
+          continue;
+        case _AvatarPreviewAction.cancel:
+          return;
+      }
+    }
+  }
+
+  Future<AvatarImageSource?> _showAvatarSourceSheet() {
+    return showModalBottomSheet<AvatarImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const ValueKey('edit-profile-avatar-source-camera'),
+              leading: const Icon(Icons.camera_alt_rounded),
+              title: const Text('Take Photo'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(AvatarImageSource.camera),
+            ),
+            ListTile(
+              key: const ValueKey('edit-profile-avatar-source-gallery'),
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Choose from Gallery'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(AvatarImageSource.gallery),
+            ),
+            ListTile(
+              key: const ValueKey('edit-profile-avatar-source-cancel'),
+              leading: const Icon(Icons.close_rounded),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.of(sheetContext).pop(),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Requests the permission appropriate for [source], then picks and
+  // validates an image. Returns the picked image's path once it has passed
+  // validation, or null if the user cancelled/denied at any stage — in
+  // every null-returning case, user-facing feedback has already been shown
+  // (except a plain picker cancel, which is silent by design) and the
+  // previous avatar is left untouched.
+  Future<String?> _pickAndValidateImage(AvatarImageSource source) async {
+    final permissionStatus = source == AvatarImageSource.camera
+        ? await widget.avatarPermissionService.requestCameraPermission()
+        : await widget.avatarPermissionService.requestGalleryPermission();
+    if (!mounted) return null;
+
+    switch (permissionStatus) {
+      case AvatarPermissionStatus.granted:
+      case AvatarPermissionStatus.limited:
+        break;
+      case AvatarPermissionStatus.denied:
+        _showSnackBar(
+          source == AvatarImageSource.camera
+              ? 'Camera access is needed to take a photo. Please allow '
+                    'access and try again.'
+              : 'Photo library access is needed to choose a photo. '
+                    'Please allow access and try again.',
+        );
+        return null;
+      case AvatarPermissionStatus.restricted:
+        _showSnackBar('That access is restricted on this device.');
+        return null;
+      case AvatarPermissionStatus.permanentlyDenied:
+        _showPermanentlyDeniedSnackBar(source);
+        return null;
+    }
+
+    PickedAvatarImage? picked;
+    try {
+      picked = await widget.avatarPickerService.pickImage(source);
+    } catch (error) {
+      // Technical detail only — never shown to the user.
+      debugPrint('Avatar picker failed: $error');
+      if (mounted) {
+        _showSnackBar("We couldn't open the picker. Please try again.");
+      }
+      return null;
+    }
+    if (!mounted) return null;
+    if (picked == null) return null; // User cancelled the platform picker.
+
+    try {
+      await widget.avatarImageProcessor.validate(picked.path);
+    } on AvatarImageValidationException catch (error) {
+      if (mounted) _showSnackBar(error.message);
+      return null;
+    } catch (error) {
+      debugPrint('Avatar validation failed: $error');
+      if (mounted) {
+        _showSnackBar("That photo couldn't be used. Please choose another.");
+      }
+      return null;
+    }
+
+    return picked.path;
+  }
+
+  Future<String?> _cropImage(String sourcePath) async {
+    try {
+      final croppedPath = await widget.avatarCropperService.cropToSquare(
+        sourcePath,
+      );
+      return croppedPath; // null == user cancelled cropping.
+    } catch (error) {
+      debugPrint('Avatar crop failed: $error');
+      if (mounted) {
+        _showSnackBar("We couldn't crop that photo. Please try again.");
+      }
+      return null;
+    }
+  }
+
+  Future<_AvatarPreviewAction> _showAvatarPreviewDialog(
+    String croppedPath,
+  ) async {
+    final action = await showDialog<_AvatarPreviewAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        key: const ValueKey('edit-profile-avatar-preview-dialog'),
+        title: const Text('Preview Photo'),
+        content: SizedBox(
+          width: 160,
+          height: 160,
+          child: ClipOval(
+            child: Image.file(
+              File(croppedPath),
+              key: const ValueKey('edit-profile-avatar-preview-image'),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('edit-profile-avatar-preview-cancel'),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_AvatarPreviewAction.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            key: const ValueKey('edit-profile-avatar-preview-choose-again'),
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AvatarPreviewAction.chooseAgain),
+            child: const Text('Choose Again'),
+          ),
+          TextButton(
+            key: const ValueKey('edit-profile-avatar-preview-use-photo'),
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AvatarPreviewAction.usePhoto),
+            child: const Text('Use Photo'),
+          ),
+        ],
+      ),
+    );
+    return action ?? _AvatarPreviewAction.cancel;
+  }
+
+  // Confirms the cropped, previewed image as the new avatar. Only reached
+  // after the user explicitly taps "Use Photo" — a failed or cancelled
+  // attempt at any earlier stage never reaches (or affects) this step.
+  Future<void> _applyAvatar(String croppedPath) async {
+    AvatarUpdateResult result;
+    try {
+      result = await widget.avatarUploadService.updateAvatar(croppedPath);
+    } catch (error) {
+      debugPrint('Avatar update failed: $error');
+      if (mounted) {
+        _showSnackBar("We couldn't update your photo. Please try again.");
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    if (result.succeeded) {
+      await _avatarController.setAvatarPath(result.localPath!);
+      if (!mounted) return;
+      _showSnackBar(result.message ?? 'Profile photo updated.');
+    } else {
+      _showSnackBar(
+        result.message ?? "We couldn't update your photo. Please try again.",
+      );
+    }
   }
 
   Future<void> _handleSave() async {
@@ -239,6 +582,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
         return;
       }
+
+      // Clears the shared avatar state (and its stable local file) so the
+      // next signed-in user on this device never sees this user's avatar.
+      await _avatarController.clear();
+      if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -428,40 +776,78 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              Container(
-                key: const ValueKey('edit-profile-avatar'),
-                width: 112,
-                height: 112,
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primaryNavy, width: 3),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: const Icon(
-                  Icons.person,
-                  size: 56,
-                  color: AppColors.grayText,
-                ),
+              ListenableBuilder(
+                listenable: _avatarController,
+                builder: (context, _) {
+                  final image = _avatarController.imageProvider;
+                  return Container(
+                    key: const ValueKey('edit-profile-avatar'),
+                    width: 112,
+                    height: 112,
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primaryNavy,
+                        width: 3,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: image != null
+                        ? Image(
+                            image: image,
+                            fit: BoxFit.cover,
+                            // Falls back to the initials-style icon instead
+                            // of an uncaught decode error if the stored
+                            // avatar file is ever missing/corrupted.
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                                  Icons.person,
+                                  size: 56,
+                                  color: AppColors.grayText,
+                                ),
+                          )
+                        : const Icon(
+                            Icons.person,
+                            size: 56,
+                            color: AppColors.grayText,
+                          ),
+                  );
+                },
               ),
               Positioned(
                 right: -6,
                 bottom: -6,
-                child: GestureDetector(
-                  key: const ValueKey('edit-profile-camera-button'),
-                  onTap: _handleChangePhoto,
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryNavy,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt_rounded,
-                      color: Colors.white,
-                      size: 16,
+                child: Tooltip(
+                  message: 'Change profile photo',
+                  child: Semantics(
+                    button: true,
+                    label: 'Change profile photo',
+                    child: GestureDetector(
+                      key: const ValueKey('edit-profile-camera-button'),
+                      onTap: _isAvatarFlowActive ? null : _handleChangePhoto,
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryNavy,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: _isAvatarBusy
+                            ? const Padding(
+                                padding: EdgeInsets.all(9),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                      ),
                     ),
                   ),
                 ),

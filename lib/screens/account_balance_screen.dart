@@ -9,6 +9,7 @@ import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
 import '../services/account_statement_exporter.dart';
+import '../services/current_user_avatar_controller.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../utils/user_initials.dart';
@@ -43,6 +44,7 @@ class AccountBalanceScreen extends StatefulWidget {
     super.key,
     AccountBalanceService? service,
     AccountStatementExporter? exporter,
+    this.avatarController,
   }) : service = service ?? const MockAccountBalanceService(),
        exporter = exporter ?? const LocalAccountStatementPdfExporter();
 
@@ -56,6 +58,12 @@ class AccountBalanceScreen extends StatefulWidget {
   /// platform plugin.
   final AccountStatementExporter exporter;
 
+  /// Shared current-user avatar state. Defaults (lazily, in State) to the
+  /// app-wide [currentUserAvatarController] singleton; overridable so tests
+  /// can inject a fresh instance instead of sharing that mutable singleton
+  /// across test cases.
+  final CurrentUserAvatarController? avatarController;
+
   @override
   State<AccountBalanceScreen> createState() => _AccountBalanceScreenState();
 }
@@ -63,6 +71,8 @@ class AccountBalanceScreen extends StatefulWidget {
 class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   late final AccountBalanceService _service = widget.service;
   late final AccountStatementExporter _exporter = widget.exporter;
+  late final CurrentUserAvatarController _avatarController =
+      widget.avatarController ?? currentUserAvatarController;
 
   AccountBalanceSummary? _summary;
   CreditUtilizationData? _creditUtilization;
@@ -269,10 +279,14 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: 16),
-          child: AvatarInitialsBadge(
-            key: const ValueKey('account-balance-avatar'),
-            initials: userInitials(kCurrentUserName),
-            onTap: _openProfile,
+          child: ListenableBuilder(
+            listenable: _avatarController,
+            builder: (context, _) => AvatarInitialsBadge(
+              key: const ValueKey('account-balance-avatar'),
+              initials: userInitials(kCurrentUserName),
+              image: _avatarController.imageProvider,
+              onTap: _openProfile,
+            ),
           ),
         ),
       ],

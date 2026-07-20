@@ -12,16 +12,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// TODO(api): Add real keys here (accessToken, refreshToken, tenantId,
 /// companyId, cached current-user profile, ...) once an authentication
 /// backend defines what an authenticated session actually contains. Today
-/// only a login flag is persisted, since no real credentials exist yet —
-/// see [SharedPreferencesSessionService].
-@visibleForTesting
+/// only a login flag and the temporary local/mock avatar path are
+/// persisted, since no real credentials or backend avatar URL exist yet —
+/// see [SharedPreferencesSessionService] and `CurrentUserAvatarController`.
 class SessionStorageKeys {
   SessionStorageKeys._();
 
   static const String isLoggedIn = 'session_is_logged_in';
 
+  /// Path to the locally persisted mock avatar file (see
+  /// `CurrentUserAvatarController`). User-specific, so it's cleared on
+  /// logout the same as every other session key — otherwise the next
+  /// signed-in user on this device would see the previous user's avatar.
+  static const String localAvatarPath = 'session_local_avatar_path';
+
   /// Every key written for an authenticated session.
-  static const List<String> all = [isLoggedIn];
+  static const List<String> all = [isLoggedIn, localAvatarPath];
 }
 
 /// How a [SessionService.endSession] attempt resolved.
