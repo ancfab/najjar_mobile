@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openProfile() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+    ).push(MaterialPageRoute(builder: (_) => EditProfileScreen()));
   }
 
   // Handles the header gear icon tap.
@@ -240,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _openTabScreen(_navIndexSupport, const SupportScreen());
         break;
       case _navIndexProfile:
-        _openTabScreen(_navIndexProfile, const EditProfileScreen());
+        _openTabScreen(_navIndexProfile, EditProfileScreen());
         break;
     }
   }

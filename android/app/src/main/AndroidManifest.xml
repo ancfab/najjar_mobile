@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for all ANC API calls (login, etc.) in release builds.
+         debug/AndroidManifest.xml and profile/AndroidManifest.xml already
+         declare this for Flutter tooling (hot reload/VM service), which
+         masks its absence here during `flutter run` — release builds only
+         merge this main manifest, so without it every network call fails
+         at the socket layer (SocketException: Permission denied). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Avatar upload: camera capture for "Take Photo". No storage
          permission is requested for "Choose from Gallery" — the gallery
          picker uses the system Photo Picker / document picker, which needs
@@ -17,7 +24,17 @@
     <application
         android:label="anc_fabrics"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- flutter_secure_storage (10.3.1) encrypts values with an
+             Android Keystore-held key. Android Auto Backup can restore the
+             plugin's encrypted-value store to a new/reset device without
+             that non-exportable key, which the package's own README
+             documents as a cause of InvalidKeyException; disallowing
+             backup avoids restoring an undecryptable secure session and
+             keeps the session envelope from being transferred off-device
+             at all. -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

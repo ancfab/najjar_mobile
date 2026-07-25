@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
-import 'package:anc_fabrics/services/session_service.dart';
+import 'package:anc_fabrics/services/session_storage_keys.dart';
 
 import '../helpers/valid_avatar_image.dart';
 

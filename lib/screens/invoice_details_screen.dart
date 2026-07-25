@@ -133,7 +133,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   void _openProfile() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+    ).push(MaterialPageRoute(builder: (_) => EditProfileScreen()));
   }
 
   /// Handles the Print button tap: generates the invoice PDF (shared with
@@ -141,8 +141,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   Future<void> _printInvoice() async {
     await _runPdfAction(
       action: _InvoicePdfAction.print,
-      perform: (bytes, filename) =>
-          _documentActions.printPdf(bytes, filename),
+      perform: (bytes, filename) => _documentActions.printPdf(bytes, filename),
       cancelledMessage: 'Printing was cancelled.',
       failureMessage: 'Unable to print the invoice. Please try again.',
     );

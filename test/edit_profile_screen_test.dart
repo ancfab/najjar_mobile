@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/data/mock_profile_data.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
+import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/avatar_image_processor.dart';
@@ -22,6 +23,7 @@ import 'package:anc_fabrics/services/avatar_picker_service.dart';
 import 'package:anc_fabrics/services/avatar_upload_service.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/profile_service.dart';
+import 'package:anc_fabrics/services/session_storage_exception.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_avatar_cropper_service.dart';
@@ -53,6 +55,7 @@ void main() {
     FakeAvatarImageProcessor? avatarImageProcessor,
     FakeAvatarUploadService? avatarUploadService,
     CurrentUserAvatarController? avatarController,
+    bool showLogoutAction = false,
   }) async {
     tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1.0;
@@ -73,6 +76,7 @@ void main() {
               avatarImageProcessor ?? FakeAvatarImageProcessor(),
           avatarUploadService: avatarUploadService ?? FakeAvatarUploadService(),
           avatarController: avatarController ?? CurrentUserAvatarController(),
+          showLogoutAction: showLogoutAction,
         ),
       ),
     );
@@ -88,6 +92,7 @@ void main() {
     FakeProfileService? service,
     FakeSessionService? sessionService,
     CurrentUserAvatarController? avatarController,
+    bool showLogoutAction = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -102,6 +107,7 @@ void main() {
                       sessionService: sessionService ?? FakeSessionService(),
                       avatarController:
                           avatarController ?? CurrentUserAvatarController(),
+                      showLogoutAction: showLogoutAction,
                     ),
                   ),
                 ),
@@ -1223,8 +1229,11 @@ void main() {
     // The approved Edit Profile Figma has no Logout button, row, or menu
     // entry. The implementation (SessionService plumbing, _handleLogout,
     // and _buildLogoutButton in edit_profile_screen.dart) is preserved
-    // behind the disabled `_showLogoutAction` flag for later restoration;
-    // these tests assert only on what's currently rendered.
+    // behind EditProfileScreen.showLogoutAction, which defaults to false
+    // in every production call site, for later restoration; these tests
+    // assert only on what's currently rendered by default. See the
+    // "Logout (test-only visibility seam enabled)" group below for tests
+    // of the already-implemented logout behavior itself.
     testWidgets('No Logout button, text, or key is rendered', (tester) async {
       await pumpEditProfile(tester);
 
@@ -1261,6 +1270,182 @@ void main() {
         expect(find.text('Logout'), findsNothing);
       },
     );
+  });
+
+  group('Logout (test-only visibility seam enabled)', () {
+    // Exercises the already-implemented local logout behavior via
+    // EditProfileScreen.showLogoutAction: true — a @visibleForTesting-only
+    // constructor parameter that defaults to false in every production
+    // call site (see the group above, which is unaffected by these
+    // tests). Never contacts real secure storage or the live API — only
+    // FakeSessionService.
+    const logoutButton = ValueKey('edit-profile-logout-button');
+
+    testWidgets('the Logout action renders only when the seam is enabled', (
+      tester,
+    ) async {
+      await pumpEditProfile(tester, showLogoutAction: true);
+
+      expect(find.byKey(logoutButton), findsOneWidget);
+    });
+
+    group('successful logout', () {
+      testWidgets('one tap calls SessionService.endSession exactly once', (
+        tester,
+      ) async {
+        final sessionService = FakeSessionService();
+        await pumpPushedEditProfile(
+          tester,
+          sessionService: sessionService,
+          showLogoutAction: true,
+        );
+
+        await tester.ensureVisible(find.byKey(logoutButton));
+        await tester.tap(find.byKey(logoutButton));
+        await tester.pumpAndSettle();
+
+        expect(sessionService.endSessionCallCount, 1);
+      });
+
+      testWidgets(
+        'shows a loading state while pending, a second tap does not call '
+        'endSession again, and the avatar is not cleared until it '
+        'completes',
+        (tester) async {
+          final completer = Completer<void>();
+          final sessionService = FakeSessionService(pending: completer);
+          final avatarController = CurrentUserAvatarController();
+          await avatarController.setAvatarPath('/fake/path/avatar.png');
+          await pumpPushedEditProfile(
+            tester,
+            sessionService: sessionService,
+            avatarController: avatarController,
+            showLogoutAction: true,
+          );
+
+          await tester.ensureVisible(find.byKey(logoutButton));
+          await tester.tap(find.byKey(logoutButton));
+          await tester.pump();
+
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          expect(avatarController.avatarFile, isNotNull);
+
+          // Duplicate tap while pending — the button is already visible
+          // from above, so no further scrolling is needed.
+          await tester.tap(find.byKey(logoutButton));
+          await tester.pump();
+          expect(sessionService.endSessionCallCount, 1);
+
+          completer.complete();
+          // Bounded pumps through the pushAndRemoveUntil transition,
+          // rather than pumpAndSettle: the outgoing route still paints
+          // this screen's indeterminate CircularProgressIndicator for the
+          // remainder of the transition, and an indeterminate animation
+          // never lets pumpAndSettle observe "no more frames scheduled".
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          expect(avatarController.avatarFile, isNull);
+        },
+      );
+
+      testWidgets('navigates with full-stack removal: Login is shown and Back '
+          'cannot return to Profile or Home', (tester) async {
+        final sessionService = FakeSessionService();
+        await pumpPushedEditProfile(
+          tester,
+          sessionService: sessionService,
+          showLogoutAction: true,
+        );
+
+        await tester.ensureVisible(find.byKey(logoutButton));
+        await tester.tap(find.byKey(logoutButton));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.byType(EditProfileScreen), findsNothing);
+        expect(find.text('Open Edit Profile'), findsNothing);
+
+        await tester.tap(find.text('BACK'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LoginScreen), findsOneWidget);
+      });
+    });
+
+    group('expected secure logout failure', () {
+      testWidgets(
+        'remains on Profile, leaves the avatar untouched, resets loading, '
+        'shows a neutral message, and does not navigate',
+        (tester) async {
+          final sessionService = FakeSessionService(
+            error: const SessionStorageException(SessionStorageOperation.clear),
+          );
+          final avatarController = CurrentUserAvatarController();
+          await avatarController.setAvatarPath('/fake/path/avatar.png');
+          await pumpPushedEditProfile(
+            tester,
+            sessionService: sessionService,
+            avatarController: avatarController,
+            showLogoutAction: true,
+          );
+
+          await tester.ensureVisible(find.byKey(logoutButton));
+          await tester.tap(find.byKey(logoutButton));
+          await tester.pumpAndSettle();
+
+          expect(find.byType(EditProfileScreen), findsOneWidget);
+          expect(find.byType(LoginScreen), findsNothing);
+          expect(avatarController.avatarFile, isNotNull);
+          expect(find.byType(CircularProgressIndicator), findsNothing);
+          expect(
+            find.text('Unable to sign out securely. Please try again.'),
+            findsOneWidget,
+          );
+        },
+      );
+    });
+
+    group('programming-error boundary', () {
+      testWidgets(
+        'a StateError from endSession is not relabeled as the neutral '
+        'secure-logout failure',
+        (tester) async {
+          final sessionService = FakeSessionService(
+            error: StateError('simulated programmer error'),
+          );
+          await pumpPushedEditProfile(
+            tester,
+            sessionService: sessionService,
+            showLogoutAction: true,
+          );
+
+          // Invokes the button's onTap directly rather than through
+          // tester.tap(): FakeSessionService.endSession's synchronous
+          // throw (no pending gate) makes _handleLogout's returned Future
+          // reject within the same dispatch, and flutter_test's gesture
+          // simulation cannot be wrapped in expectLater around an
+          // in-flight unhandled async error without a guard conflict.
+          // onTap's static type is `void Function()` (Dart's void-
+          // covariance lets an async handler satisfy it), but the actual
+          // runtime value returned is still the real Future<void> —
+          // captured here via `dynamic` so it can be awaited directly, a
+          // deterministic mechanism for observing that this programming
+          // defect is not silently converted into the neutral
+          // secure-logout-failure message.
+          final inkWell = tester.widget<InkWell>(find.byKey(logoutButton));
+          final Function onTap = inkWell.onTap!;
+          final dynamic pendingLogout = onTap();
+
+          await expectLater(pendingLogout, throwsA(isA<StateError>()));
+
+          expect(
+            find.text('Unable to sign out securely. Please try again.'),
+            findsNothing,
+          );
+        },
+      );
+    });
   });
 
   group('Bottom navigation', () {

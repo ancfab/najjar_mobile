@@ -149,7 +149,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   void _openProfile() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+    ).push(MaterialPageRoute(builder: (_) => EditProfileScreen()));
   }
 
   // Handles bottom tab bar taps. Home returns to the screen this was pushed
@@ -173,7 +173,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       case _navIndexProfile:
         Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+        ).push(MaterialPageRoute(builder: (_) => EditProfileScreen()));
         break;
     }
   }

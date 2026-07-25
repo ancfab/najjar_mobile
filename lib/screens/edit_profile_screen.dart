@@ -12,6 +12,7 @@ import '../services/avatar_upload_service.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/profile_service.dart';
 import '../services/session_service.dart';
+import '../services/session_storage_exception.dart';
 import '../theme/app_colors.dart';
 import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
@@ -35,12 +36,12 @@ const int _navIndexProfile = 3;
 /// Edit Profile screen: avatar with a camera/edit overlay, client info
 /// (ANC ID + last-updated label), a prefilled editable form, and a
 /// full-width "Save Changes" action. A "Logout" action also exists but is
-/// currently hidden — see [_EditProfileScreenState._showLogoutAction].
+/// currently hidden — see [showLogoutAction].
 ///
 /// TODO(api): Replace mock profile display/prefill data (see
 /// [kMockUserProfile]) once the profile API/backend contract is confirmed.
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({
+  EditProfileScreen({
     super.key,
     this.profile = kMockUserProfile,
     ProfileService? service,
@@ -51,9 +52,9 @@ class EditProfileScreen extends StatefulWidget {
     AvatarImageProcessor? avatarImageProcessor,
     AvatarUploadService? avatarUploadService,
     this.avatarController,
+    @visibleForTesting this.showLogoutAction = false,
   }) : service = service ?? const UnavailableProfileService(),
-       sessionService =
-           sessionService ?? const SharedPreferencesSessionService(),
+       sessionService = sessionService ?? SecureSessionService(),
        avatarPickerService =
            avatarPickerService ?? const ImagePickerAvatarPickerService(),
        avatarPermissionService =
@@ -75,8 +76,8 @@ class EditProfileScreen extends StatefulWidget {
   /// [UnavailableProfileService]; overridable so tests can inject a fake.
   final ProfileService service;
 
-  /// Logout seam. Defaults to the real SharedPreferences-backed session
-  /// service; overridable so tests can inject a fake.
+  /// Logout seam. Defaults to the real secure-session-backed
+  /// [SecureSessionService]; overridable so tests can inject a fake.
   final SessionService sessionService;
 
   /// Camera/gallery selection seam. Overridable so tests can inject a fake
@@ -105,16 +106,22 @@ class EditProfileScreen extends StatefulWidget {
   /// sharing that mutable singleton across test cases.
   final CurrentUserAvatarController? avatarController;
 
+  /// Whether the Logout action renders at all. Always `false` in
+  /// production — Logout is intentionally hidden to match the approved
+  /// Edit Profile Figma; set it to `true` when the product team requests
+  /// that Logout be restored. This exists only so widget tests can
+  /// exercise the already-implemented local logout behavior
+  /// ([_EditProfileScreenState._handleLogout]) while production keeps the
+  /// action hidden — it is not an environment/debug-mode toggle, and no
+  /// production call site should ever pass `true`.
+  @visibleForTesting
+  final bool showLogoutAction;
+
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  // TODO(ui): Logout is intentionally hidden to match the approved
-  // Edit Profile Figma. Set _showLogoutAction to true when the product
-  // team requests that logout be restored.
-  static const bool _showLogoutAction = false;
-
   final _formKey = GlobalKey<FormState>();
 
   late final _fullNameController = TextEditingController(
@@ -577,19 +584,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _isLoggingOut = true);
 
     try {
-      final result = await widget.sessionService.endSession();
+      // Throws SessionStorageException on an expected secure-storage
+      // failure — the secure token is guaranteed to still exist whenever
+      // this throws (see SecureAuthSessionStore.clear()'s ordering
+      // guarantee), so the catch clause below never clears the avatar or
+      // navigates away. A StateError/ArgumentError or other programming
+      // defect is deliberately not caught here — it must not be
+      // relabeled as this neutral failure.
+      await widget.sessionService.endSession();
       if (!mounted) return;
-
-      if (!result.succeeded) {
-        setState(() => _isLoggingOut = false);
-        _showSnackBar(
-          result.message ?? "We couldn't sign you out. Please try again.",
-        );
-        return;
-      }
 
       // Clears the shared avatar state (and its stable local file) so the
       // next signed-in user on this device never sees this user's avatar.
+      // Only reached after the secure session is confirmed cleared above.
       await _avatarController.clear();
       if (!mounted) return;
 
@@ -597,12 +604,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
       );
-    } catch (error) {
-      // Technical detail only — never shown to the user.
-      debugPrint('Logout failed: $error');
+    } on SessionStorageException {
       if (!mounted) return;
       setState(() => _isLoggingOut = false);
-      _showSnackBar("We couldn't sign you out. Please try again.");
+      _showSnackBar('Unable to sign out securely. Please try again.');
     }
   }
 
@@ -766,7 +771,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildDivider(),
               const SizedBox(height: 24),
               _buildSaveButton(),
-              if (_showLogoutAction) ...[
+              if (widget.showLogoutAction) ...[
                 const SizedBox(height: 32),
                 _buildLogoutButton(),
               ],

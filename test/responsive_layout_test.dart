@@ -617,7 +617,7 @@ void main() {
   group('Edit Profile screen', () {
     testWidgets('No overflow at small width + 1.5x text scale', (tester) async {
       await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(const MaterialApp(home: EditProfileScreen()));
+      await tester.pumpWidget(MaterialApp(home: EditProfileScreen()));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });

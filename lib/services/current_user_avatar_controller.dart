@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'session_service.dart';
+import 'session_storage_keys.dart';
 
 /// Single shared source of truth for the signed-in user's avatar image,
 /// listened to by every screen that shows the current-user avatar (Home
