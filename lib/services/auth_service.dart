@@ -3,6 +3,7 @@ import '../models/auth/auth_session.dart';
 import '../models/auth/login_failure.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
+import '../models/auth/session_validation_result.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
@@ -21,12 +22,15 @@ import 'session_storage_exception.dart';
 /// - Persist the resulting [AuthSession] through [AuthSessionStore] and
 ///   return [AuthLoginSuccess] only once that persistence has completed.
 ///
+/// - Call `GET /auth/me` through [AncApiClient.fetchCurrentUser] to
+///   re-validate a persisted session on cold app launch (see
+///   [confirmSession]), never trusting a locally stored token alone.
+///
 /// Must not:
 /// - Contain navigation or widget logic.
 /// - Store or log passwords, tokens, or raw API responses.
 /// - Communicate directly with Business Central.
-/// - Attempt authenticated (Bearer) requests, HTTP 401 handling, token
-///   refresh, or backend logout — none of that exists yet.
+/// - Implement token refresh or a timer-based expiry — none exists.
 class AuthService {
   /// Creates an [AuthService] over caller-owned dependencies. [apiClient]
   /// and [sessionStore] are never closed or otherwise disposed by this
@@ -116,6 +120,76 @@ class AuthService {
     }
 
     return AuthLoginSuccess(session);
+  }
+
+  /// Re-validates a persisted secure session against `GET /auth/me`, per
+  /// the app-startup contract in `main.dart`: a locally stored token is
+  /// never trusted on its own.
+  ///
+  /// - No stored session -> [SessionValidationAbsent].
+  /// - The stored session cannot even be read (a secure-storage I/O
+  ///   failure) -> [SessionValidationStorageFailure]; the session is left
+  ///   untouched since nothing is known to safely clear.
+  /// - HTTP 200 -> the session is re-persisted with identity fields
+  ///   refreshed from the response (see [AuthSession.fromAuthenticatedUser])
+  ///   and [SessionValidationValid] is returned. A failure to re-persist is
+  ///   not escalated — the freshly confirmed data is still safe to use for
+  ///   this launch even if it could not be written back.
+  /// - HTTP 401 -> the token is revoked; the secure session is cleared
+  ///   (best-effort — see [_clearIgnoringStorageFailure]) and
+  ///   [SessionValidationRevoked] is returned.
+  /// - A malformed response body -> the secure session is cleared, since it
+  ///   cannot be trusted, and [SessionValidationUnusable] is returned.
+  /// - A network failure, timeout, or any other unexpected HTTP status ->
+  ///   the secure session is left untouched and
+  ///   [SessionValidationUnavailable] is returned; this must never be
+  ///   treated as an invalid credential.
+  Future<SessionValidationResult> confirmSession() async {
+    final AuthSession? stored;
+    try {
+      stored = await _sessionStore.read();
+    } on SessionStorageException {
+      return const SessionValidationStorageFailure();
+    }
+    if (stored == null) return const SessionValidationAbsent();
+
+    try {
+      final user = await _apiClient.fetchCurrentUser(token: stored.token);
+      final updated = AuthSession.fromAuthenticatedUser(
+        token: stored.token,
+        user: user,
+      );
+      try {
+        await _sessionStore.save(updated);
+      } on SessionStorageException {
+        // Best-effort refresh only; see doc comment above.
+      }
+      return SessionValidationValid(updated);
+    } on AncHttpException catch (error) {
+      if (error.statusCode == 401) {
+        await _clearIgnoringStorageFailure();
+        return const SessionValidationRevoked();
+      }
+      return const SessionValidationUnavailable();
+    } on AncNetworkException {
+      return const SessionValidationUnavailable();
+    } on AncProtocolException {
+      await _clearIgnoringStorageFailure();
+      return const SessionValidationUnusable();
+    }
+  }
+
+  /// Clears the secure session, swallowing a [SessionStorageException] so a
+  /// failure to also delete the local copy never blocks reporting that the
+  /// token is confirmed dead/unusable server-side — correctness of that
+  /// outcome (never showing Home with it) matters more than surfacing a
+  /// storage error mid-validation.
+  Future<void> _clearIgnoringStorageFailure() async {
+    try {
+      await _sessionStore.clear();
+    } on SessionStorageException {
+      // Intentionally ignored; see doc comment above.
+    }
   }
 
   /// Maps a well-formed non-2xx login response to a failure.

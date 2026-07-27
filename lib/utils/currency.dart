@@ -1,6 +1,12 @@
-/// Formats [amount] as a USD-style currency string with a leading "$",
-/// comma thousands separators, and exactly two decimal places (e.g. `12250`
-/// -> `"$12,250.00"`).
+/// Formats [amount] with comma thousands separators and exactly two decimal
+/// places, prefixed either by [currencyCode] (e.g. `"AED 1,936.50"`) when
+/// supplied, or by a leading "$" (e.g. `12250` -> `"$12,250.00"`) when it is
+/// `null` — the app's existing default for data with no known currency.
+///
+/// [currencyCode] is displayed exactly as given (e.g. an ISO 4217 code like
+/// `"AED"` or `"USD"`) — never converted, exchanged, or re-derived; this
+/// function only decides how to render an already-known currency, never
+/// which one it is.
 ///
 /// No currency-formatting helper existed anywhere in the app before this —
 /// other screens (e.g. Order Detail's Price Breakdown) store amounts as
@@ -11,9 +17,9 @@
 /// those numbers into display text.
 ///
 /// TODO: Replace with locale-aware formatting (e.g. via `package:intl`)
-/// once the app's currency/locale requirements are confirmed — this
-/// assumes USD-style grouping and a single currency symbol.
-String formatCurrency(num amount) {
+/// once the app's locale requirements are confirmed — this assumes
+/// USD-style digit grouping regardless of [currencyCode].
+String formatCurrency(num amount, {String? currencyCode}) {
   final isNegative = amount < 0;
   final fixed = amount.abs().toStringAsFixed(2);
   final dotIndex = fixed.indexOf('.');
@@ -28,7 +34,8 @@ String formatCurrency(num amount) {
     buffer.write(wholePart[i]);
   }
 
-  return '${isNegative ? '-' : ''}\$$buffer.$decimalPart';
+  final prefix = currencyCode == null ? '\$' : '$currencyCode ';
+  return '${isNegative ? '-' : ''}$prefix$buffer.$decimalPart';
 }
 
 /// Formats [amount] as a signed, whole-dollar currency string for compact

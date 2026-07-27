@@ -1,12 +1,15 @@
 import '../data/mock_account_balance_data.dart';
 import '../models/account_balance_summary.dart';
-import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
 
 /// Data seam for the Account Balance screen: global balance summary, credit
 /// utilization, and balance history by time range.
+///
+/// Quick History is deliberately not part of this seam — it is backed by
+/// the live Business Central ledger-entries endpoint (see
+/// `QuickHistoryDataSource`/`LedgerQuickHistoryDataSource`), not mock data.
 ///
 /// TODO(api): Replace [MockAccountBalanceService] with a real API-backed
 /// implementation once the backend endpoint and response contract are
@@ -21,8 +24,6 @@ abstract class AccountBalanceService {
   Future<List<BalanceHistoryPoint>> fetchBalanceHistory(
     BalanceHistoryRange range,
   );
-
-  Future<List<AccountTransaction>> fetchQuickHistory();
 }
 
 /// Mock implementation returning deterministic sample data with a simulated
@@ -48,11 +49,5 @@ class MockAccountBalanceService implements AccountBalanceService {
   ) async {
     await Future.delayed(const Duration(milliseconds: 400));
     return kMockBalanceHistoryByRange[range]!;
-  }
-
-  @override
-  Future<List<AccountTransaction>> fetchQuickHistory() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return kMockQuickHistoryTransactions;
   }
 }

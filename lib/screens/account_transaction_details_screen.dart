@@ -23,7 +23,10 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCredit = transaction.type == AccountTransactionType.credit;
-    final amountColor = isCredit ? AppColors.darkTeal : AppColors.darkRedBrown;
+    final isNeutral = transaction.type == AccountTransactionType.neutral;
+    final amountColor = isNeutral
+        ? AppColors.textNavy
+        : (isCredit ? AppColors.darkTeal : AppColors.darkRedBrown);
     final reference = transaction.reference?.trim();
 
     return Scaffold(
@@ -59,7 +62,12 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        formatSignedCurrency(transaction.amount),
+                        isNeutral
+                            ? formatCurrency(
+                                transaction.amount,
+                                currencyCode: transaction.currencyCode,
+                              )
+                            : formatSignedCurrency(transaction.amount),
                         key: const ValueKey(
                           'account-transaction-details-amount',
                         ),
@@ -69,16 +77,20 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
                           color: amountColor,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isCredit ? 'Credit' : 'Debit',
-                        key: const ValueKey('account-transaction-details-type'),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: amountColor,
+                      if (!isNeutral) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          isCredit ? 'Credit' : 'Debit',
+                          key: const ValueKey(
+                            'account-transaction-details-type',
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: amountColor,
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 18),
                       _DetailRow(
                         label: 'Date',

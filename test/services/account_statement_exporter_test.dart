@@ -116,6 +116,101 @@ void main() {
       },
     );
 
+    test(
+      'renders an AED API-backed transaction with the AED currency code, '
+      'not a dollar sign, matching Quick History and Transaction Details',
+      () async {
+        final aedData = AccountStatementData(
+          summary: data.summary,
+          creditUtilization: data.creditUtilization,
+          selectedRange: data.selectedRange,
+          quickHistory: [
+            AccountTransaction(
+              id: 'ledger-entry-53473',
+              label: 'Invoice INV-53473',
+              amount: 1936.5,
+              type: AccountTransactionType.neutral,
+              occurredAt: DateTime.utc(2026, 1, 5),
+              category: AccountTransactionCategory.ledgerEntry,
+              reference: 'INV-53473',
+              currencyCode: 'AED',
+            ),
+          ],
+          generatedAt: data.generatedAt,
+        );
+
+        final bytes = await buildAccountStatementPdfBytes(aedData);
+        final text = String.fromCharCodes(bytes);
+
+        expect(text, contains('(AED)'));
+        expect(text, contains('(1,936.50)'));
+        expect(text, isNot(contains(r'($1,936.50)')));
+      },
+    );
+
+    test('renders a USD API-backed transaction with the USD currency code, '
+        'not a dollar sign', () async {
+      final usdData = AccountStatementData(
+        summary: data.summary,
+        creditUtilization: data.creditUtilization,
+        selectedRange: data.selectedRange,
+        quickHistory: [
+          AccountTransaction(
+            id: 'ledger-entry-1004',
+            label: 'Invoice INV-TEST-004',
+            amount: 250.0,
+            type: AccountTransactionType.neutral,
+            occurredAt: DateTime.utc(2026, 1, 6),
+            category: AccountTransactionCategory.ledgerEntry,
+            currencyCode: 'USD',
+          ),
+        ],
+        generatedAt: data.generatedAt,
+      );
+
+      final bytes = await buildAccountStatementPdfBytes(usdData);
+      final text = String.fromCharCodes(bytes);
+
+      expect(text, contains('(USD)'));
+      expect(text, contains('(250.00)'));
+    });
+
+    test('places the sign before the currency code for a negative API-backed '
+        'amount, and leaves the numeric amount unchanged', () async {
+      final negativeAedData = AccountStatementData(
+        summary: data.summary,
+        creditUtilization: data.creditUtilization,
+        selectedRange: data.selectedRange,
+        quickHistory: [
+          AccountTransaction(
+            id: 'ledger-entry-9001',
+            label: 'Credit Note CN-9001',
+            amount: -42.5,
+            type: AccountTransactionType.neutral,
+            occurredAt: DateTime.utc(2026, 1, 7),
+            category: AccountTransactionCategory.ledgerEntry,
+            currencyCode: 'AED',
+          ),
+        ],
+        generatedAt: data.generatedAt,
+      );
+
+      final bytes = await buildAccountStatementPdfBytes(negativeAedData);
+      final text = String.fromCharCodes(bytes);
+
+      expect(text, contains('(-AED)'));
+      expect(text, contains('(42.50)'));
+    });
+
+    test('keeps the legacy signed dollar fallback for a transaction with no '
+        'currencyCode', () async {
+      final bytes = await buildAccountStatementPdfBytes(data);
+      final text = String.fromCharCodes(bytes);
+
+      expect(text, contains('(+\$15,000)'));
+      expect(text, contains('(-\$2,400)'));
+    });
+
     test('succeeds when Quick History has no transactions', () async {
       final emptyHistoryData = AccountStatementData(
         summary: data.summary,

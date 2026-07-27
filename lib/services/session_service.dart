@@ -18,11 +18,12 @@ import 'secure_auth_session_store.dart';
 /// - Make an HTTP request — login itself goes through `AuthService`, not
 ///   this seam.
 abstract interface class SessionService {
-  /// Whether an authenticated session is currently active, as read from
-  /// the secure `AuthSession` only. Used by the app-startup gate (see
-  /// `main.dart`) so a relaunch after logout opens on Login rather than an
-  /// authenticated screen, without relying on in-memory state or the
-  /// legacy Boolean.
+  /// Whether a secure session is currently persisted locally, as read from
+  /// the `AuthSession` only, without relying on in-memory state or the
+  /// legacy Boolean. A local-only presence check: it does not confirm the
+  /// token is still valid server-side. The app-startup gate (see
+  /// `main.dart`) uses `AuthService.confirmSession` instead, which also
+  /// calls `GET /auth/me` before trusting a stored token.
   Future<bool> isLoggedIn();
 
   /// Clears the authenticated session. Called on logout.

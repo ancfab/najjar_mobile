@@ -151,6 +151,85 @@ void main() {
     });
   });
 
+  group('Neutral rows (e.g. Business Central ledger entries)', () {
+    final neutralTransaction = AccountTransaction(
+      id: 'ledger-entry-1001',
+      label: 'Invoice INV-TEST-001',
+      amount: 100.50,
+      type: AccountTransactionType.neutral,
+      occurredAt: DateTime(2026, 1, 5),
+      category: AccountTransactionCategory.ledgerEntry,
+      reference: 'INV-TEST-001',
+    );
+
+    testWidgets(
+      'Shows a plain (non-signed) amount in the neutral navy color, not the '
+      'credit/debit colors',
+      (tester) async {
+        await _pumpCard(tester, transactions: [neutralTransaction]);
+
+        expect(find.text('Invoice INV-TEST-001'), findsOneWidget);
+        final amountText = tester.widget<Text>(find.text('\$100.50'));
+        expect(amountText.style?.color, AppColors.textNavy);
+        expect(find.text('+\$101'), findsNothing);
+      },
+    );
+
+    testWidgets('A negative neutral amount shows a literal minus, not a '
+        'forced +/- sign', (tester) async {
+      final negativeNeutral = AccountTransaction(
+        id: 'ledger-entry-1002',
+        label: 'Payment PAY-TEST-002',
+        amount: -50.00,
+        type: AccountTransactionType.neutral,
+        occurredAt: DateTime(2026, 1, 3),
+        category: AccountTransactionCategory.ledgerEntry,
+      );
+
+      await _pumpCard(tester, transactions: [negativeNeutral]);
+
+      expect(find.text('-\$50.00'), findsOneWidget);
+    });
+
+    testWidgets('An AED ledger entry renders with the AED currency code, '
+        'not a dollar sign', (tester) async {
+      final aedTransaction = AccountTransaction(
+        id: 'ledger-entry-53473',
+        label: 'Invoice INV-53473',
+        amount: 1936.5,
+        type: AccountTransactionType.neutral,
+        occurredAt: DateTime(2026, 1, 5),
+        category: AccountTransactionCategory.ledgerEntry,
+        reference: 'INV-53473',
+        currencyCode: 'AED',
+      );
+
+      await _pumpCard(tester, transactions: [aedTransaction]);
+
+      expect(find.text('AED 1,936.50'), findsOneWidget);
+      expect(find.text('\$1,936.50'), findsNothing);
+      expect(find.textContaining('\$'), findsNothing);
+    });
+
+    testWidgets('A USD ledger entry renders with the USD currency code, '
+        'not a dollar sign', (tester) async {
+      final usdTransaction = AccountTransaction(
+        id: 'ledger-entry-1004',
+        label: 'Invoice INV-TEST-004',
+        amount: 250.0,
+        type: AccountTransactionType.neutral,
+        occurredAt: DateTime(2026, 1, 6),
+        category: AccountTransactionCategory.ledgerEntry,
+        currencyCode: 'USD',
+      );
+
+      await _pumpCard(tester, transactions: [usdTransaction]);
+
+      expect(find.text('USD 250.00'), findsOneWidget);
+      expect(find.textContaining('\$'), findsNothing);
+    });
+  });
+
   group('Responsive layout', () {
     for (final width in [320.0, 360.0, 390.0, 430.0]) {
       testWidgets('No overflow at ${width}px width', (tester) async {

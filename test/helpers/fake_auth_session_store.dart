@@ -13,8 +13,19 @@ class FakeAuthSessionStore implements AuthSessionStore {
   /// When set, thrown from [save] instead of performing the save.
   Object? saveError;
 
+  /// When set, thrown from [read] instead of returning the stored session.
+  Object? readError;
+
+  /// When set, thrown from [clear] instead of performing the clear.
+  Object? clearError;
+
   int saveCallCount = 0;
   int clearCallCount = 0;
+
+  /// Directly seeds the stored session, bypassing [save], so tests can set
+  /// up an existing session without it counting toward [saveCallCount] or
+  /// [savedSessions].
+  void seed(AuthSession session) => _saved = session;
 
   /// When set, [save] awaits this future before recording the save,
   /// letting tests observe that a caller does not see the save as complete
@@ -31,7 +42,10 @@ class FakeAuthSessionStore implements AuthSessionStore {
   }
 
   @override
-  Future<AuthSession?> read() async => _saved;
+  Future<AuthSession?> read() async {
+    if (readError != null) throw readError!;
+    return _saved;
+  }
 
   @override
   Future<bool> hasValidSession() async => _saved != null;
@@ -39,6 +53,7 @@ class FakeAuthSessionStore implements AuthSessionStore {
   @override
   Future<void> clear() async {
     clearCallCount++;
+    if (clearError != null) throw clearError!;
     _saved = null;
   }
 }

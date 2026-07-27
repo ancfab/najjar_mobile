@@ -1,3 +1,4 @@
+import 'authenticated_user.dart';
 import 'login_response.dart';
 
 /// Purpose: The authenticated ANC API session data this app persists after
@@ -72,6 +73,26 @@ class AuthSession {
       mustChangePassword: response.mustChangePassword,
     );
   }
+
+  /// Refreshes an already-persisted session's identity fields from a
+  /// confirmed `GET /auth/me` response, preserving [token] unchanged — that
+  /// endpoint never returns a new token. Used by
+  /// `AuthService.confirmSession` on cold app launch so a returning user's
+  /// stored identity data never goes stale after the backend confirms the
+  /// token is still valid.
+  factory AuthSession.fromAuthenticatedUser({
+    required String token,
+    required AuthenticatedUser user,
+  }) => AuthSession(
+    token: token,
+    userId: user.id,
+    username: user.username,
+    phone: user.phone,
+    country: user.country,
+    clientId: user.clientId,
+    bcCustomerNo: user.bcCustomerNo,
+    mustChangePassword: user.mustChangePassword,
+  );
 
   /// Serializes to the versioned envelope persisted by
   /// `SecureAuthSessionStore`.

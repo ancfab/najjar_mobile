@@ -6,8 +6,11 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../models/auth/api_validation_error.dart';
+import '../models/auth/authenticated_user.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
+import '../models/business_central/ledger_entry.dart';
+import '../models/business_central/paginated_response.dart';
 import 'anc_api_exceptions.dart';
 
 /// Purpose: The single controlled HTTP transport boundary between this app
@@ -31,10 +34,12 @@ import 'anc_api_exceptions.dart';
 /// - Attach an Authorization header to the login request.
 ///
 /// [postPublicJson] is deliberately named to make clear it never attaches
-/// a Bearer token. A later phase adding authenticated requests must
-/// introduce a distinctly-named method (e.g. `postAuthenticatedJson`) that
-/// requires a token argument, rather than adding an optional parameter
-/// here that a caller could accidentally omit.
+/// a Bearer token. [getAuthenticatedJson] is the distinctly-named
+/// counterpart for authenticated requests: it requires a token argument
+/// rather than adding an optional parameter to the public method that a
+/// caller could accidentally omit, and it is the one place that builds the
+/// `Authorization: Bearer ...` header — every authenticated ANC API call
+/// must go through it rather than constructing that header itself.
 class AncApiClient {
   AncApiClient({http.Client? httpClient, Duration? requestTimeout})
     : _httpClient = httpClient ?? http.Client(),
@@ -68,6 +73,80 @@ class AncApiClient {
     return _decodeLoginResponse(response);
   }
 
+  /// Calls `GET /api/auth/me` with the given [token] as a Bearer credential,
+  /// so a returning user's locally stored token is confirmed against the
+  /// backend rather than trusted on its own (see `AuthService.confirmSession`
+  /// and `main.dart`'s startup gate). Parses the required top-level `data`
+  /// wrapper — never [LoginResponse]'s shape, which this endpoint does not
+  /// share.
+  Future<AuthenticatedUser> fetchCurrentUser({required String token}) async {
+    final response = await getAuthenticatedJson(ApiConfig.mePath, token: token);
+    return _decodeCurrentUserResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/ledger-entries` for the authenticated
+  /// user, requesting [page] at a fixed [perPage] size. Never sends a
+  /// customer identifier — the ANC API scopes the result to the
+  /// authenticated [token] server-side.
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.ledgerEntriesMinPerPage, ApiConfig.ledgerEntriesMaxPerPage]`
+  /// before the request is sent, so a caller-side bug can never grow the
+  /// requested page size or send a nonsensical page number.
+  Future<PaginatedResponse<LedgerEntry>> fetchLedgerEntries({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.ledgerEntriesDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.ledgerEntriesMinPerPage,
+      ApiConfig.ledgerEntriesMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.ledgerEntriesPath,
+      token: token,
+      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+    );
+    return _decodeLedgerEntriesResponse(response);
+  }
+
+  /// Follows a backend-provided `next_page_url` for the ledger-entries
+  /// endpoint (see [PaginatedResponse.nextPageUrl]), preferring it over
+  /// reconstructing a `page`/`per_page` query for subsequent pages.
+  ///
+  /// Rejects [nextPageUrl] with an [ArgumentError] — never sending the
+  /// request or attaching the Authorization header — unless it is an
+  /// `https` URL whose host is exactly [ApiConfig.baseUrl]'s host. This is
+  /// the one guard standing between a compromised/malformed backend
+  /// response and the bearer token being sent to an arbitrary host.
+  Future<PaginatedResponse<LedgerEntry>> fetchLedgerEntriesPage({
+    required String token,
+    required Uri nextPageUrl,
+  }) async {
+    _requireTrustedApiHost(nextPageUrl);
+
+    final response = await _sendWithTransportHandling(
+      () => _httpClient
+          .get(nextPageUrl, headers: _authenticatedHeaders(token))
+          .timeout(_requestTimeout),
+    );
+    return _decodeLedgerEntriesResponse(response);
+  }
+
+  /// Throws an [ArgumentError] unless [url] is `https` and its host is
+  /// exactly [ApiConfig.baseUrl]'s host — see [fetchLedgerEntriesPage].
+  void _requireTrustedApiHost(Uri url) {
+    if (url.scheme != 'https' || url.host != ApiConfig.baseUrl.host) {
+      throw ArgumentError.value(
+        url,
+        'nextPageUrl',
+        'must be an https URL on the ANC API host (${ApiConfig.baseUrl.host})',
+      );
+    }
+  }
+
   /// Sends an unauthenticated POST request with a JSON body to
   /// [relativePath], resolved against [ApiConfig.baseUrl]. Never attaches
   /// an Authorization header — this method is for the ANC API's public
@@ -86,10 +165,54 @@ class AncApiClient {
     final uri = _resolve(relativePath);
     final encodedBody = jsonEncode(body);
 
-    try {
-      return await _httpClient
+    return _sendWithTransportHandling(
+      () => _httpClient
           .post(uri, headers: _sharedHeaders, body: encodedBody)
-          .timeout(_requestTimeout);
+          .timeout(_requestTimeout),
+    );
+  }
+
+  /// Sends an authenticated GET request to [relativePath], resolved against
+  /// [ApiConfig.baseUrl], with `Authorization: Bearer <token>` and
+  /// `Accept: application/json` — the only place in this app those headers
+  /// are constructed. Same [relativePath] safety rules as [postPublicJson].
+  ///
+  /// [queryParameters], when supplied, is attached via [Uri.replace] after
+  /// [relativePath] has already passed every path-safety check — it can
+  /// never be used to change the request's scheme, host, or port.
+  Future<http.Response> getAuthenticatedJson(
+    String relativePath, {
+    required String token,
+    Map<String, String>? queryParameters,
+  }) async {
+    var uri = _resolve(relativePath);
+    if (queryParameters != null && queryParameters.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParameters);
+    }
+
+    return _sendWithTransportHandling(
+      () => _httpClient
+          .get(uri, headers: _authenticatedHeaders(token))
+          .timeout(_requestTimeout),
+    );
+  }
+
+  /// The one place `Authorization: Bearer ...` is built, so it can never be
+  /// duplicated or drift across call sites. Never logs or otherwise exposes
+  /// [token].
+  static Map<String, String> _authenticatedHeaders(String token) => {
+    'Accept': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
+
+  /// Runs [send], normalizing transport/protocol-level failures the same
+  /// way for every request method — shared by [postPublicJson] and
+  /// [getAuthenticatedJson] so that mapping is defined exactly once.
+  Future<http.Response> _sendWithTransportHandling(
+    Future<http.Response> Function() send,
+  ) async {
+    try {
+      return await send();
     } on AncApiException {
       rethrow;
     } on TimeoutException {
@@ -197,6 +320,70 @@ class AncApiClient {
     throw AncHttpException(
       'ANC API login request failed.',
       statusCode: response.statusCode,
+    );
+  }
+
+  /// Decodes a `GET /auth/me` response, requiring the top-level `data`
+  /// wrapper the ANC API always sends for this endpoint — a body shaped
+  /// like a login response (or any other shape) is a protocol failure, not
+  /// a successfully parsed user. HTTP 401 surfaces as [AncHttpException]
+  /// with `statusCode: 401` like every other non-2xx status, so callers
+  /// decide how to react (see `AuthService.confirmSession`) rather than
+  /// this client special-casing session semantics.
+  AuthenticatedUser _decodeCurrentUserResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonMap(response.body);
+      final data = json['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const AncProtocolException(
+          'Malformed /auth/me response: missing the required "data" wrapper.',
+        );
+      }
+      try {
+        return AuthenticatedUser.fromJson(data);
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed /auth/me response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API /auth/me request failed.',
+      statusCode: response.statusCode,
+    );
+  }
+
+  /// Decodes a ledger-entries response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [LedgerEntry]; every other status raises
+  /// [AncHttpException] with that [statusCode] — including a parsed
+  /// [ApiValidationError] for 422, since the Business Central taxonomy
+  /// (pagination bug vs. account-not-linked) is decided one layer up (see
+  /// `mapBusinessCentralError`), not here. This client stays
+  /// transport/protocol-only.
+  PaginatedResponse<LedgerEntry> _decodeLedgerEntriesResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<LedgerEntry>.fromJson(
+          json,
+          LedgerEntry.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed ledger-entries response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API ledger-entries request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
     );
   }
 

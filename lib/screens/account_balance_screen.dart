@@ -9,7 +9,9 @@ import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
 import '../services/account_statement_exporter.dart';
+import '../services/business_central_error_mapper.dart';
 import '../services/current_user_avatar_controller.dart';
+import '../services/ledger_entry_presentation_adapter.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../utils/user_initials.dart';
@@ -23,6 +25,14 @@ import 'account_transaction_details_screen.dart';
 import 'edit_profile_screen.dart';
 import 'orders_screen.dart';
 import 'support_screen.dart';
+
+/// Quick History load state, tracked independently of the rest of the
+/// screen's balance/credit/history data so a ledger failure never blanks
+/// out those sections, and a 401 never shows any local error at all (the
+/// centralized session coordinator is already navigating to Login by the
+/// time [SessionExpiredException] reaches this screen — see
+/// `_AccountBalanceScreenState._loadQuickHistory`).
+enum _QuickHistoryState { loading, loaded, empty, error }
 
 // Bottom tab bar indexes, matching HomeScreen's. Account Balance itself
 // isn't one of the four tabs — it's a drill-down reached from the Home
@@ -45,6 +55,7 @@ class AccountBalanceScreen extends StatefulWidget {
     AccountBalanceService? service,
     AccountStatementExporter? exporter,
     this.avatarController,
+    this.quickHistorySource,
   }) : service = service ?? const MockAccountBalanceService(),
        exporter = exporter ?? const LocalAccountStatementPdfExporter();
 
@@ -64,6 +75,11 @@ class AccountBalanceScreen extends StatefulWidget {
   /// across test cases.
   final CurrentUserAvatarController? avatarController;
 
+  /// Quick History data seam. Defaults (lazily, in State) to
+  /// [LedgerQuickHistoryDataSource] — the live Business Central
+  /// ledger-entries endpoint; overridable so tests can inject a fake.
+  final QuickHistoryDataSource? quickHistorySource;
+
   @override
   State<AccountBalanceScreen> createState() => _AccountBalanceScreenState();
 }
@@ -73,12 +89,22 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   late final AccountStatementExporter _exporter = widget.exporter;
   late final CurrentUserAvatarController _avatarController =
       widget.avatarController ?? currentUserAvatarController;
+  late final QuickHistoryDataSource _quickHistorySource =
+      widget.quickHistorySource ?? LedgerQuickHistoryDataSource();
 
   AccountBalanceSummary? _summary;
   CreditUtilizationData? _creditUtilization;
-  List<AccountTransaction> _quickHistory = const [];
   bool _isLoading = true;
   String? _error;
+
+  _QuickHistoryState _quickHistoryState = _QuickHistoryState.loading;
+  List<AccountTransaction> _quickHistory = const [];
+
+  /// Set only when [_quickHistoryState] is [_QuickHistoryState.error] from a
+  /// [BusinessCentralFailureException] — `null` for a generic/unexpected
+  /// failure, which gets the same neutral retry copy as every outcome other
+  /// than "account not linked"/"temporarily unavailable".
+  BusinessCentralOutcome? _quickHistoryOutcome;
 
   BalanceHistoryRange _selectedRange = BalanceHistoryRange.thirtyDays;
   List<BalanceHistoryPoint> _historyPoints = const [];
@@ -94,6 +120,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     super.initState();
     _loadSummary();
     _loadHistory(_selectedRange);
+    _loadQuickHistory();
   }
 
   Future<void> _loadSummary() async {
@@ -104,12 +131,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     try {
       final summary = await _service.fetchSummary();
       final utilization = await _service.fetchCreditUtilization();
-      final quickHistory = await _service.fetchQuickHistory();
       if (!mounted) return;
       setState(() {
         _summary = summary;
         _creditUtilization = utilization;
-        _quickHistory = quickHistory;
         _isLoading = false;
       });
     } catch (_) {
@@ -123,6 +148,44 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
 
   Future<void> _retryLoad() async {
     await _loadSummary();
+  }
+
+  /// Loads Quick History independently of [_loadSummary]/[_loadHistory] so
+  /// a ledger-entries failure can never blank out the balance/credit/
+  /// history sections, and so a runtime HTTP 401 — already fully handled by
+  /// the centralized `SessionExpiryCoordinator` by the time
+  /// [SessionExpiredException] reaches this catch — never shows any local
+  /// error state or toast here.
+  Future<void> _loadQuickHistory() async {
+    setState(() {
+      _quickHistoryState = _QuickHistoryState.loading;
+      _quickHistoryOutcome = null;
+    });
+    try {
+      final rows = await _quickHistorySource.fetchQuickHistoryRows();
+      if (!mounted) return;
+      setState(() {
+        _quickHistory = rows;
+        _quickHistoryState = rows.isEmpty
+            ? _QuickHistoryState.empty
+            : _QuickHistoryState.loaded;
+      });
+    } on SessionExpiredException {
+      // The centralized session coordinator has already cleared the
+      // session and is navigating to Login — show nothing here.
+    } on BusinessCentralFailureException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _quickHistoryOutcome = error.outcome;
+        _quickHistoryState = _QuickHistoryState.error;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _quickHistoryOutcome = null;
+        _quickHistoryState = _QuickHistoryState.error;
+      });
+    }
   }
 
   Future<void> _loadHistory(BalanceHistoryRange range) async {
@@ -369,15 +432,55 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               isLoading: _isHistoryLoading,
             ),
             const SizedBox(height: 16),
-            QuickHistoryCard(
-              transactions: _quickHistory,
-              onTransactionTap: _openTransactionDetails,
-              onSeeAll: _openFullTransactionHistory,
-            ),
+            _buildQuickHistorySection(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildQuickHistorySection() {
+    switch (_quickHistoryState) {
+      case _QuickHistoryState.loading:
+        return const _QuickHistorySectionShell(
+          key: ValueKey('quick-history-loading'),
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        );
+      case _QuickHistoryState.empty:
+        return const _QuickHistorySectionShell(
+          key: ValueKey('quick-history-empty'),
+          message: 'No account statement entries are available yet.',
+        );
+      case _QuickHistoryState.error:
+        return _QuickHistorySectionShell(
+          key: const ValueKey('quick-history-error'),
+          message: _quickHistoryErrorMessage(),
+          onRetry: _loadQuickHistory,
+        );
+      case _QuickHistoryState.loaded:
+        return QuickHistoryCard(
+          transactions: _quickHistory,
+          onTransactionTap: _openTransactionDetails,
+          onSeeAll: _openFullTransactionHistory,
+        );
+    }
+  }
+
+  /// Maps [_quickHistoryOutcome] to controlled, safe user-facing copy — the
+  /// backend's raw `message` is never shown directly (see
+  /// `BusinessCentralOutcome`'s doc comments).
+  String _quickHistoryErrorMessage() {
+    return switch (_quickHistoryOutcome) {
+      BusinessCentralAccountNotLinked() =>
+        "Your account isn't fully set up yet. Please contact support.",
+      BusinessCentralTemporarilyUnavailable() => 'Temporarily unavailable.',
+      _ => "Couldn't load data right now.",
+    };
   }
 
   Widget _buildErrorState() {
@@ -409,6 +512,68 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Quick History section placeholder for the loading/empty/error states,
+/// reusing [QuickHistoryCard]'s exact outer chrome (white card, border,
+/// radius 12, "QUICK HISTORY" header) so the section never visually jumps
+/// once real rows arrive. [QuickHistoryCard] itself is untouched — this is
+/// a sibling widget shown in its place, never a modification of it.
+class _QuickHistorySectionShell extends StatelessWidget {
+  const _QuickHistorySectionShell({
+    super.key,
+    this.child,
+    this.message,
+    this.onRetry,
+  });
+
+  final Widget? child;
+  final String? message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'QUICK HISTORY',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textNavy,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ?child,
+          if (message != null) ...[
+            Text(
+              message!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.grayText, fontSize: 13),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  onPressed: onRetry,
+                  child: const Text('Retry'),
+                ),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

@@ -2,12 +2,11 @@
 //The test folder contains automated Flutter widget tests. We added Home screen tests to validate navigation, responsive layout, catalogue lookup states, and pull-to-refresh behavior. These tests do not affect the production app; they are only used during development to make sure future changes do not break the UI.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:anc_fabrics/main.dart';
 
 void main() {
   testWidgets('Login screen renders key content', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp());
 
     expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.text('MOBILE NUMBER'), findsOneWidget);
@@ -23,7 +22,7 @@ void main() {
   testWidgets('Password visibility toggle switches obscureText', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp());
 
     Finder findPasswordField() => find.ancestor(
       of: find.text('Enter your password'),
@@ -45,7 +44,7 @@ void main() {
   // screen ends up wired to a stale/old picker or list.
   group('Login screen country code picker (real screen, not isolated)', () {
     Future<void> openPicker(WidgetTester tester) async {
-      await tester.pumpWidget(const MyApp());
+      await tester.pumpWidget(MyApp());
       expect(find.text('+971'), findsOneWidget); // default selection: UAE
       await tester.tap(find.text('+971'));
       await tester.pumpAndSettle();

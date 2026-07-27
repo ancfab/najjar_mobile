@@ -34,6 +34,7 @@ import 'package:anc_fabrics/widgets/scan_fabric_button.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
 
@@ -76,7 +77,7 @@ void main() {
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
-          await tester.pumpWidget(const MyApp());
+          await tester.pumpWidget(MyApp());
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
@@ -85,14 +86,14 @@ void main() {
 
     testWidgets('No overflow at 1.3x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.3);
-      await tester.pumpWidget(const MyApp());
+      await tester.pumpWidget(MyApp());
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('No overflow in landscape on a small phone', (tester) async {
       await _setSize(tester, const Size(568, 320));
-      await tester.pumpWidget(const MyApp());
+      await tester.pumpWidget(MyApp());
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
@@ -428,6 +429,7 @@ void main() {
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
+            quickHistorySource: FakeQuickHistoryDataSource(),
           ),
         ),
       );

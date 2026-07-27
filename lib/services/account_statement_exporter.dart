@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../models/account_statement_data.dart';
+import '../models/account_transaction.dart';
 import '../models/balance_history_range.dart';
 import '../utils/currency.dart';
 import '../utils/date_time_format.dart';
@@ -149,7 +150,7 @@ pw.Widget _buildQuickHistorySection(AccountStatementData data) {
             [
               formatDateOnly(txn.occurredAt),
               txn.label,
-              formatSignedCurrency(txn.amount),
+              _formatTransactionAmount(txn),
             ],
         ],
         headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -158,6 +159,20 @@ pw.Widget _buildQuickHistorySection(AccountStatementData data) {
       ),
     ],
   );
+}
+
+/// Formats [txn]'s amount for the statement's Quick History table, matching
+/// the currency presentation used on the Quick History card and Transaction
+/// Details screen: transactions carrying a currency code (e.g. Business
+/// Central ledger entries) render with that code via [formatCurrency],
+/// while legacy transactions with no currency code keep the existing signed
+/// dollar format from [formatSignedCurrency].
+String _formatTransactionAmount(AccountTransaction txn) {
+  final currencyCode = txn.currencyCode;
+  if (currencyCode != null && currencyCode.isNotEmpty) {
+    return formatCurrency(txn.amount, currencyCode: currencyCode);
+  }
+  return formatSignedCurrency(txn.amount);
 }
 
 pw.Widget _statRow(String label, double amount) {

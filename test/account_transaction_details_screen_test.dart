@@ -77,6 +77,75 @@ void main() {
     });
   });
 
+  group('Neutral transaction (e.g. a Business Central ledger entry)', () {
+    final neutralTransaction = AccountTransaction(
+      id: 'ledger-entry-1001',
+      label: 'Invoice INV-TEST-001',
+      amount: 100.50,
+      type: AccountTransactionType.neutral,
+      occurredAt: DateTime.utc(2026, 1, 5),
+      category: AccountTransactionCategory.ledgerEntry,
+      reference: 'INV-TEST-001',
+    );
+
+    testWidgets(
+      'Shows a plain amount with no invented Credit/Debit status line',
+      (tester) async {
+        await _pumpScreen(tester, transaction: neutralTransaction);
+
+        expect(find.text('Invoice INV-TEST-001'), findsOneWidget);
+        expect(find.text('\$100.50'), findsOneWidget);
+        expect(find.text('Credit'), findsNothing);
+        expect(find.text('Debit'), findsNothing);
+        expect(find.text('Jan 5, 2026'), findsOneWidget);
+        expect(find.text('INV-TEST-001'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'An AED ledger entry shows the AED currency code, not a dollar sign',
+      (tester) async {
+        final aedTransaction = AccountTransaction(
+          id: 'ledger-entry-53473',
+          label: 'Invoice INV-53473',
+          amount: 1936.5,
+          type: AccountTransactionType.neutral,
+          occurredAt: DateTime.utc(2026, 1, 5),
+          category: AccountTransactionCategory.ledgerEntry,
+          reference: 'INV-53473',
+          currencyCode: 'AED',
+        );
+
+        await _pumpScreen(tester, transaction: aedTransaction);
+
+        expect(find.text('AED 1,936.50'), findsOneWidget);
+        expect(find.textContaining('\$'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'A USD ledger entry shows the USD currency code, not a dollar sign',
+      (tester) async {
+        final usdTransaction = AccountTransaction(
+          id: 'ledger-entry-1004',
+          label: 'Invoice INV-TEST-004',
+          amount: 250.0,
+          type: AccountTransactionType.neutral,
+          occurredAt: DateTime.utc(2026, 1, 6),
+          category: AccountTransactionCategory.ledgerEntry,
+          currencyCode: 'USD',
+        );
+
+        await _pumpScreen(tester, transaction: usdTransaction);
+
+        expect(find.text('USD 250.00'), findsOneWidget);
+        expect(find.textContaining('\$'), findsNothing);
+      },
+    );
+  });
+
   group('Back navigation', () {
     testWidgets('The menu/back button pops the screen', (tester) async {
       await tester.pumpWidget(

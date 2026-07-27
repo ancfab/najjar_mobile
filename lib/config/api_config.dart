@@ -40,6 +40,28 @@ class ApiConfig {
   /// against [baseUrl] by [AncApiClient].
   static const String loginPath = 'api/auth/login';
 
+  /// Relative path (no leading slash) for the authenticated "confirm
+  /// session" endpoint, resolved against [baseUrl] by [AncApiClient]. Called
+  /// on cold app launch (see `main.dart`) to verify a locally stored token
+  /// is still valid before trusting it — never on its own.
+  static const String mePath = 'api/auth/me';
+
+  /// Relative path (no leading slash) for the Business Central ledger-
+  /// entries endpoint, resolved against [baseUrl] by [AncApiClient]. The ANC
+  /// API scopes results to the authenticated user server-side — the app
+  /// never sends a customer identifier of its own.
+  static const String ledgerEntriesPath = 'api/business-central/ledger-entries';
+
+  /// Fixed page size requested for the first ledger-entries page. Never
+  /// increased by load-more logic.
+  static const int ledgerEntriesDefaultPerPage = 25;
+
+  /// Smallest `per_page` value this app will ever send.
+  static const int ledgerEntriesMinPerPage = 1;
+
+  /// Largest `per_page` value this app will ever send.
+  static const int ledgerEntriesMaxPerPage = 100;
+
   /// Default per-request timeout applied by [AncApiClient]. A timeout is a
   /// transport failure (mapped to [AncNetworkException]), not a session
   /// event — it must never clear an authenticated session, only the ANC

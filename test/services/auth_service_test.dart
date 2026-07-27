@@ -16,7 +16,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/config/api_config.dart';
+import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/auth/login_failure.dart';
+import 'package:anc_fabrics/models/auth/session_validation_result.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
@@ -924,5 +926,221 @@ void main() {
 
       expect(service.close, returnsNormally);
     });
+  });
+
+  group('confirmSession', () {
+    const storedToken = 'synthetic-id|synthetic-secret';
+
+    AuthSession storedSession({String username = _validUsername}) =>
+        AuthSession(
+          token: storedToken,
+          userId: 7,
+          username: username,
+          phone: _validPhone,
+          country: _validCountry,
+          clientId: ApiConfig.clientId,
+          bcCustomerNo: 'SAMPLE-0001',
+          mustChangePassword: false,
+        );
+
+    Map<String, dynamic> meUserJson({
+      String username = 'refreshed.user',
+      bool mustChangePassword = false,
+    }) => {
+      'id': 7,
+      'username': username,
+      'phone': _validPhone,
+      'country': _validCountry,
+      'client_id': ApiConfig.clientId,
+      'bc_customer_no': 'SAMPLE-0001',
+      'must_change_password': mustChangePassword,
+    };
+
+    _RecordingHttpClient meSuccessHttpClient({
+      String username = 'refreshed.user',
+    }) => _RecordingHttpClient(
+      (req) async => _jsonResponse(200, {
+        'data': meUserJson(username: username),
+      }, request: req),
+    );
+
+    test('no stored session resolves to SessionValidationAbsent', () async {
+      final http = meSuccessHttpClient();
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationAbsent>());
+      expect(http.requestCount, 0);
+    });
+
+    test(
+      'a secure-storage read failure resolves to SessionValidationStorageFailure',
+      () async {
+        store.readError = const SessionStorageException(
+          SessionStorageOperation.read,
+        );
+        final http = meSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.confirmSession();
+
+        expect(result, isA<SessionValidationStorageFailure>());
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test('sends Authorization: Bearer <storedToken> to /auth/me', () async {
+      store.seed(storedSession());
+      final http = meSuccessHttpClient();
+      final service = _service(http, store);
+
+      await service.confirmSession();
+
+      expect(http.lastRequest!.headers['Authorization'], 'Bearer $storedToken');
+      expect(
+        http.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/me'),
+      );
+    });
+
+    test('HTTP 200 resolves to SessionValidationValid with the refreshed user '
+        'and the original token preserved', () async {
+      store.seed(storedSession(username: 'stale.name'));
+      final http = meSuccessHttpClient(username: 'fresh.name');
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      final valid = result as SessionValidationValid;
+      expect(valid.session.username, 'fresh.name');
+      expect(valid.session.token, storedToken);
+    });
+
+    test('HTTP 200 re-persists the refreshed session exactly once', () async {
+      store.seed(storedSession(username: 'stale.name'));
+      final http = meSuccessHttpClient(username: 'fresh.name');
+      final service = _service(http, store);
+
+      await service.confirmSession();
+
+      expect(store.saveCallCount, 1);
+      expect(store.savedSessions.single.username, 'fresh.name');
+    });
+
+    test('a re-persist failure after a valid /auth/me response still returns '
+        'SessionValidationValid', () async {
+      store.seed(storedSession());
+      store.saveError = const SessionStorageException(
+        SessionStorageOperation.write,
+      );
+      final http = meSuccessHttpClient();
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationValid>());
+    });
+
+    test(
+      'HTTP 401 resolves to SessionValidationRevoked and clears the store',
+      () async {
+        store.seed(storedSession());
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(401, const {}, request: req),
+        );
+        final service = _service(http, store);
+
+        final result = await service.confirmSession();
+
+        expect(result, isA<SessionValidationRevoked>());
+        expect(store.clearCallCount, 1);
+      },
+    );
+
+    test('a clear failure after HTTP 401 still resolves to '
+        'SessionValidationRevoked', () async {
+      store.seed(storedSession());
+      store.clearError = const SessionStorageException(
+        SessionStorageOperation.clear,
+      );
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationRevoked>());
+    });
+
+    test('a malformed /auth/me body resolves to SessionValidationUnusable and '
+        'clears the store', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, meUserJson(), request: req), // no data wrapper
+      );
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationUnusable>());
+      expect(store.clearCallCount, 1);
+    });
+
+    test('a network failure resolves to SessionValidationUnavailable and does '
+        'not clear the store', () async {
+      store.seed(storedSession());
+      final http = _neverRespondingHttpClient();
+      final service = _service(
+        http,
+        store,
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationUnavailable>());
+      expect(store.clearCallCount, 0);
+      expect(await store.read(), isNotNull);
+    });
+
+    test('HTTP 500 resolves to SessionValidationUnavailable and does not clear '
+        'the store', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.confirmSession();
+
+      expect(result, isA<SessionValidationUnavailable>());
+      expect(store.clearCallCount, 0);
+    });
+
+    test('confirmSession makes at most one HTTP request', () async {
+      store.seed(storedSession());
+      final http = meSuccessHttpClient();
+      final service = _service(http, store);
+
+      await service.confirmSession();
+
+      expect(http.requestCount, 1);
+    });
+
+    test(
+      'the resolved session never exposes the token through toString',
+      () async {
+        store.seed(storedSession());
+        final http = meSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.confirmSession() as SessionValidationValid;
+
+        expect(result.session.toString(), isNot(contains(storedToken)));
+      },
+    );
   });
 }

@@ -27,6 +27,27 @@ Future<void> _pumpHomeScreen(WidgetTester tester, double width) async {
   await tester.pumpAndSettle();
 }
 
+/// Pumps only far enough for a pushed route's transition to finish, without
+/// waiting for every animation to settle.
+///
+/// AccountBalanceScreen's Quick History defaults to a live
+/// LedgerQuickHistoryDataSource, which in this widget-test sandbox never
+/// resolves (no secure-storage platform handler is registered), leaving its
+/// loading spinner animating indefinitely. These navigation tests only care
+/// that the push transition completed, not that Quick History finished
+/// loading, so `pumpAndSettle` (which would wait on that spinner forever)
+/// is deliberately avoided here.
+Future<void> _pumpRouteTransition(WidgetTester tester) async {
+  await tester.pump(); // start the push transition
+  // AccountBalanceScreen's _loadSummary awaits MockAccountBalanceService's
+  // two 400ms simulated delays sequentially (fetchSummary, then
+  // fetchCreditUtilization) — long enough for both, plus the push
+  // transition, to finish, so no dangling Timer trips
+  // AutomatedTestWidgetsFlutterBinding's post-test invariant check.
+  await tester.pump(const Duration(milliseconds: 900));
+  await tester.pump(); // let the now-covered route finish settling offstage
+}
+
 void main() {
   for (final width in [320.0, 360.0, 390.0, 430.0]) {
     testWidgets('Home screen has no overflow at ${width}px width', (
@@ -144,7 +165,7 @@ void main() {
       await _pumpHomeScreen(tester, 390);
 
       await tester.tap(find.byType(BalanceCard));
-      await tester.pumpAndSettle();
+      await _pumpRouteTransition(tester);
 
       expect(find.byType(AccountBalanceScreen), findsOneWidget);
     });
@@ -155,7 +176,7 @@ void main() {
       await _pumpHomeScreen(tester, 390);
 
       await tester.tap(find.byType(BalanceCard));
-      await tester.pumpAndSettle();
+      await _pumpRouteTransition(tester);
       expect(find.byType(AccountBalanceScreen), findsOneWidget);
 
       await tester.pageBack();
@@ -172,7 +193,7 @@ void main() {
         await _pumpHomeScreen(tester, 390);
 
         await tester.tap(find.byType(BalanceCard));
-        await tester.pumpAndSettle();
+        await _pumpRouteTransition(tester);
         expect(find.byType(AccountBalanceScreen), findsOneWidget);
 
         await tester.tap(find.text('Home'));
@@ -191,7 +212,7 @@ void main() {
 
         for (var i = 0; i < 3; i++) {
           await tester.tap(find.byType(BalanceCard));
-          await tester.pumpAndSettle();
+          await _pumpRouteTransition(tester);
           expect(find.byType(AccountBalanceScreen), findsOneWidget);
 
           await tester.pageBack();

@@ -101,11 +101,18 @@ class _QuickHistoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isCredit = transaction.type == AccountTransactionType.credit;
-    final amountColor = isCredit ? AppColors.darkTeal : AppColors.darkRedBrown;
-    final iconBackground = isCredit
-        ? AppColors.darkTeal.withValues(alpha: 0.12)
-        : AppColors.background;
-    final iconColor = isCredit ? AppColors.darkTeal : AppColors.grayText;
+    final isNeutral = transaction.type == AccountTransactionType.neutral;
+    final amountColor = isNeutral
+        ? AppColors.textNavy
+        : (isCredit ? AppColors.darkTeal : AppColors.darkRedBrown);
+    final iconBackground = isNeutral
+        ? AppColors.background
+        : (isCredit
+              ? AppColors.darkTeal.withValues(alpha: 0.12)
+              : AppColors.background);
+    final iconColor = isNeutral
+        ? AppColors.grayText
+        : (isCredit ? AppColors.darkTeal : AppColors.grayText);
 
     return Material(
       color: Colors.transparent,
@@ -145,7 +152,12 @@ class _QuickHistoryRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                formatSignedCurrency(transaction.amount),
+                isNeutral
+                    ? formatCurrency(
+                        transaction.amount,
+                        currencyCode: transaction.currencyCode,
+                      )
+                    : formatSignedCurrency(transaction.amount),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -170,5 +182,7 @@ IconData _iconForCategory(AccountTransactionCategory category) {
       return Icons.savings_outlined;
     case AccountTransactionCategory.serviceFee:
       return Icons.receipt_long_outlined;
+    case AccountTransactionCategory.ledgerEntry:
+      return Icons.article_outlined;
   }
 }

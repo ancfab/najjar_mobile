@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import '../models/account_balance_summary.dart';
-import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
@@ -111,33 +110,3 @@ kMockBalanceHistoryByRange = {
     endBalance: 42850.00,
   ),
 };
-
-// TODO(api): Replace the deterministic Quick History transactions with the
-// account-transactions endpoint after its request and response contract is confirmed.
-final List<AccountTransaction> kMockQuickHistoryTransactions = [
-  AccountTransaction(
-    id: 'txn-loom-supply-42',
-    label: 'Loom Supply #42',
-    amount: -2400,
-    type: AccountTransactionType.debit,
-    occurredAt: DateTime.utc(2023, 10, 28),
-    category: AccountTransactionCategory.supplyPurchase,
-  ),
-  AccountTransaction(
-    id: 'txn-client-deposit',
-    label: 'Client Deposit',
-    amount: 15000,
-    type: AccountTransactionType.credit,
-    occurredAt: DateTime.utc(2023, 10, 26),
-    category: AccountTransactionCategory.deposit,
-    reference: 'REF-20231026-CD',
-  ),
-  AccountTransaction(
-    id: 'txn-service-fee',
-    label: 'Service Fee',
-    amount: -120,
-    type: AccountTransactionType.debit,
-    occurredAt: DateTime.utc(2023, 10, 24),
-    category: AccountTransactionCategory.serviceFee,
-  ),
-];

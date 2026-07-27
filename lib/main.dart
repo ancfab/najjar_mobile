@@ -1,57 +1,105 @@
 import 'package:flutter/material.dart';
 
+import 'models/auth/session_validation_result.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/auth_service.dart';
 import 'services/current_user_avatar_controller.dart';
-import 'services/session_service.dart';
-import 'services/session_storage_exception.dart';
+import 'services/session_expiry_coordinator.dart';
+import 'services/session_messages.dart';
 import 'theme/app_colors.dart';
 
-/// Safe, one-time message shown on Login after a startup secure-session
-/// restore failure (see [resolveStartupSession]) — never a storage
-/// implementation detail.
+/// Safe, one-time message shown on Login after the locally persisted
+/// session itself could not be read (a secure-storage I/O failure) — never
+/// a storage implementation detail.
 const String _secureSessionRestoreFailedMessage =
     'We could not restore your secure session. Please sign in again.';
 
-/// App-startup auth-gate result: whether a previously-established secure
-/// session is still active, and an optional safe message to show once on
-/// Login when that could not be determined.
-typedef StartupSession = ({bool isLoggedIn, String? startupMessage});
+/// Safe, one-time message shown on Login when a stored session could not be
+/// confirmed because `/auth/me` could not be reached or the ANC API failed
+/// to service the request. Deliberately distinct from
+/// [_sessionExpiredMessage]: a transient network/service failure is not
+/// evidence of invalid credentials, and the secure session is left intact
+/// so a later launch with connectivity can still succeed.
+const String _sessionValidationUnavailableMessage =
+    'We could not verify your session. Please check your connection and '
+    'sign in again.';
 
-/// Resolves the app-startup authentication state from [sessionService]
-/// alone — the secure `AuthSession` is the only source of truth (see
-/// [SessionService.isLoggedIn]); the legacy Boolean is never consulted. A
-/// genuine secure-storage read failure routes to Login with
-/// [_secureSessionRestoreFailedMessage] rather than crashing before
-/// `runApp` or falling back to any legacy signal. Makes no network call
-/// and never decodes or otherwise inspects token contents.
-Future<StartupSession> resolveStartupSession(
-  SessionService sessionService,
-) async {
-  try {
-    final isLoggedIn = await sessionService.isLoggedIn();
-    return (isLoggedIn: isLoggedIn, startupMessage: null);
-  } on SessionStorageException {
-    return (
+/// App-startup auth-gate result: whether a previously-established secure
+/// session is both present and confirmed still valid, an optional safe
+/// message to show once on Login when that could not be determined, and
+/// whether the session was actively invalidated during this check (as
+/// opposed to simply never having existed) — see [resolveStartupSession].
+typedef StartupSession = ({
+  bool isLoggedIn,
+  String? startupMessage,
+  bool sessionInvalidated,
+});
+
+/// Resolves the app-startup authentication state via
+/// [AuthService.confirmSession] — a locally stored token is never trusted
+/// on its own; a returning user's session is only treated as active once
+/// `GET /auth/me` confirms it. Makes at most one network call and never
+/// decodes or otherwise inspects token contents.
+Future<StartupSession> resolveStartupSession(AuthService authService) async {
+  final result = await authService.confirmSession();
+  return switch (result) {
+    SessionValidationAbsent() => (
+      isLoggedIn: false,
+      startupMessage: null,
+      sessionInvalidated: false,
+    ),
+    SessionValidationValid() => (
+      isLoggedIn: true,
+      startupMessage: null,
+      sessionInvalidated: false,
+    ),
+    SessionValidationRevoked() => (
+      isLoggedIn: false,
+      startupMessage: sessionExpiredMessage,
+      sessionInvalidated: true,
+    ),
+    SessionValidationUnusable() => (
+      isLoggedIn: false,
+      startupMessage: sessionExpiredMessage,
+      sessionInvalidated: true,
+    ),
+    SessionValidationUnavailable() => (
+      isLoggedIn: false,
+      startupMessage: _sessionValidationUnavailableMessage,
+      sessionInvalidated: false,
+    ),
+    SessionValidationStorageFailure() => (
       isLoggedIn: false,
       startupMessage: _secureSessionRestoreFailedMessage,
-    );
-  }
+      sessionInvalidated: false,
+    ),
+  };
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Startup auth gate: reads the persisted secure session (not just
-  // in-memory state) before the first frame, so a relaunch after logout
-  // opens on Login rather than briefly showing — or worse, staying on — an
-  // authenticated screen.
-  final startup = await resolveStartupSession(SecureSessionService());
+  // Startup auth gate: confirms any persisted secure session against
+  // `GET /auth/me` (not just its local presence) before the first frame, so
+  // a relaunch never briefly shows — or worse, stays on — an authenticated
+  // screen for a token the backend has since revoked.
+  final authService = AuthService.production();
+  final startup = await resolveStartupSession(authService);
+  authService.close();
+
   if (startup.isLoggedIn) {
     // Restores the temporary local/mock avatar (see
     // CurrentUserAvatarController) so it's already in place on the first
     // authenticated frame instead of popping in after a rebuild.
     await currentUserAvatarController.restorePersisted();
+  } else if (startup.sessionInvalidated) {
+    // The centralized invalid-session path: a session that was confirmed
+    // revoked/unusable during this check must not leave stale in-memory
+    // authenticated-user state (here, a locally cached avatar) around for
+    // whichever account signs in next on this device.
+    await currentUserAvatarController.clear();
   }
+
   runApp(
     MyApp(
       isLoggedIn: startup.isLoggedIn,
@@ -74,7 +122,12 @@ Future<void> main() async {
 ///   value directly without touching secure storage or any platform
 ///   channel.
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.isLoggedIn = false, this.startupMessage});
+  MyApp({
+    super.key,
+    this.isLoggedIn = false,
+    this.startupMessage,
+    GlobalKey<NavigatorState>? navigatorKey,
+  }) : navigatorKey = navigatorKey ?? appNavigatorKey;
 
   /// Whether a previously-established session is still active, as
   /// determined by [resolveStartupSession] before the widget tree is
@@ -87,9 +140,17 @@ class MyApp extends StatelessWidget {
   /// session restore failure, or null when nothing needs to be shown.
   final String? startupMessage;
 
+  /// The app's root [Navigator] key. Defaults to the shared
+  /// [appNavigatorKey] that [SessionExpiryCoordinator] uses to replace the
+  /// whole back stack with Login after a runtime 401 — overridable so
+  /// widget tests can supply a fresh key per test instead of reusing the
+  /// app-wide singleton across independently torn-down widget trees.
+  final GlobalKey<NavigatorState> navigatorKey;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'ANC Fabrics',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -12,11 +12,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/avatar_initials_badge.dart';
@@ -24,7 +26,43 @@ import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/valid_avatar_image.dart';
+
+// Ledger-adapted fixture rows, matching what
+// adaptLedgerEntryToAccountTransaction would produce for real ledger
+// entries — a neutral type/category, since the API contract does not
+// define a credit/debit meaning for Amount's sign (see
+// AccountTransactionType.neutral).
+final _quickHistoryRows = [
+  AccountTransaction(
+    id: 'ledger-entry-1001',
+    label: 'Invoice INV-TEST-001',
+    amount: 100.50,
+    type: AccountTransactionType.neutral,
+    occurredAt: DateTime.utc(2026, 1, 5),
+    category: AccountTransactionCategory.ledgerEntry,
+    reference: 'INV-TEST-001',
+  ),
+  AccountTransaction(
+    id: 'ledger-entry-1002',
+    label: 'Payment PAY-TEST-002',
+    amount: -50.00,
+    type: AccountTransactionType.neutral,
+    occurredAt: DateTime.utc(2026, 1, 3),
+    category: AccountTransactionCategory.ledgerEntry,
+    reference: 'PAY-TEST-002',
+  ),
+  AccountTransaction(
+    id: 'ledger-entry-1003',
+    label: 'Credit Memo CM-TEST-003',
+    amount: 25.75,
+    type: AccountTransactionType.neutral,
+    occurredAt: DateTime.utc(2025, 12, 30),
+    category: AccountTransactionCategory.ledgerEntry,
+    reference: 'CM-TEST-003',
+  ),
+];
 
 Future<void> _pumpAccountBalanceScreen(
   WidgetTester tester, {
@@ -32,6 +70,7 @@ Future<void> _pumpAccountBalanceScreen(
   FakeAccountBalanceService? service,
   FakeAccountStatementExporter? exporter,
   CurrentUserAvatarController? avatarController,
+  FakeQuickHistoryDataSource? quickHistorySource,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -44,6 +83,9 @@ Future<void> _pumpAccountBalanceScreen(
         service: service ?? FakeAccountBalanceService(),
         exporter: exporter ?? FakeAccountStatementExporter(),
         avatarController: avatarController,
+        quickHistorySource:
+            quickHistorySource ??
+            FakeQuickHistoryDataSource(rows: _quickHistoryRows),
       ),
     ),
   );
@@ -253,7 +295,7 @@ void main() {
 
   group('Quick History card', () {
     testWidgets(
-      'Renders below the Balance History card with all mock transactions',
+      'Renders below the Balance History card with live ledger-adapted rows',
       (tester) async {
         await _pumpAccountBalanceScreen(tester);
 
@@ -267,28 +309,47 @@ void main() {
         );
         expect(quickHistoryTop.dy, greaterThan(balanceHistoryTop.dy));
 
-        expect(find.text('Loom Supply #42'), findsOneWidget);
-        expect(find.text('Client Deposit'), findsOneWidget);
-        expect(find.text('Service Fee'), findsOneWidget);
-        expect(find.text('-\$2,400'), findsOneWidget);
-        expect(find.text('+\$15,000'), findsOneWidget);
-        expect(find.text('-\$120'), findsOneWidget);
+        expect(find.text('Invoice INV-TEST-001'), findsOneWidget);
+        expect(find.text('Payment PAY-TEST-002'), findsOneWidget);
+        expect(find.text('Credit Memo CM-TEST-003'), findsOneWidget);
       },
     );
 
+    testWidgets('No mock ledger rows flash before the data source resolves', (
+      tester,
+    ) async {
+      final pending = Completer<List<AccountTransaction>>();
+      final source = FakeQuickHistoryDataSource(pendingFuture: pending.future);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AccountBalanceScreen(
+            service: FakeAccountBalanceService(),
+            exporter: FakeAccountStatementExporter(),
+            quickHistorySource: source,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.text('Invoice INV-TEST-001'), findsNothing);
+      expect(find.byKey(const ValueKey('quick-history-card')), findsNothing);
+
+      pending.complete(_quickHistoryRows);
+      await tester.pumpAndSettle();
+      expect(find.text('Invoice INV-TEST-001'), findsOneWidget);
+    });
+
     testWidgets(
-      'Credit amounts use the teal color and debit amounts use the dark debit color',
+      'Ledger-adapted rows render with neutral styling, not invented credit/debit color',
       (tester) async {
         await _pumpAccountBalanceScreen(tester);
 
-        final creditText = tester.widget<Text>(find.text('+\$15,000'));
-        expect(creditText.style?.color, AppColors.darkTeal);
+        final invoiceAmount = tester.widget<Text>(find.text('\$100.50'));
+        expect(invoiceAmount.style?.color, AppColors.textNavy);
 
-        final debitText = tester.widget<Text>(find.text('-\$2,400'));
-        expect(debitText.style?.color, AppColors.darkRedBrown);
-
-        final feeText = tester.widget<Text>(find.text('-\$120'));
-        expect(feeText.style?.color, AppColors.darkRedBrown);
+        final paymentAmount = tester.widget<Text>(find.text('-\$50.00'));
+        expect(paymentAmount.style?.color, AppColors.textNavy);
       },
     );
 
@@ -298,7 +359,7 @@ void main() {
         await _pumpAccountBalanceScreen(tester);
 
         final row = find.byKey(
-          const ValueKey('quick-history-row-txn-client-deposit'),
+          const ValueKey('quick-history-row-ledger-entry-1001'),
         );
         await tester.ensureVisible(row);
         await tester.tap(row);
@@ -312,23 +373,25 @@ void main() {
         expect(
           find.descendant(
             of: detailsCard,
-            matching: find.text('Client Deposit'),
+            matching: find.text('Invoice INV-TEST-001'),
           ),
           findsOneWidget,
         );
         expect(
-          find.descendant(of: detailsCard, matching: find.text('+\$15,000')),
+          find.descendant(of: detailsCard, matching: find.text('\$100.50')),
           findsOneWidget,
         );
+        // Neutral rows never show a "Credit"/"Debit" status line.
         expect(
           find.descendant(of: detailsCard, matching: find.text('Credit')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
-          find.descendant(
-            of: detailsCard,
-            matching: find.text('REF-20231026-CD'),
-          ),
+          find.descendant(of: detailsCard, matching: find.text('Debit')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: detailsCard, matching: find.text('INV-TEST-001')),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
@@ -336,34 +399,65 @@ void main() {
     );
 
     testWidgets(
-      'Tapping a debit row opens Transaction Details showing Debit status',
+      'Quick History and Transaction Details show the same API-provided '
+      'currency for the same ledger entry',
       (tester) async {
-        await _pumpAccountBalanceScreen(tester);
+        final aedRow = AccountTransaction(
+          id: 'ledger-entry-53473',
+          label: 'Invoice INV-53473',
+          amount: 1936.5,
+          type: AccountTransactionType.neutral,
+          occurredAt: DateTime.utc(2026, 1, 5),
+          category: AccountTransactionCategory.ledgerEntry,
+          reference: 'INV-53473',
+          currencyCode: 'AED',
+        );
+        await _pumpAccountBalanceScreen(
+          tester,
+          quickHistorySource: FakeQuickHistoryDataSource(rows: [aedRow]),
+        );
+
+        // Quick History shows the AED amount, not a dollar sign — scoped to
+        // the Quick History card itself, since the still-mocked Global
+        // Balance/Credit Utilization sections legitimately show USD "$"
+        // amounts elsewhere on the same screen (out of scope for this fix).
+        final quickHistoryCard = find.byKey(
+          const ValueKey('quick-history-card'),
+        );
+        expect(
+          find.descendant(
+            of: quickHistoryCard,
+            matching: find.text('AED 1,936.50'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: quickHistoryCard,
+            matching: find.textContaining('\$'),
+          ),
+          findsNothing,
+        );
 
         final row = find.byKey(
-          const ValueKey('quick-history-row-txn-loom-supply-42'),
+          const ValueKey('quick-history-row-ledger-entry-53473'),
         );
         await tester.ensureVisible(row);
         await tester.tap(row);
         await tester.pumpAndSettle();
 
+        // Transaction Details shows the exact same currency-formatted
+        // amount as Quick History did.
         final detailsCard = find.byKey(
           const ValueKey('account-transaction-details-card'),
         );
         expect(
-          find.descendant(
-            of: detailsCard,
-            matching: find.text('Loom Supply #42'),
-          ),
+          find.descendant(of: detailsCard, matching: find.text('AED 1,936.50')),
           findsOneWidget,
         );
         expect(
-          find.descendant(of: detailsCard, matching: find.text('-\$2,400')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('Debit')),
-          findsOneWidget,
+          find.descendant(of: detailsCard, matching: find.textContaining('\$')),
+          findsNothing,
         );
         expect(tester.takeException(), isNull);
       },
@@ -384,6 +478,133 @@ void main() {
       expect(
         find.text('Full transaction history is not available yet.'),
         findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Shows a controlled empty state for a successful empty page', (
+      tester,
+    ) async {
+      await _pumpAccountBalanceScreen(
+        tester,
+        quickHistorySource: FakeQuickHistoryDataSource(rows: const []),
+      );
+
+      expect(find.text('QUICK HISTORY'), findsOneWidget);
+      expect(
+        find.text('No account statement entries are available yet.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('quick-history-card')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'Shows the account-not-linked message and preserves the rest of the '
+      'screen',
+      (tester) async {
+        await _pumpAccountBalanceScreen(
+          tester,
+          quickHistorySource: FakeQuickHistoryDataSource(
+            error: const BusinessCentralFailureException(
+              BusinessCentralAccountNotLinked('unlinked customer'),
+            ),
+          ),
+        );
+
+        expect(
+          find.text(
+            "Your account isn't fully set up yet. Please contact support.",
+          ),
+          findsOneWidget,
+        );
+        // The rest of the screen is unaffected by a Quick-History-only failure.
+        expect(find.text('Export PDF'), findsOneWidget);
+        expect(find.text('Available Credit'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Shows "Temporarily unavailable." for a 503 outcome', (
+      tester,
+    ) async {
+      await _pumpAccountBalanceScreen(
+        tester,
+        quickHistorySource: FakeQuickHistoryDataSource(
+          error: const BusinessCentralFailureException(
+            BusinessCentralTemporarilyUnavailable(),
+          ),
+        ),
+      );
+
+      expect(find.text('Temporarily unavailable.'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Shows the generic retry copy for an upstream/network/protocol failure',
+      (tester) async {
+        await _pumpAccountBalanceScreen(
+          tester,
+          quickHistorySource: FakeQuickHistoryDataSource(
+            error: const BusinessCentralFailureException(
+              BusinessCentralUpstreamFailure(),
+            ),
+          ),
+        );
+
+        expect(find.text("Couldn't load data right now."), findsOneWidget);
+      },
+    );
+
+    testWidgets('Retrying after a failure re-invokes the data source', (
+      tester,
+    ) async {
+      final source = FakeQuickHistoryDataSource(
+        error: const BusinessCentralFailureException(
+          BusinessCentralUpstreamFailure(),
+        ),
+      );
+      await _pumpAccountBalanceScreen(tester, quickHistorySource: source);
+      expect(source.callCount, 1);
+
+      final retryButton = find.text('Retry').last;
+      await tester.ensureVisible(retryButton);
+      await tester.tap(retryButton);
+      await tester.pumpAndSettle();
+
+      expect(source.callCount, 2);
+    });
+
+    testWidgets('A session-expired failure shows no error card and no toast', (
+      tester,
+    ) async {
+      // The coordinator has already handled the 401 by the time
+      // SessionExpiredException reaches this screen, so it deliberately
+      // leaves Quick History's loading spinner in place forever (in a real
+      // app the screen is off-stack by then) — pumpAndSettle would hang
+      // waiting for that spinner to stop, so a bounded pump is used
+      // instead.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AccountBalanceScreen(
+            service: FakeAccountBalanceService(),
+            exporter: FakeAccountStatementExporter(),
+            quickHistorySource: FakeQuickHistoryDataSource(
+              error: const SessionExpiredException(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text("Couldn't load data right now."), findsNothing);
+      expect(
+        find.text(
+          "Your account isn't fully set up yet. Please contact support.",
+        ),
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
     });
@@ -555,9 +776,9 @@ void main() {
 
         final data = exporter.exportedData.single;
         expect(data.quickHistory.map((t) => t.id), [
-          'txn-loom-supply-42',
-          'txn-client-deposit',
-          'txn-service-fee',
+          'ledger-entry-1001',
+          'ledger-entry-1002',
+          'ledger-entry-1003',
         ]);
       },
     );

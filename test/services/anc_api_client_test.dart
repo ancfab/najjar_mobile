@@ -19,6 +19,8 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/models/auth/login_request.dart';
+import 'package:anc_fabrics/models/business_central/ledger_entry.dart';
+import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/anc_api_exceptions.dart';
 
@@ -438,6 +440,164 @@ void main() {
     );
   });
 
+  group('AncApiClient.fetchCurrentUser request construction', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    test('GETs the exact /auth/me URI', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, {'data': _validUserJson()}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchCurrentUser(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/me'),
+      );
+    });
+
+    test('sends Authorization: Bearer <token> and Accept headers', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, {'data': _validUserJson()}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchCurrentUser(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+    });
+
+    test('sends no request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, {'data': _validUserJson()}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchCurrentUser(token: syntheticToken);
+
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test(
+      'an unsafe relativePath is rejected before any request is sent',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, const {}, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.getAuthenticatedJson(
+            'https://evil.example.com',
+            token: syntheticToken,
+          ),
+          throwsArgumentError,
+        );
+        expect(fake.lastRequest, isNull);
+      },
+    );
+  });
+
+  group('AncApiClient.fetchCurrentUser response handling', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    test('parses a 200 body through the required data wrapper', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, {'data': _validUserJson()}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final user = await client.fetchCurrentUser(token: syntheticToken);
+
+      expect(user.id, 1);
+      expect(user.username, 'sample.user');
+      expect(user.bcCustomerNo, 'SAMPLE-0001');
+    });
+
+    test(
+      'a 200 body missing the data wrapper raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, _validUserJson(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchCurrentUser(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed user object under data raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, {
+            'data': {'username': 'sample.user'},
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchCurrentUser(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed 200 body raises AncProtocolException, not a crash',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchCurrentUser(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchCurrentUser(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test('a transport failure raises AncNetworkException, not a 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchCurrentUser(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+  });
+
   group('AncApiClient timeout handling', () {
     test('wraps a timeout in a controlled network exception', () async {
       final fake = _neverRespondingClient();
@@ -476,4 +636,338 @@ void main() {
       expect(fake.closed, isFalse);
     });
   });
+
+  group('AncApiClient.fetchLedgerEntries', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      String? nextPageUrl,
+    }) => {
+      'current_page': 1,
+      'data': data ?? [_validLedgerEntryJson()],
+      'first_page_url':
+          'https://api.ancfab.com/api/business-central/ledger-entries?page=1',
+      'from': 1,
+      'last_page': 1,
+      'last_page_url':
+          'https://api.ancfab.com/api/business-central/ledger-entries?page=1',
+      'next_page_url': nextPageUrl,
+      'path': 'https://api.ancfab.com/api/business-central/ledger-entries',
+      'per_page': 25,
+      'prev_page_url': null,
+      'to': 1,
+      'total': 1,
+    };
+
+    test('GETs the exact ledger-entries URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchLedgerEntries(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/ledger-entries'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test(
+      'sends Accept: application/json and Authorization: Bearer <token>',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchLedgerEntries(token: syntheticToken);
+
+        expect(fake.lastRequest!.headers['Accept'], 'application/json');
+        expect(
+          fake.lastRequest!.headers['Authorization'],
+          'Bearer $syntheticToken',
+        );
+      },
+    );
+
+    test('never sends a Customer_No query parameter', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchLedgerEntries(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.url.queryParameters.containsKey('Customer_No'),
+        isFalse,
+      );
+      expect(
+        fake.lastRequest!.url.queryParameters.containsKey('customer_no'),
+        isFalse,
+      );
+    });
+
+    test('clamps page below 1 up to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchLedgerEntries(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test('clamps per_page to the configured maximum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchLedgerEntries(token: syntheticToken, perPage: 9999);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+    });
+
+    test('parses a 200 body into PaginatedResponse<LedgerEntry>', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchLedgerEntries(token: syntheticToken);
+
+      expect(response, isA<PaginatedResponse<LedgerEntry>>());
+      expect(response.data, hasLength(1));
+      expect(response.data.single.entryNo, 1001);
+    });
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchLedgerEntries(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchLedgerEntries(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test(
+      'an account-not-linked 422 exposes its message via validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'No linked Business Central customer.',
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchLedgerEntries(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.message,
+            'No linked Business Central customer.',
+          );
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchLedgerEntries(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchLedgerEntries(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test(
+      'a network failure raises AncNetworkException, preserving no session state',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => throw const SocketException('No route to host'),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchLedgerEntries(token: syntheticToken),
+          throwsA(isA<AncNetworkException>()),
+        );
+      },
+    );
+
+    test('a malformed 200 body raises AncProtocolException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _rawResponse(200, 'not json at all', request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchLedgerEntries(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test(
+      'a 200 body with non-array data raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope['data'] = {'not': 'an array'};
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchLedgerEntries(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+  });
+
+  group('AncApiClient.fetchLedgerEntriesPage', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    test('follows a trusted https next_page_url on the ANC API host', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, {
+          'current_page': 2,
+          'data': [_validLedgerEntryJson()],
+          'first_page_url': 'https://api.ancfab.com/x?page=1',
+          'from': 26,
+          'last_page': 2,
+          'last_page_url': 'https://api.ancfab.com/x?page=2',
+          'next_page_url': null,
+          'path': 'https://api.ancfab.com/x',
+          'per_page': 25,
+          'prev_page_url': 'https://api.ancfab.com/x?page=1',
+          'to': 27,
+          'total': 27,
+        }, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+      final nextPageUrl = Uri.parse(
+        'https://api.ancfab.com/api/business-central/ledger-entries?page=2',
+      );
+
+      final response = await client.fetchLedgerEntriesPage(
+        token: syntheticToken,
+        nextPageUrl: nextPageUrl,
+      );
+
+      expect(fake.lastRequest!.url, nextPageUrl);
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(response.currentPage, 2);
+    });
+
+    test('rejects an untrusted next_page_url host', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchLedgerEntriesPage(
+          token: syntheticToken,
+          nextPageUrl: Uri.parse('https://evil.example.com/steal?page=2'),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        fake.lastRequest,
+        isNull,
+        reason: 'An untrusted host must never receive the bearer token.',
+      );
+    });
+
+    test('rejects a non-https next_page_url on the trusted host', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchLedgerEntriesPage(
+          token: syntheticToken,
+          nextPageUrl: Uri.parse('http://api.ancfab.com/x?page=2'),
+        ),
+        throwsArgumentError,
+      );
+      expect(fake.lastRequest, isNull);
+    });
+  });
 }
+
+Map<String, dynamic> _validLedgerEntryJson() => {
+  'Entry_No': 1001,
+  'Posting_Date': '2026-01-05',
+  'Document_Type': 'Invoice',
+  'Document_No': 'INV-TEST-001',
+  'Customer_No': 'CLNT-0001',
+  'Customer_Name': 'Test Customer One',
+  'Currency_Code': 'USD',
+  'Amount': 100.50,
+  'Remaining_Amount': 100.50,
+  'Due_Date': '2026-01-15',
+  'Open': true,
+};
