@@ -1740,6 +1740,275 @@ void main() {
       expect(syntheticToken, startsWith('synthetic-'));
     });
   });
+
+  group('AncApiClient.logout', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    _RecordingHttpClient loggedOutHttpClient() => _RecordingHttpClient(
+      (req) async =>
+          _jsonResponse(200, {'message': 'Logged out.'}, request: req),
+    );
+
+    test('POSTs to the exact logout URI', () async {
+      final fake = loggedOutHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.logout(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'POST');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/logout'),
+      );
+    });
+
+    test('sends Authorization: Bearer <token> and Accept headers', () async {
+      final fake = loggedOutHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.logout(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+    });
+
+    test('sends no request body and no Content-Type header', () async {
+      final fake = loggedOutHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.logout(token: syntheticToken);
+
+      expect(fake.lastRequest!.body, isEmpty);
+      expect(fake.lastRequest!.headers.containsKey('Content-Type'), isFalse);
+    });
+
+    test('never sends any Business Central customer identifier', () async {
+      final fake = loggedOutHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.logout(token: syntheticToken);
+
+      final query = fake.lastRequest!.url.queryParameters;
+      for (final key in [
+        'Sell_to_Customer_No',
+        'Customer_No',
+        'customerNo',
+        'customer_id',
+        'bc_customer_no',
+      ]) {
+        expect(query.containsKey(key), isFalse);
+      }
+      expect(query, isEmpty);
+    });
+
+    test(
+      'always resolves to the fixed ApiConfig.logoutPath on the ANC API host '
+      '— no caller-supplied URL parameter exists',
+      () async {
+        final fake = loggedOutHttpClient();
+        final client = AncApiClient(httpClient: fake);
+
+        await client.logout(token: syntheticToken);
+
+        expect(fake.lastRequest!.url.path, '/${ApiConfig.logoutPath}');
+        expect(fake.lastRequest!.url.host, ApiConfig.baseUrl.host);
+      },
+    );
+
+    test('HTTP 200 with the confirmed {"message":"Logged out."} body completes '
+        'normally', () async {
+      final fake = loggedOutHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(client.logout(token: syntheticToken), completes);
+    });
+
+    test(
+      'HTTP 200 with a malformed (non-JSON) body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.logout(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'HTTP 200 with a non-object JSON body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, '[1, 2, 3]', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.logout(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'HTTP 200 missing the message field raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, const {}, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.logout(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'HTTP 200 with a non-String message raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, {'message': 12345}, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.logout(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.logout(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test('HTTP 422 raises AncHttpException with statusCode 422', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.logout(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 422);
+      }
+    });
+
+    test('HTTP 500 raises AncHttpException with statusCode 500', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.logout(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 500);
+      }
+    });
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.logout(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.logout(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a timeout raises AncNetworkException', () async {
+      final fake = _neverRespondingClient();
+      final client = AncApiClient(
+        httpClient: fake,
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+
+      await expectLater(
+        client.logout(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test('a network/client failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.logout(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+
+    test('no thrown exception ever exposes the token in its message', () async {
+      final scenarios = <_RecordingHttpClient>[
+        _RecordingHttpClient(
+          (req) async => _jsonResponse(401, const {}, request: req),
+        ),
+        _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        ),
+        _RecordingHttpClient(
+          (req) async => throw const SocketException('No route to host'),
+        ),
+      ];
+
+      for (final fake in scenarios) {
+        final client = AncApiClient(httpClient: fake);
+        try {
+          await client.logout(token: syntheticToken);
+          fail('Expected an exception');
+        } catch (error) {
+          expect(error.toString(), isNot(contains(syntheticToken)));
+        }
+      }
+    });
+  });
 }
 
 Map<String, dynamic> _validLedgerEntryJson() => {

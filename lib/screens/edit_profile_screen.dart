@@ -9,9 +9,10 @@ import '../services/avatar_image_processor.dart';
 import '../services/avatar_permission_service.dart';
 import '../services/avatar_picker_service.dart';
 import '../services/avatar_upload_service.dart';
+import '../services/auth_service.dart';
 import '../services/current_user_avatar_controller.dart';
+import '../services/logout_service.dart';
 import '../services/profile_service.dart';
-import '../services/session_service.dart';
 import '../services/session_storage_exception.dart';
 import '../theme/app_colors.dart';
 import '../utils/contact_form_validators.dart';
@@ -45,7 +46,7 @@ class EditProfileScreen extends StatefulWidget {
     super.key,
     this.profile = kMockUserProfile,
     ProfileService? service,
-    SessionService? sessionService,
+    this.logoutService,
     AvatarPickerService? avatarPickerService,
     AvatarPermissionService? avatarPermissionService,
     AvatarCropperService? avatarCropperService,
@@ -54,7 +55,6 @@ class EditProfileScreen extends StatefulWidget {
     this.avatarController,
     @visibleForTesting this.showLogoutAction = false,
   }) : service = service ?? const UnavailableProfileService(),
-       sessionService = sessionService ?? SecureSessionService(),
        avatarPickerService =
            avatarPickerService ?? const ImagePickerAvatarPickerService(),
        avatarPermissionService =
@@ -76,9 +76,13 @@ class EditProfileScreen extends StatefulWidget {
   /// [UnavailableProfileService]; overridable so tests can inject a fake.
   final ProfileService service;
 
-  /// Logout seam. Defaults to the real secure-session-backed
-  /// [SecureSessionService]; overridable so tests can inject a fake.
-  final SessionService sessionService;
+  /// Explicit-logout seam: attempts best-effort remote revocation, then
+  /// unconditionally clears the local secure session — see
+  /// [LogoutService]/[AuthService.logout]. Defaults (lazily, in State — see
+  /// [_EditProfileScreenState]) to a real, owned [AuthService.production];
+  /// overridable so tests can inject a fake without making a real network
+  /// call or touching real secure storage.
+  final LogoutService? logoutService;
 
   /// Camera/gallery selection seam. Overridable so tests can inject a fake
   /// instead of invoking the real platform picker.
@@ -168,6 +172,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final CurrentUserAvatarController _avatarController =
       widget.avatarController ?? currentUserAvatarController;
 
+  // Explicit-logout seam, resolved in initState (not the widget's
+  // constructor) since the production default owns a real AncApiClient
+  // that must be closed — mirrors LoginScreen's AuthService.production
+  // ownership pattern rather than instantiating one per build().
+  late final LogoutService _logoutService;
+
+  // Only set when this State created its own AuthService.production() (no
+  // widget.logoutService was injected) — that instance is the only thing
+  // this screen ever closes; a caller-injected LogoutService is left alone.
+  AuthService? _ownedAuthService;
+
   // Guards the whole camera-icon-to-confirmation flow (source selection,
   // permission request, picking, validation, cropping, preview, and the
   // avatar service call) so repeated taps can't start overlapping
@@ -214,6 +229,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     for (final controller in _formControllers) {
       controller.addListener(_handleFormChanged);
     }
+
+    final injectedLogoutService = widget.logoutService;
+    if (injectedLogoutService != null) {
+      _logoutService = injectedLogoutService;
+    } else {
+      final owned = AuthService.production();
+      _ownedAuthService = owned;
+      _logoutService = owned;
+    }
   }
 
   // Rebuilds so the Save Changes button's enabled state tracks [_isDirty]
@@ -236,6 +260,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _phoneFocusNode.dispose();
     _companyFocusNode.dispose();
     _businessAddressFocusNode.dispose();
+    _ownedAuthService?.close();
     super.dispose();
   }
 
@@ -584,14 +609,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _isLoggingOut = true);
 
     try {
-      // Throws SessionStorageException on an expected secure-storage
+      // Attempts best-effort remote revocation, then unconditionally clears
+      // the local secure session (see AuthService.logout). Throws
+      // SessionStorageException only on an expected secure-storage
       // failure — the secure token is guaranteed to still exist whenever
       // this throws (see SecureAuthSessionStore.clear()'s ordering
       // guarantee), so the catch clause below never clears the avatar or
       // navigates away. A StateError/ArgumentError or other programming
       // defect is deliberately not caught here — it must not be
       // relabeled as this neutral failure.
-      await widget.sessionService.endSession();
+      await _logoutService.logout();
       if (!mounted) return;
 
       // Clears the shared avatar state (and its stable local file) so the

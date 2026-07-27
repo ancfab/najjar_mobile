@@ -46,6 +46,12 @@ class ApiConfig {
   /// is still valid before trusting it — never on its own.
   static const String mePath = 'api/auth/me';
 
+  /// Relative path (no leading slash) for the logout endpoint, resolved
+  /// against [baseUrl] by [AncApiClient]. Revokes the current Sanctum
+  /// personal access token server-side; called with no request body (see
+  /// `AncApiClient.logout`).
+  static const String logoutPath = 'api/auth/logout';
+
   /// Relative path (no leading slash) for the Business Central ledger-
   /// entries endpoint, resolved against [baseUrl] by [AncApiClient]. The ANC
   /// API scopes results to the authenticated user server-side — the app

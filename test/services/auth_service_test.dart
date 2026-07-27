@@ -11,6 +11,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -1142,5 +1143,281 @@ void main() {
         expect(result.session.toString(), isNot(contains(storedToken)));
       },
     );
+  });
+
+  group('logout', () {
+    const storedToken = 'synthetic-id|synthetic-secret';
+
+    AuthSession storedSession() => const AuthSession(
+      token: storedToken,
+      userId: 7,
+      username: _validUsername,
+      phone: _validPhone,
+      country: _validCountry,
+      clientId: 'ANCNAJJAR',
+      bcCustomerNo: 'SAMPLE-0001',
+      mustChangePassword: false,
+    );
+
+    _RecordingHttpClient loggedOutHttpClient() => _RecordingHttpClient(
+      (req) async =>
+          _jsonResponse(200, {'message': 'Logged out.'}, request: req),
+    );
+
+    test(
+      'remote 200 clears the local session and completes normally',
+      () async {
+        store.seed(storedSession());
+        final http = loggedOutHttpClient();
+        final service = _service(http, store);
+
+        await expectLater(service.logout(), completes);
+        expect(store.clearCallCount, 1);
+        expect(await store.read(), isNull);
+      },
+    );
+
+    test('does not clear the local session before the remote logout attempt '
+        'completes (the remote call happens first)', () async {
+      store.seed(storedSession());
+      var sessionPresentDuringRemoteCall = false;
+      final http = _RecordingHttpClient((req) async {
+        sessionPresentDuringRemoteCall = await store.read() != null;
+        return _jsonResponse(200, {'message': 'Logged out.'}, request: req);
+      });
+      final service = _service(http, store);
+
+      await service.logout();
+
+      expect(sessionPresentDuringRemoteCall, isTrue);
+      expect(await store.read(), isNull);
+    });
+
+    test('remote 401 still clears locally and completes normally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+      expect(await store.read(), isNull);
+    });
+
+    test('remote 422 still clears locally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test('remote 500 still clears locally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test('remote 502 still clears locally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test('remote 503 still clears locally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test('a timeout still clears locally', () async {
+      store.seed(storedSession());
+      final http = _neverRespondingHttpClient();
+      final service = _service(
+        http,
+        store,
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test('a network failure still clears locally', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+      expect(store.clearCallCount, 1);
+    });
+
+    test(
+      'a malformed successful remote response still clears locally',
+      () async {
+        store.seed(storedSession());
+        final http = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final service = _service(http, store);
+
+        await expectLater(service.logout(), completes);
+        expect(store.clearCallCount, 1);
+      },
+    );
+
+    test(
+      'missing local session skips the remote call and clears idempotently',
+      () async {
+        final http = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, {'message': 'Logged out.'}, request: req),
+        );
+        final service = _service(http, store);
+
+        await expectLater(service.logout(), completes);
+        expect(http.requestCount, 0);
+        expect(store.clearCallCount, 1);
+      },
+    );
+
+    test('a session read failure still attempts the local clear', () async {
+      store.readError = const SessionStorageException(
+        SessionStorageOperation.read,
+      );
+      final http = loggedOutHttpClient();
+      final service = _service(http, store);
+
+      await service.logout();
+
+      expect(http.requestCount, 0);
+      expect(store.clearCallCount, 1);
+    });
+
+    test(
+      'a session read failure plus a successful clear completes normally',
+      () async {
+        store.readError = const SessionStorageException(
+          SessionStorageOperation.read,
+        );
+        final http = loggedOutHttpClient();
+        final service = _service(http, store);
+
+        await expectLater(service.logout(), completes);
+      },
+    );
+
+    test(
+      'remote 200 plus a clear failure throws SessionStorageException',
+      () async {
+        store.seed(storedSession());
+        store.clearError = const SessionStorageException(
+          SessionStorageOperation.clear,
+        );
+        final http = loggedOutHttpClient();
+        final service = _service(http, store);
+
+        await expectLater(
+          service.logout(),
+          throwsA(isA<SessionStorageException>()),
+        );
+      },
+    );
+
+    test(
+      'remote 502 plus a clear failure throws SessionStorageException',
+      () async {
+        store.seed(storedSession());
+        store.clearError = const SessionStorageException(
+          SessionStorageOperation.clear,
+        );
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(502, const {}, request: req),
+        );
+        final service = _service(http, store);
+
+        await expectLater(
+          service.logout(),
+          throwsA(isA<SessionStorageException>()),
+        );
+      },
+    );
+
+    test(
+      'a read failure plus a clear failure throws the clear failure',
+      () async {
+        store.readError = const SessionStorageException(
+          SessionStorageOperation.read,
+        );
+        store.clearError = const SessionStorageException(
+          SessionStorageOperation.clear,
+        );
+        final http = loggedOutHttpClient();
+        final service = _service(http, store);
+
+        await expectLater(
+          service.logout(),
+          throwsA(isA<SessionStorageException>()),
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test('no automatic retry of the remote logout call', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await service.logout();
+
+      expect(http.requestCount, 1);
+    });
+
+    test('only a local clear failure ever escapes logout() — a transport '
+        'failure never does', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => throw const SocketException('a transport failure'),
+      );
+      final service = _service(http, store);
+
+      await expectLater(service.logout(), completes);
+    });
+
+    test('does not import session_expiry_coordinator.dart — logout() cannot '
+        'invoke SessionExpiryCoordinator because AuthService never depends on '
+        'it (the class doc comment above mentions it only in prose, to '
+        'explain why the two paths are deliberately kept separate)', () {
+      final source = File('lib/services/auth_service.dart').readAsStringSync();
+
+      expect(source, isNot(contains("import 'session_expiry_coordinator")));
+      expect(
+        source,
+        isNot(contains("import '../services/session_expiry_coordinator")),
+      );
+    });
   });
 }

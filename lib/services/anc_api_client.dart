@@ -207,6 +207,33 @@ class AncApiClient {
     return _decodeInvoicesResponse(response);
   }
 
+  /// Calls `POST /api/auth/logout` with the given [token] as a Bearer
+  /// credential, revoking the current Sanctum personal access token
+  /// server-side. Sends no request body and no customer identifier — only
+  /// the shared `Accept` header and the `Authorization` header built by
+  /// [_authenticatedHeaders], the same as every other authenticated call in
+  /// this client.
+  ///
+  /// The confirmed response is `{"message": "Logged out."}`; [message] is
+  /// decoded only far enough to confirm the response shape (a JSON object
+  /// with a String `message`) and is not otherwise inspected, returned, or
+  /// persisted — callers never need to display or store it.
+  ///
+  /// A non-2xx response raises [AncHttpException] with that status code,
+  /// exactly like every other endpoint on this client — this method does
+  /// not special-case 401/502/503 itself; that judgment belongs to the
+  /// caller (see `AuthService.logout`).
+  Future<void> logout({required String token}) async {
+    final uri = _resolve(ApiConfig.logoutPath);
+
+    final response = await _sendWithTransportHandling(
+      () => _httpClient
+          .post(uri, headers: _authenticatedHeaders(token))
+          .timeout(_requestTimeout),
+    );
+    _decodeLogoutResponse(response);
+  }
+
   /// Throws an [ArgumentError] unless [url] is `https` and its host is
   /// exactly [ApiConfig.baseUrl]'s host — see [fetchLedgerEntriesPage].
   void _requireTrustedApiHost(Uri url) {
@@ -522,6 +549,30 @@ class AncApiClient {
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
           : null,
+    );
+  }
+
+  /// Decodes a logout response. HTTP 200 requires a JSON object with a
+  /// String `message` field — anything else (non-object JSON, malformed
+  /// JSON, a missing/non-String `message`) raises [AncProtocolException].
+  /// Every other status raises [AncHttpException] with that [statusCode],
+  /// with no [ApiValidationError] parsing — this endpoint has no documented
+  /// 422 validation shape.
+  void _decodeLogoutResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonMap(response.body);
+      final message = json['message'];
+      if (message is! String) {
+        throw const AncProtocolException(
+          'Malformed logout response: "message" missing or not a String.',
+        );
+      }
+      return;
+    }
+
+    throw AncHttpException(
+      'ANC API logout request failed.',
+      statusCode: response.statusCode,
     );
   }
 

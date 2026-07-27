@@ -7,6 +7,7 @@ import '../models/auth/session_validation_result.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
+import 'logout_service.dart';
 import 'secure_auth_session_store.dart';
 import 'session_storage_exception.dart';
 
@@ -26,12 +27,22 @@ import 'session_storage_exception.dart';
 ///   re-validate a persisted session on cold app launch (see
 ///   [confirmSession]), never trusting a locally stored token alone.
 ///
+/// - Implement explicit, user-initiated logout (see [logout] and
+///   [LogoutService]): a best-effort `POST /auth/logout` call followed by an
+///   unconditional local secure-session clear. Deliberately separate from
+///   passive session expiry (`SessionExpiryCoordinator`/`SessionService`),
+///   which must never attempt remote revocation against a token already
+///   confirmed invalid.
+///
 /// Must not:
 /// - Contain navigation or widget logic.
 /// - Store or log passwords, tokens, or raw API responses.
 /// - Communicate directly with Business Central.
 /// - Implement token refresh or a timer-based expiry — none exists.
-class AuthService {
+/// - Clear in-memory authenticated-user state (e.g. the avatar) or show UI —
+///   [logout]'s caller owns both, the same way `EditProfileScreen` already
+///   does for the local-only flow it replaces.
+class AuthService implements LogoutService {
   /// Creates an [AuthService] over caller-owned dependencies. [apiClient]
   /// and [sessionStore] are never closed or otherwise disposed by this
   /// instance — the caller retains ownership.
@@ -190,6 +201,54 @@ class AuthService {
     } on SessionStorageException {
       // Intentionally ignored; see doc comment above.
     }
+  }
+
+  /// Explicit, user-initiated logout: attempts `POST /auth/logout` on a
+  /// best-effort basis, then unconditionally clears the local secure
+  /// session — implementing [LogoutService] for callers such as
+  /// `EditProfileScreen`.
+  ///
+  /// Sequence:
+  /// 1. Read the stored [AuthSession]. A [SessionStorageException] here
+  ///    (the session itself cannot be read) is treated as "no token
+  ///    available" for the remote step below — this never creates an
+  ///    in-memory token cache, and local clear is still attempted next.
+  /// 2. If a token is available, attempt [AncApiClient.logout]. Every
+  ///    [AncApiException] outcome — HTTP 401/422/5xx, a timeout, a network
+  ///    failure, or a malformed response — is swallowed here: the remote
+  ///    result never gates, delays, or blocks the local clear that follows,
+  ///    and is never retried.
+  /// 3. Unconditionally call [AuthSessionStore.clear]. This is the only
+  ///    step whose failure this method surfaces: a thrown
+  ///    [SessionStorageException] propagates unchanged (the secure token is
+  ///    guaranteed still present per [SecureAuthSessionStore.clear]'s
+  ///    ordering guarantee), so the caller must not navigate to Login or
+  ///    treat this call as a successful sign-out.
+  ///
+  /// Never clears in-memory authenticated-user state, shows UI, or
+  /// navigates — the caller (see `EditProfileScreen._handleLogout`) owns
+  /// all three, exactly as it already does for the local-only flow this
+  /// replaces.
+  @override
+  Future<void> logout() async {
+    AuthSession? stored;
+    try {
+      stored = await _sessionStore.read();
+    } on SessionStorageException {
+      stored = null;
+    }
+
+    final token = stored?.token;
+    if (token != null) {
+      try {
+        await _apiClient.logout(token: token);
+      } on AncApiException {
+        // Best-effort remote revocation only; see the method doc comment
+        // above — no remote outcome may prevent the local clear below.
+      }
+    }
+
+    await _sessionStore.clear();
   }
 
   /// Maps a well-formed non-2xx login response to a failure.
