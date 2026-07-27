@@ -75,6 +75,16 @@ class ApiConfig {
   /// sends a customer identifier here either.
   static const String paymentsPath = 'api/business-central/payments';
 
+  /// Relative path (no leading slash) for the Business Central invoices
+  /// endpoint, resolved against [baseUrl] by [AncApiClient]. Each row is one
+  /// invoice *line*, not one complete invoice — see `BusinessCentralInvoiceLine`.
+  /// Shares [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
+  /// [businessCentralMaxPerPage] with [ledgerEntriesPath]/[paymentsPath]
+  /// rather than duplicating them. The ANC API scopes results to the
+  /// authenticated user server-side, so the app never sends a customer
+  /// identifier here either.
+  static const String invoicesPath = 'api/business-central/invoices';
+
   /// Default per-request timeout applied by [AncApiClient]. A timeout is a
   /// transport failure (mapped to [AncNetworkException]), not a session
   /// event — it must never clear an authenticated session, only the ANC

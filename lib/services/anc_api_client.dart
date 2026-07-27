@@ -9,6 +9,7 @@ import '../models/auth/api_validation_error.dart';
 import '../models/auth/authenticated_user.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
+import '../models/business_central/business_central_invoice_line.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
@@ -168,6 +169,42 @@ class AncApiClient {
       queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
     );
     return _decodePaymentsResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/invoices` for the authenticated user,
+  /// requesting [page] at a fixed [perPage] size. Never sends a customer
+  /// identifier — the ANC API scopes the result to the authenticated
+  /// [token] server-side. Each returned row is one invoice *line*, not one
+  /// complete invoice — see [BusinessCentralInvoiceLine].
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
+  /// before the request is sent, same as [fetchLedgerEntries]/[fetchPayments].
+  ///
+  /// Deliberately has no `fetchInvoicesPage(nextPageUrl:)` counterpart, for
+  /// the same reason as [fetchPayments]: the confirmed live envelope's
+  /// `next_page_url`/`path` values are unsafe/incomplete (observed as a bare
+  /// `/?page=2` / `/`) and must never be used for request construction.
+  /// Invoices pagination is done only by requesting `page: currentPage + 1`
+  /// against this fixed endpoint with the original `perPage` — see
+  /// `InvoicesService`.
+  Future<PaginatedResponse<BusinessCentralInvoiceLine>> fetchInvoices({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.invoicesPath,
+      token: token,
+      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+    );
+    return _decodeInvoicesResponse(response);
   }
 
   /// Throws an [ArgumentError] unless [url] is `https` and its host is
@@ -448,6 +485,39 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API payments request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes an invoices response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [BusinessCentralInvoiceLine]; every other status
+  /// raises [AncHttpException] with that [statusCode] — including a parsed
+  /// [ApiValidationError] for 422 — the same shape as
+  /// [_decodePaymentsResponse]/[_decodeLedgerEntriesResponse]. The Business
+  /// Central taxonomy (pagination bug vs. account-not-linked) is decided one
+  /// layer up (see `mapBusinessCentralError`), not here.
+  PaginatedResponse<BusinessCentralInvoiceLine> _decodeInvoicesResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralInvoiceLine>.fromJson(
+          json,
+          BusinessCentralInvoiceLine.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed invoices response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API invoices request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))

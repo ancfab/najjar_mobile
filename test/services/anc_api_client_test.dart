@@ -19,6 +19,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/models/auth/login_request.dart';
+import 'package:anc_fabrics/models/business_central/business_central_invoice_line.dart';
 import 'package:anc_fabrics/models/business_central/ledger_entry.dart';
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
@@ -1289,6 +1290,456 @@ void main() {
       expect(syntheticToken, startsWith('synthetic-'));
     });
   });
+
+  group('AncApiClient.fetchInvoices', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      int currentPage = 1,
+      int lastPage = 1,
+    }) {
+      final rows = data ?? [_validInvoiceLineJson()];
+      return {
+        'current_page': currentPage,
+        'data': rows,
+        // The confirmed live envelope's URL metadata is unsafe/incomplete
+        // (a bare "/?page=2" / "/") — these fixtures deliberately mirror
+        // that shape so tests prove AncApiClient/InvoicesService never read
+        // or follow it.
+        'first_page_url': '/?page=1',
+        'from': rows.isEmpty ? null : 1,
+        'last_page': lastPage,
+        'last_page_url': '/?page=$lastPage',
+        'next_page_url': currentPage < lastPage
+            ? '/?page=${currentPage + 1}'
+            : null,
+        'path': '/',
+        'per_page': 25,
+        'prev_page_url': null,
+        'to': rows.isEmpty ? null : rows.length,
+        'total': rows.length,
+      };
+    }
+
+    test('GETs the exact invoices URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/invoices'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test('sends Accept: application/json and Authorization: Bearer <token>, '
+        'never a request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken);
+
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('never sends any Business Central customer identifier', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken);
+
+      final query = fake.lastRequest!.url.queryParameters;
+      for (final key in [
+        'Sell_to_Customer_No',
+        'Customer_No',
+        'customerNo',
+        'customer_id',
+        'bc_customer_no',
+      ]) {
+        expect(query.containsKey(key), isFalse);
+      }
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('never constructs a request from next_page_url/path (no such method '
+        'parameter exists)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken, page: 2);
+
+      expect(fake.lastRequest!.url.path, '/api/business-central/invoices');
+      expect(fake.lastRequest!.url.queryParameters['page'], '2');
+    });
+
+    test('clamps page below 1 up to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test('clamps per_page to the configured maximum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken, perPage: 9999);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+    });
+
+    test('clamps per_page below the configured minimum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken, perPage: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '1');
+    });
+
+    test(
+      'parses a 200 body into PaginatedResponse<BusinessCentralInvoiceLine>',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        final response = await client.fetchInvoices(token: syntheticToken);
+
+        expect(response, isA<PaginatedResponse<BusinessCentralInvoiceLine>>());
+        expect(response.data, hasLength(1));
+        expect(response.data.single.documentNo, 'INV-1001');
+        expect(response.data.single.lineNo, 10000);
+      },
+    );
+
+    test('parses an empty page (no rows)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: const []), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInvoices(token: syntheticToken);
+
+      expect(response.data, isEmpty);
+      expect(response.total, 0);
+    });
+
+    test(
+      'parses a row containing only the documented approved fields',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(
+            200,
+            validEnvelope(data: [_validInvoiceLineJson()]),
+            request: req,
+          ),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        final response = await client.fetchInvoices(token: syntheticToken);
+
+        expect(response.data.single.documentNo, 'INV-1001');
+        expect(response.data.single.orderNo, 'ORD-8829');
+      },
+    );
+
+    test('parses a row containing every observed extra/undocumented live field '
+        'without failing, and never exposes Unit_Cost_LCY', () async {
+      final rowWithExtras = {
+        ..._validInvoiceLineJson(),
+        '@odata.etag': 'W/"JzQ0O1234567890abcdef;1234567\'"',
+        'Variant_Code': '',
+        'Description_2': '',
+        'Shortcut_Dimension_1_Code': '',
+        'Shortcut_Dimension_2_Code': '',
+        'Unit_of_Measure_Code': 'ROLL',
+        'Unit_of_Measure': 'Rolls',
+        'Unit_Cost_LCY': 612.5,
+        'Line_Discount_Percent': 0,
+        'Line_Discount_Amount': 0,
+        'Allow_Invoice_Disc': true,
+        'Inv_Discount_Amount': 0,
+        'Appl_to_Item_Entry': 0,
+        'Job_No': '',
+      };
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [rowWithExtras]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInvoices(token: syntheticToken);
+
+      expect(response.data, hasLength(1));
+      expect(response.data.single.documentNo, 'INV-1001');
+      expect(response.data.single.toString(), isNot(contains('612.5')));
+    });
+
+    test('a missing Posting_Date on a row still parses successfully', () async {
+      final rowWithoutPostingDate = _validInvoiceLineJson()
+        ..remove('Posting_Date');
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [rowWithoutPostingDate]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInvoices(token: syntheticToken);
+
+      expect(response.data.single.postingDate, isNull);
+    });
+
+    test('a valid Posting_Date on a row parses correctly', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [_validInvoiceLineJson()]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInvoices(token: syntheticToken);
+
+      expect(response.data.single.postingDate, DateTime(2026, 1, 5));
+    });
+
+    test('a malformed invoice-line row (missing Document_No) raises '
+        'AncProtocolException', () async {
+      final badRow = _validInvoiceLineJson()..remove('Document_No');
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchInvoices(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test('an invoice-line row using Payments-style camelCase keys raises '
+        'AncProtocolException rather than silently parsing', () async {
+      final camelCaseRow = {
+        'documentNo': 'INV-1001',
+        'lineNo': 10000,
+        'postingDate': '2026-01-05',
+        'sellToCustomerNo': 'CLNT-0001',
+        'sellToCustomerName': 'Test Customer One',
+        'type': 'Item',
+        'itemNo': 'ITEM-001',
+        'description': 'Egyptian Cotton Sateen (600TC)',
+        'quantity': 12,
+        'unitPrice': 850.0,
+        'amount': 10200.0,
+        'amountIncludingVat': 10710.0,
+        'orderNo': 'ORD-8829',
+      };
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [camelCaseRow]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchInvoices(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test(
+      'a malformed envelope (missing data) raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope.remove('data');
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInvoices(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a 200 body with non-array data raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope['data'] = {'not': 'an array'};
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInvoices(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInvoices(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchInvoices(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test(
+      'an account-not-linked 422 exposes its message via validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'No linked Business Central customer.',
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchInvoices(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.message,
+            'No linked Business Central customer.',
+          );
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInvoices(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInvoices(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a network failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchInvoices(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test(
+      'a malformed (non-JSON) 200 body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInvoices(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+  });
 }
 
 Map<String, dynamic> _validLedgerEntryJson() => {
@@ -1303,6 +1754,22 @@ Map<String, dynamic> _validLedgerEntryJson() => {
   'Remaining_Amount': 100.50,
   'Due_Date': '2026-01-15',
   'Open': true,
+};
+
+Map<String, dynamic> _validInvoiceLineJson() => {
+  'Document_No': 'INV-1001',
+  'Line_No': 10000,
+  'Posting_Date': '2026-01-05',
+  'Sell_to_Customer_No': 'CLNT-0001',
+  'Sell_to_Customer_Name': 'Test Customer One',
+  'Type': 'Item',
+  'No': 'ITEM-001',
+  'Description': 'Egyptian Cotton Sateen (600TC)',
+  'Quantity': 12,
+  'Unit_Price': 850.0,
+  'Amount': 10200.0,
+  'Amount_Including_VAT': 10710.0,
+  'Order_No': 'ORD-8829',
 };
 
 Map<String, dynamic> _validPaymentEntryJson() => {
