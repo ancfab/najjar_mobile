@@ -79,6 +79,11 @@ BusinessCentralOutcome mapBusinessCentralError(AncApiException error) {
   };
 }
 
+// TODO(api): 502/503 indicate an upstream ANC API / Business Central /
+// Azure AD integration failure or temporary unavailability. Flutter cannot
+// determine the exact server-side cause from these status codes alone —
+// preserve the authenticated session and allow retry in both cases. Only
+// HTTP 401 may ever invalidate the session; 502/503 must never do so.
 BusinessCentralOutcome _mapHttpOutcome(AncHttpException error) {
   switch (error.statusCode) {
     case 401:

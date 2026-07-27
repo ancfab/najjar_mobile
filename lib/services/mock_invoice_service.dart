@@ -10,6 +10,14 @@ import '../models/invoice.dart';
 ///
 /// TODO: Replace mock invoice fetching with the real Invoice Details API
 /// once the endpoint is confirmed.
+///
+/// TODO(api): Remove this service from the production invoice flow after
+/// real invoice grouping and details mapping are implemented. This is
+/// currently the production Invoice Details data seam (see
+/// `InvoiceDetailsScreen`'s default constructor argument) — API loading,
+/// empty, network, 502, and 503 states must never fall back to mock
+/// invoices. API failures must surface as loading/error/retry states
+/// instead.
 class MockInvoiceService {
   const MockInvoiceService();
 

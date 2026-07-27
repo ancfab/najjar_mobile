@@ -13,6 +13,14 @@ const String kSampleInvoiceNumber = '#INV-8821';
 /// response shape are confirmed. This is the only sample invoice available
 /// until then.
 ///
+/// TODO(api): This data is temporary and must not be used as a production
+/// fallback once InvoicesService is connected. It is still used by the
+/// current Invoice Details production flow (via `MockInvoiceService`), but
+/// once the real Invoices API is wired into that screen, production code
+/// must not read these values anymore — not even after an API failure.
+/// Unsupported invoice fields must be hidden or shown as unavailable rather
+/// than populated with mock values.
+///
 /// Not `const` because [InvoiceTimelineEvent.occurredAt] holds `DateTime`
 /// values, and `DateTime` has no const constructor.
 final List<Invoice> kMockInvoices = [

@@ -35,6 +35,17 @@ class InvoiceDetailsScreen extends StatefulWidget {
   const InvoiceDetailsScreen({
     super.key,
     required this.invoiceNumber,
+    // TODO(api): This screen is still mock-backed via MockInvoiceService.
+    // It must eventually be switched to the real invoice repository/service
+    // (InvoicesService + a grouping/details-mapping layer) once that
+    // contract is approved — real invoice lines may span multiple API
+    // pages, so a single `Invoice` cannot be assumed to come from one
+    // request the way MockInvoiceService currently returns it. After that
+    // connection, none of the current mock-only fields (status, due date,
+    // payment method, Payment Timeline, Logistics, Internal Notes, billed
+    // address/email, currency, tax, or totals) may remain populated with
+    // fake values — each must either be backed by a real field or hidden/
+    // shown as unavailable.
     MockInvoiceService? invoiceService,
     InvoicePdfService? pdfService,
     InvoiceDocumentActions? documentActions,
