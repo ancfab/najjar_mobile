@@ -11,6 +11,7 @@ import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
+import '../models/business_central/payment_entry.dart';
 import 'anc_api_exceptions.dart';
 
 /// Purpose: The single controlled HTTP transport boundary between this app
@@ -90,18 +91,18 @@ class AncApiClient {
   /// authenticated [token] server-side.
   ///
   /// [page] is clamped to `>= 1` and [perPage] to
-  /// `[ApiConfig.ledgerEntriesMinPerPage, ApiConfig.ledgerEntriesMaxPerPage]`
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
   /// before the request is sent, so a caller-side bug can never grow the
   /// requested page size or send a nonsensical page number.
   Future<PaginatedResponse<LedgerEntry>> fetchLedgerEntries({
     required String token,
     int page = 1,
-    int perPage = ApiConfig.ledgerEntriesDefaultPerPage,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
   }) async {
     final safePage = page < 1 ? 1 : page;
     final safePerPage = perPage.clamp(
-      ApiConfig.ledgerEntriesMinPerPage,
-      ApiConfig.ledgerEntriesMaxPerPage,
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
     );
 
     final response = await getAuthenticatedJson(
@@ -133,6 +134,40 @@ class AncApiClient {
           .timeout(_requestTimeout),
     );
     return _decodeLedgerEntriesResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/payments` for the authenticated user,
+  /// requesting [page] at a fixed [perPage] size. Never sends a customer
+  /// identifier — the ANC API scopes the result to the authenticated
+  /// [token] server-side.
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
+  /// before the request is sent, same as [fetchLedgerEntries].
+  ///
+  /// Deliberately has no `fetchPaymentsPage(nextPageUrl:)` counterpart:
+  /// Business Central's `next_page_url` has been observed to drop the
+  /// endpoint path (e.g. resolving to `/?page=2`) and cannot be trusted to
+  /// preserve `per_page`. Payments pagination is done only by requesting
+  /// `page: currentPage + 1` against this fixed endpoint with the original
+  /// `perPage` — see `PaymentsService`.
+  Future<PaginatedResponse<PaymentEntry>> fetchPayments({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.paymentsPath,
+      token: token,
+      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+    );
+    return _decodePaymentsResponse(response);
   }
 
   /// Throws an [ArgumentError] unless [url] is `https` and its host is
@@ -380,6 +415,39 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API ledger-entries request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a payments response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [PaymentEntry]; every other status raises
+  /// [AncHttpException] with that [statusCode] — including a parsed
+  /// [ApiValidationError] for 422 — the same shape as
+  /// [_decodeLedgerEntriesResponse]. The Business Central taxonomy
+  /// (pagination bug vs. account-not-linked) is decided one layer up (see
+  /// `mapBusinessCentralError`), not here.
+  PaginatedResponse<PaymentEntry> _decodePaymentsResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<PaymentEntry>.fromJson(
+          json,
+          PaymentEntry.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed payments response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API payments request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))

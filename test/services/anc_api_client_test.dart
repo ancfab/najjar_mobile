@@ -21,6 +21,7 @@ import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/models/auth/login_request.dart';
 import 'package:anc_fabrics/models/business_central/ledger_entry.dart';
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
+import 'package:anc_fabrics/models/business_central/payment_entry.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/anc_api_exceptions.dart';
 
@@ -956,6 +957,338 @@ void main() {
       expect(fake.lastRequest, isNull);
     });
   });
+
+  group('AncApiClient.fetchPayments', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      int currentPage = 1,
+      int lastPage = 1,
+    }) => {
+      'current_page': currentPage,
+      'data': data ?? [_validPaymentEntryJson()],
+      'first_page_url':
+          'https://api.ancfab.com/api/business-central/payments?page=1',
+      'from': (data ?? [_validPaymentEntryJson()]).isEmpty ? null : 1,
+      'last_page': lastPage,
+      'last_page_url':
+          'https://api.ancfab.com/api/business-central/payments'
+          '?page=$lastPage',
+      'next_page_url': null,
+      'path': 'https://api.ancfab.com/api/business-central/payments',
+      'per_page': 25,
+      'prev_page_url': null,
+      'to': (data ?? [_validPaymentEntryJson()]).isEmpty ? null : 1,
+      'total': (data ?? [_validPaymentEntryJson()]).length,
+    };
+
+    test('GETs the exact payments URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/payments'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test('sends Accept: application/json and Authorization: Bearer <token>, '
+        'never a request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken);
+
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('never sends a customerNo query or body field', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken);
+
+      final query = fake.lastRequest!.url.queryParameters;
+      expect(query.containsKey('customerNo'), isFalse);
+      expect(query.containsKey('Customer_No'), isFalse);
+      expect(query.containsKey('customer_no'), isFalse);
+      expect(fake.lastRequest!.body, isNot(contains('customerNo')));
+    });
+
+    test('clamps page below 1 up to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test('clamps per_page to the configured maximum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken, perPage: 9999);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+    });
+
+    test('clamps per_page below the configured minimum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchPayments(token: syntheticToken, perPage: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '1');
+    });
+
+    test('parses a 200 body into PaginatedResponse<PaymentEntry>', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchPayments(token: syntheticToken);
+
+      expect(response, isA<PaginatedResponse<PaymentEntry>>());
+      expect(response.data, hasLength(1));
+      expect(response.data.single.entryNo, 1001);
+      expect(response.data.single.documentNo, 'PAY-001');
+    });
+
+    test('parses an empty page (no rows)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: const []), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchPayments(token: syntheticToken);
+
+      expect(response.data, isEmpty);
+      expect(response.total, 0);
+    });
+
+    test(
+      'a malformed envelope (missing data) raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope.remove('data');
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchPayments(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed payment row (missing entryNo) raises AncProtocolException',
+      () async {
+        final badRow = _validPaymentEntryJson()..remove('entryNo');
+        final fake = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchPayments(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('a payment row using Ledger-style keys (Entry_No) raises '
+        'AncProtocolException rather than silently parsing', () async {
+      final ledgerShapedRow = {
+        'Entry_No': 1001,
+        'Posting_Date': '2026-01-05',
+        'Document_No': 'PAY-001',
+        'Customer_No': 'CLNT-0001',
+        'Customer_Name': 'Test Customer One',
+        'Currency_Code': 'USD',
+        'Amount': 100.50,
+        'Remaining_Amount': 0.0,
+        'Open': false,
+        'Due_Date': '2026-01-15',
+      };
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [ledgerShapedRow]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchPayments(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchPayments(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchPayments(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test(
+      'an account-not-linked 422 exposes its message via validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'No linked Business Central customer.',
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchPayments(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.message,
+            'No linked Business Central customer.',
+          );
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchPayments(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchPayments(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a network failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchPayments(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test('a malformed 200 body raises AncProtocolException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _rawResponse(200, 'not json at all', request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchPayments(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test(
+      'a 200 body with non-array data raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope['data'] = {'not': 'an array'};
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchPayments(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+  });
 }
 
 Map<String, dynamic> _validLedgerEntryJson() => {
@@ -970,4 +1303,17 @@ Map<String, dynamic> _validLedgerEntryJson() => {
   'Remaining_Amount': 100.50,
   'Due_Date': '2026-01-15',
   'Open': true,
+};
+
+Map<String, dynamic> _validPaymentEntryJson() => {
+  'entryNo': 1001,
+  'postingDate': '2026-01-05',
+  'documentNo': 'PAY-001',
+  'customerNo': 'CLNT-0001',
+  'customerName': 'Test Customer One',
+  'currencyCode': 'USD',
+  'amount': 100.50,
+  'remainingAmount': 0.00,
+  'open': false,
+  'dueDate': '2026-01-15',
 };

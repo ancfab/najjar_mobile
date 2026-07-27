@@ -52,15 +52,28 @@ class ApiConfig {
   /// never sends a customer identifier of its own.
   static const String ledgerEntriesPath = 'api/business-central/ledger-entries';
 
-  /// Fixed page size requested for the first ledger-entries page. Never
-  /// increased by load-more logic.
-  static const int ledgerEntriesDefaultPerPage = 25;
+  /// Fixed page size requested for the first page of any Business Central
+  /// list endpoint (ledger entries, payments, ...). Never increased by
+  /// load-more logic.
+  static const int businessCentralDefaultPerPage = 25;
 
-  /// Smallest `per_page` value this app will ever send.
-  static const int ledgerEntriesMinPerPage = 1;
+  /// Smallest `per_page` value this app will ever send to any Business
+  /// Central list endpoint.
+  static const int businessCentralMinPerPage = 1;
 
-  /// Largest `per_page` value this app will ever send.
-  static const int ledgerEntriesMaxPerPage = 100;
+  /// Largest `per_page` value this app will ever send to any Business
+  /// Central list endpoint.
+  static const int businessCentralMaxPerPage = 100;
+
+  /// Relative path (no leading slash) for the Business Central payments
+  /// endpoint, resolved against [baseUrl] by [AncApiClient]. Shares
+  /// [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
+  /// [businessCentralMaxPerPage] with [ledgerEntriesPath] rather than
+  /// duplicating them — those bounds are the app's general Business Central
+  /// pagination policy, not specific to any one endpoint. The ANC API
+  /// scopes results to the authenticated user server-side, so the app never
+  /// sends a customer identifier here either.
+  static const String paymentsPath = 'api/business-central/payments';
 
   /// Default per-request timeout applied by [AncApiClient]. A timeout is a
   /// transport failure (mapped to [AncNetworkException]), not a session
