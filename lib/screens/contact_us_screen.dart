@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/support_regions_data.dart';
+import '../localization/translations.dart';
 import '../models/contact_subject.dart';
 import '../models/support_region.dart';
 import '../services/contact_support_service.dart';
@@ -160,23 +161,20 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       switch (result.outcome) {
         case ContactSubmissionOutcome.success:
           _showSnackBar(
-            result.message ??
-                "Thanks — we've received your message and will be in touch "
-                    'soon.',
+            result.message ?? context.t('contactUs.successMessage'),
           );
         case ContactSubmissionOutcome.failure:
           _showSnackBar(
-            result.message ??
-                "We couldn't send your message. Please try again.",
+            result.message ?? context.t('contactUs.failureMessage'),
           );
         case ContactSubmissionOutcome.unavailable:
-          _showSnackBar('Email support submission is not connected yet.');
+          _showSnackBar(context.t('contactUs.emailUnavailable'));
       }
     } catch (error) {
       // Technical detail only — never the name, email, or message content.
       debugPrint('Contact Us submission failed: $error');
       if (!mounted) return;
-      _showSnackBar("We couldn't send your message. Please try again.");
+      _showSnackBar(context.t('contactUs.failureMessage'));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -185,7 +183,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   void _focusFirstInvalidField() {
     if (validateRequiredField(_fullNameController.text, '') != null) {
       _fullNameFocusNode.requestFocus();
-    } else if (validateEmailField(_workEmailController.text) != null) {
+    } else if (validateEmailField(context, _workEmailController.text) != null) {
       _workEmailFocusNode.requestFocus();
     } else if (validateRequiredField(_messageController.text, '') != null) {
       _messageFocusNode.requestFocus();
@@ -254,16 +252,23 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       key: const ValueKey('contact-back-to-support-button'),
       onTap: _handleBackToSupport,
       borderRadius: BorderRadius.circular(6),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.arrow_back_rounded, size: 16, color: AppColors.textNavy),
-            SizedBox(width: 6),
+            Transform.flip(
+              flipX: Directionality.of(context) == TextDirection.rtl,
+              child: const Icon(
+                Icons.arrow_back_rounded,
+                size: 16,
+                color: AppColors.textNavy,
+              ),
+            ),
+            const SizedBox(width: 6),
             Text(
-              'Back to Support',
-              style: TextStyle(
+              context.t('contactUs.backToSupport'),
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textNavy,
@@ -314,9 +319,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const Text(
-                'Contact Us',
-                style: TextStyle(
+              Text(
+                context.t('contactUs.title'),
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textNavy,
@@ -342,18 +347,18 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             color: AppColors.peach.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.support_agent_rounded,
                 size: 14,
                 color: AppColors.darkRedBrown,
               ),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text(
-                'SUPPORT CENTER',
-                style: TextStyle(
+                context.t('contactUs.tag'),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.0,
@@ -364,9 +369,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          'Contact Us',
-          style: TextStyle(
+        Text(
+          context.t('contactUs.title'),
+          style: const TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.bold,
             color: AppColors.textNavy,
@@ -374,10 +379,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Connect with our textile experts to streamline your supply '
-          'chain or inquire about our premium weave collections.',
-          style: TextStyle(
+        Text(
+          context.t('contactUs.intro'),
+          style: const TextStyle(
             fontSize: 14,
             color: AppColors.grayText,
             height: 1.4,
@@ -394,9 +398,9 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         SupportInfoCard(
           key: const ValueKey('contact-email-us-card'),
           icon: Icons.mail_outline_rounded,
-          label: 'EMAIL US',
+          label: context.t('contactUs.emailUsLabel'),
           child: Text(
-            _region.supportEmail ?? 'Support email details will be added soon.',
+            _region.supportEmail ?? context.t('contactUs.emailFallback'),
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -409,11 +413,13 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         SupportInfoCard(
           key: const ValueKey('contact-main-office-card'),
           icon: Icons.location_on_rounded,
-          label: 'MAIN OFFICE',
+          label: context.t('contactUs.mainOfficeLabel'),
           child: Text(
             _region.officeAddress ??
-                'Office details for ${_region.displayName} will be added '
-                    'soon.',
+                context.t(
+                  'contactUs.officeFallback',
+                  params: {'region': _region.displayName},
+                ),
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -439,7 +445,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ContactFormField(
-            label: 'FULL NAME',
+            label: context.t('contactUs.fullNameLabel'),
             child: TextFormField(
               key: const ValueKey('contact-full-name-field'),
               controller: _fullNameController,
@@ -448,16 +454,20 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.name],
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
-              decoration: _fieldDecoration(hintText: 'Jane Weaver'),
+              decoration: _fieldDecoration(
+                hintText: context.t('contactUs.fullNameHint'),
+              ),
               onFieldSubmitted: (_) => _workEmailFocusNode.requestFocus(),
               onChanged: (_) => _nameEditedByUser = true,
-              validator: (value) =>
-                  validateRequiredField(value, 'Please enter your full name.'),
+              validator: (value) => validateRequiredField(
+                value,
+                context.t('contactUs.fullNameError'),
+              ),
             ),
           ),
           const SizedBox(height: 20),
           ContactFormField(
-            label: 'WORK EMAIL',
+            label: context.t('contactUs.workEmailLabel'),
             child: TextFormField(
               key: const ValueKey('contact-work-email-field'),
               controller: _workEmailController,
@@ -466,22 +476,24 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.email],
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
-              decoration: _fieldDecoration(hintText: 'jane@textile.co'),
+              decoration: _fieldDecoration(
+                hintText: context.t('contactUs.workEmailHint'),
+              ),
               onFieldSubmitted: (_) => _messageFocusNode.requestFocus(),
               onChanged: (_) => _emailEditedByUser = true,
-              validator: validateEmailField,
+              validator: (value) => validateEmailField(context, value),
             ),
           ),
           const SizedBox(height: 20),
           ContactFormField(
-            label: 'SUBJECT',
+            label: context.t('contactUs.subjectLabel'),
             child: DropdownButtonFormField<ContactSubject>(
               key: const ValueKey('contact-subject-field'),
               initialValue: _selectedSubject,
               isExpanded: true,
-              hint: const Text(
-                'Select a subject',
-                style: TextStyle(fontSize: 15, color: AppColors.grayText),
+              hint: Text(
+                context.t('contactUs.selectSubjectHint'),
+                style: const TextStyle(fontSize: 15, color: AppColors.grayText),
               ),
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
               decoration: _fieldDecoration(),
@@ -489,18 +501,21 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 for (final subject in ContactSubject.values)
                   DropdownMenuItem(
                     value: subject,
-                    child: Text(subject.label, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      subject.localizedLabel(context),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
               onChanged: (subject) {
                 setState(() => _selectedSubject = subject);
               },
-              validator: validateSubjectField,
+              validator: (value) => validateSubjectField(context, value),
             ),
           ),
           const SizedBox(height: 20),
           ContactFormField(
-            label: 'MESSAGE BODY',
+            label: context.t('contactUs.messageLabel'),
             child: TextFormField(
               key: const ValueKey('contact-message-field'),
               controller: _messageController,
@@ -511,10 +526,12 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               maxLines: 8,
               style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
               decoration: _fieldDecoration(
-                hintText: 'Tell us more about your project requirements...',
+                hintText: context.t('contactUs.messageHint'),
               ),
-              validator: (value) =>
-                  validateRequiredField(value, 'Please enter a message.'),
+              validator: (value) => validateRequiredField(
+                value,
+                context.t('contactUs.messageError'),
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -576,20 +593,24 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Row(
+                  : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'SEND EMAIL',
-                          style: TextStyle(
+                          context.t('contactUs.sendButton'),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,
                           ),
                         ),
-                        SizedBox(width: 8),
-                        Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.send_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ],
                     ),
             ),

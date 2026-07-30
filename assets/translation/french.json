@@ -1,0 +1,364 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "retry": "Réessayer",
+    "back": "Retour",
+    "ok": "OK",
+    "close": "Fermer",
+    "reset": "Réinitialiser",
+    "apply": "Appliquer",
+    "all": "Tous",
+    "search": "Rechercher",
+    "clear": "Effacer",
+    "selectDate": "Sélectionner une date",
+    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
+  },
+  "language": {
+    "selectorTitle": "Choisir la langue",
+    "iconTooltip": "Changer de langue",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français"
+  },
+  "nav": {
+    "home": "Accueil",
+    "orders": "Commandes",
+    "support": "Assistance",
+    "profile": "Profil"
+  },
+  "session": {
+    "expired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "restoreFailed": "Nous n'avons pas pu restaurer votre session sécurisée. Veuillez vous reconnecter.",
+    "validationUnavailable": "Nous n'avons pas pu vérifier votre session. Veuillez vérifier votre connexion et vous reconnecter."
+  },
+  "home": {
+    "unableToLoadDashboard": "Impossible de charger les données du tableau de bord.",
+    "unableToRefreshDashboard": "Impossible d'actualiser les données du tableau de bord.",
+    "enterCatalogueCodeValidation": "Veuillez saisir un code du catalogue.",
+    "availableAtWarehouse": "{quantity} yd disponibles à {warehouse}.",
+    "noAvailabilityFound": "Aucune disponibilité trouvée pour « {code} ».",
+    "catalogueLookupError": "Une erreur s'est produite. Veuillez réessayer.",
+    "settingsComingSoon": "Écran des paramètres bientôt disponible",
+    "scanFabricAvailability": "Scanner la disponibilité du tissu",
+    "checkAvailability": "Vérifier la disponibilité",
+    "enterCatalogueCode": "Saisissez le code du catalogue",
+    "checkAvailabilityHelper": "Vérifiez rapidement la disponibilité dans tous les entrepôts.",
+    "activeOrders": "Commandes actives",
+    "overdueInvoices": "Factures en retard"
+  },
+  "balanceCard": {
+    "label": "SOLDE ACTUEL",
+    "semanticsCurrent": "Solde actuel {amount}",
+    "semanticsHint": "Ouvre les détails du solde du compte"
+  },
+  "accountBalance": {
+    "unableToLoad": "Impossible de charger le solde du compte.",
+    "exportFailed": "Impossible de générer le relevé de compte. Veuillez réessayer.",
+    "fullHistoryUnavailable": "L'historique complet des transactions n'est pas encore disponible.",
+    "noStatementEntries": "Aucune écriture de relevé de compte n'est disponible pour le moment.",
+    "errorAccountNotSetUp": "Votre compte n'est pas encore entièrement configuré. Veuillez contacter le support.",
+    "errorTemporarilyUnavailable": "Temporairement indisponible.",
+    "errorGeneric": "Impossible de charger les données pour le moment.",
+    "quickHistoryTitle": "HISTORIQUE RAPIDE",
+    "exportPdf": "Exporter en PDF",
+    "generatingPdf": "Génération en cours...",
+    "globalAccountBalance": "SOLDE GLOBAL DU COMPTE"
+  },
+  "accountTransaction": {
+    "title": "Détails de la transaction",
+    "credit": "Crédit",
+    "debit": "Débit",
+    "date": "Date",
+    "reference": "Référence"
+  },
+  "login": {
+    "welcomeBack": "Bon retour.",
+    "validationRequiredFields": "Veuillez remplir tous les champs obligatoires.",
+    "validationMobileDigitsOnly": "Le numéro de mobile ne doit contenir que des chiffres.",
+    "failureRequiredFields": "Veuillez remplir tous les champs obligatoires.",
+    "failureInvalidCredentials": "Veuillez vérifier vos identifiants de connexion et réessayer.",
+    "failureInvalidMobile": "Veuillez saisir un numéro de mobile valide.",
+    "failureNoConnection": "Connexion impossible. Vérifiez votre connexion internet et réessayez.",
+    "failureServiceUnavailable": "Le service est temporairement indisponible. Veuillez réessayer.",
+    "failureGeneric": "Nous n'avons pas pu terminer la connexion. Veuillez réessayer.",
+    "failureSessionNotSaved": "Connexion réussie, mais la session n'a pas pu être enregistrée en toute sécurité. Veuillez réessayer.",
+    "mobileNumberLabel": "NUMÉRO DE MOBILE",
+    "mobileNumberHint": "50 123 4567",
+    "clientNameLabel": "NOM DU CLIENT",
+    "clientNameHint": "Saisissez votre nom",
+    "passwordLabel": "MOT DE PASSE",
+    "passwordHint": "Saisissez votre mot de passe",
+    "loginButton": "CONNEXION",
+    "backButton": "RETOUR",
+    "contactUsLink": "Besoin d'aide ? Contactez-nous",
+    "footerCopyright": "© 2024 INDIGO LOOM TEXTILE PORTAL. TOUS DROITS RÉSERVÉS.",
+    "privacyPolicy": "Politique de confidentialité",
+    "termsOfService": "Conditions d'utilisation"
+  },
+  "orders": {
+    "unableToLoad": "Impossible de charger les commandes.",
+    "unableToRefresh": "Impossible d'actualiser les commandes.",
+    "cancelSearch": "Annuler",
+    "searchOrdersTooltip": "Rechercher des commandes",
+    "clientPortalTitle": "Portail client",
+    "searchHint": "Rechercher un n° de commande, un tissu, un statut...",
+    "clearSearchTooltip": "Effacer la recherche",
+    "globalLogisticsEyebrow": "LOGISTIQUE MONDIALE",
+    "fabricOrdersTitle": "Commandes de tissus",
+    "filterButton": "Filtrer",
+    "filterButtonWithCount": "Filtrer ({count})",
+    "showingCount": "Affichage de {shown} sur {total} commandes",
+    "pageOf": "Page {page} sur {totalPages}",
+    "noOrdersFiltered": "Aucune commande ne correspond aux filtres sélectionnés.",
+    "noOrdersYet": "Aucune commande pour le moment.",
+    "resetFilters": "Réinitialiser les filtres"
+  },
+  "orderDetail": {
+    "unableToLoad": "Impossible de charger les détails de la commande.",
+    "historyComingSoon": "Historique de la commande bientôt disponible",
+    "title": "Détail de la commande",
+    "breadcrumbOrders": "Commandes",
+    "placedOn": "Passée le {date}",
+    "itemsHeader": "ARTICLES DE LA COMMANDE",
+    "fabricSpecsAction": "SPÉCIFICATIONS DU TISSU",
+    "historyHeader": "HISTORIQUE DE LA COMMANDE",
+    "viewTimelineAction": "VOIR LE SUIVI DE LA COMMANDE"
+  },
+  "orderStatus": {
+    "delivered": "Livrée",
+    "shipped": "Expédiée",
+    "processing": "En traitement",
+    "unknown": "Inconnu"
+  },
+  "dateRangeFilter": {
+    "all": "Toutes les dates",
+    "last7Days": "7 derniers jours",
+    "last30Days": "30 derniers jours",
+    "custom": "Période personnalisée"
+  },
+  "orderFilter": {
+    "title": "Filtrer les commandes",
+    "status": "Statut",
+    "dateRange": "Période",
+    "fabricType": "Type de tissu",
+    "startDate": "Date de début",
+    "endDate": "Date de fin"
+  },
+  "invoices": {
+    "overdueTitle": "Factures en retard",
+    "title": "Factures",
+    "overdueListComingSoon": "Liste des factures en retard bientôt disponible",
+    "listComingSoon": "Liste des factures bientôt disponible"
+  },
+  "invoiceDetails": {
+    "title": "Détails de la facture",
+    "unableToLoad": "Impossible de charger les détails de la facture.",
+    "printCancelled": "L'impression a été annulée.",
+    "printFailed": "Impossible d'imprimer la facture. Veuillez réessayer.",
+    "downloadCancelled": "Le téléchargement a été annulé.",
+    "downloadFailed": "Impossible de préparer le PDF de la facture. Veuillez réessayer.",
+    "emailNotAvailable": "L'envoi d'e-mail au contact de facturation n'est pas encore disponible."
+  },
+  "invoiceStatus": {
+    "paid": "Payée"
+  },
+  "invoiceWidgets": {
+    "invoiceNumber": "Numéro de facture",
+    "issuedDate": "Date d'émission",
+    "billedTo": "FACTURÉ À",
+    "dueDate": "DATE D'ÉCHÉANCE",
+    "paymentMethod": "MODE DE PAIEMENT",
+    "itemDetails": "DÉTAILS DE L'ARTICLE",
+    "qty": "QTÉ",
+    "unitPrice": "PRIX UNITAIRE",
+    "total": "TOTAL",
+    "logisticsHeading": "Logistique",
+    "status": "STATUT",
+    "estDelivery": "LIVRAISON ESTIMÉE",
+    "internalNotes": "Notes internes",
+    "paymentEnding": "{method} (se terminant par ...{reference})",
+    "subtotal": "Sous-total",
+    "tax": "Taxe",
+    "totalAmount": "Montant total",
+    "print": "Imprimer",
+    "downloadPdf": "Télécharger le PDF"
+  },
+  "priceBreakdown": {
+    "heading": "DÉTAIL DU PRIX",
+    "subtotal": "Sous-total",
+    "shipping": "Livraison",
+    "vat": "TVA",
+    "totalAmount": "Montant total",
+    "invoiceButton": "FACTURE"
+  },
+  "scanStock": {
+    "title": "Scanner le stock",
+    "stockCheckComingSoon": "Vérification de la disponibilité du stock bientôt disponible",
+    "scanHistoryComingSoon": "Historique des scans bientôt disponible",
+    "flashToggleComingSoon": "Activation du flash bientôt disponible",
+    "toggleFlashTooltip": "Activer/désactiver le flash",
+    "centerQrInstruction": "Centrez le code QR dans le cadre",
+    "checkStockButton": "Vérifier la disponibilité du stock",
+    "recentScanLabel": "SCAN RÉCENT",
+    "viewHistoryButton": "Voir l'historique"
+  },
+  "support": {
+    "title": "Assistance",
+    "tag": "CENTRE D'ASSISTANCE",
+    "heroHeading": "Comment pouvons-nous aider votre entreprise à prospérer ?",
+    "intro": "Nos spécialistes textiles et experts en chaîne d'approvisionnement sont disponibles 24h/24 et 7j/7 pour garantir la continuité de votre production.",
+    "whatsappUnavailable": "L'assistance WhatsApp n'est pas encore disponible pour {region}.",
+    "whatsappOpenFailed": "Impossible d'ouvrir WhatsApp pour {region}. Veuillez réessayer plus tard.",
+    "hotlineUnavailable": "Ce numéro de la ligne directe n'est pas disponible.",
+    "dialerUnavailable": "Impossible d'ouvrir le composeur téléphonique. Veuillez réessayer.",
+    "corporateOfficeLabel": "SIÈGE SOCIAL",
+    "officeDetailsFallback": "Les coordonnées du bureau pour {region} seront ajoutées prochainement.",
+    "directHotlineLabel": "LIGNE DIRECTE",
+    "hoursFallback": "Les horaires d'assistance pour {region} seront confirmés prochainement.",
+    "hotlineFallback": "Les numéros de la ligne directe pour {region} seront ajoutés prochainement.",
+    "callNumber": "Appeler {number}"
+  },
+  "supportAction": {
+    "heading": "Assistance directe par un spécialiste",
+    "description": "Connexion instantanée avec nos spécialistes textiles. Recevez des mises à jour en temps réel sur la disponibilité des tissus et la logistique.",
+    "chatWhatsapp": "DISCUTER SUR WHATSAPP",
+    "emailSupport": "ASSISTANCE PAR E-MAIL"
+  },
+  "supportHours": {
+    "label": "HORAIRES D'ASSISTANCE"
+  },
+  "supportTextileVisual": {
+    "tagline": "Précision 24h/24 et 7j/7"
+  },
+  "supportRegion": {
+    "uae": "Émirats arabes unis",
+    "syria": "Syrie",
+    "iraq": "Irak",
+    "oman": "Oman",
+    "lebanon": "Liban"
+  },
+  "contactUs": {
+    "title": "Contactez-nous",
+    "tag": "CENTRE D'ASSISTANCE",
+    "intro": "Contactez nos experts textiles pour optimiser votre chaîne d'approvisionnement ou vous renseigner sur nos collections de tissage premium.",
+    "successMessage": "Merci — nous avons bien reçu votre message et vous répondrons bientôt.",
+    "failureMessage": "Nous n'avons pas pu envoyer votre message. Veuillez réessayer.",
+    "emailUnavailable": "L'envoi de message par e-mail au support n'est pas encore activé.",
+    "backToSupport": "Retour à l'assistance",
+    "emailUsLabel": "ÉCRIVEZ-NOUS",
+    "emailFallback": "Les coordonnées e-mail du support seront ajoutées prochainement.",
+    "mainOfficeLabel": "SIÈGE PRINCIPAL",
+    "officeFallback": "Les coordonnées du bureau pour {region} seront ajoutées prochainement.",
+    "fullNameLabel": "NOM COMPLET",
+    "fullNameHint": "Jane Weaver",
+    "fullNameError": "Veuillez saisir votre nom complet.",
+    "workEmailLabel": "E-MAIL PROFESSIONNEL",
+    "workEmailHint": "jane@textile.co",
+    "subjectLabel": "SUJET",
+    "selectSubjectHint": "Sélectionnez un sujet",
+    "messageLabel": "CONTENU DU MESSAGE",
+    "messageHint": "Parlez-nous davantage des besoins de votre projet...",
+    "messageError": "Veuillez saisir un message.",
+    "sendButton": "ENVOYER L'E-MAIL"
+  },
+  "contactSubject": {
+    "orderStatusInquiry": "Demande sur l'état de la commande",
+    "productAvailability": "Disponibilité du produit",
+    "invoiceOrPayment": "Facture ou paiement",
+    "technicalSupport": "Assistance technique",
+    "generalInquiry": "Demande générale",
+    "other": "Autre"
+  },
+  "editProfile": {
+    "title": "Modifier le profil",
+    "changePhotoTooltip": "Changer la photo de profil",
+    "cameraSource": "Appareil photo",
+    "gallerySource": "Photothèque",
+    "accessTurnedOff": "L'accès à {label} est désactivé pour cette application. Activez-le dans les Réglages pour continuer.",
+    "openSettings": "Ouvrir les Réglages",
+    "takePhoto": "Prendre une photo",
+    "chooseFromGallery": "Choisir dans la galerie",
+    "cameraAccessNeeded": "L'accès à l'appareil photo est nécessaire pour prendre une photo. Veuillez autoriser l'accès et réessayer.",
+    "galleryAccessNeeded": "L'accès à la photothèque est nécessaire pour choisir une photo. Veuillez autoriser l'accès et réessayer.",
+    "accessRestricted": "Cet accès est restreint sur cet appareil.",
+    "pickerFailed": "Nous n'avons pas pu ouvrir le sélecteur. Veuillez réessayer.",
+    "photoUnusable": "Cette photo n'a pas pu être utilisée. Veuillez en choisir une autre.",
+    "fileNotFound": "Nous n'avons pas trouvé cette photo. Veuillez réessayer.",
+    "emptyFile": "Ce fichier semble vide. Veuillez choisir une autre photo.",
+    "tooLarge": "Cette photo est trop volumineuse. Veuillez choisir une image plus petite.",
+    "unreadableFile": "Nous n'avons pas pu lire cette photo. Veuillez réessayer.",
+    "unsupportedFormat": "Veuillez choisir une photo au format JPG, PNG ou HEIC.",
+    "corruptImage": "Ce fichier n'est pas une image valide. Veuillez choisir une autre photo.",
+    "photoUpdatedOnDevice": "Photo de profil mise à jour sur cet appareil.",
+    "cropFailed": "Nous n'avons pas pu recadrer cette photo. Veuillez réessayer.",
+    "cropToolbarTitle": "Recadrer la photo",
+    "previewTitle": "Aperçu de la photo",
+    "chooseAgain": "Choisir à nouveau",
+    "usePhoto": "Utiliser la photo",
+    "photoUpdateFailed": "Nous n'avons pas pu mettre à jour votre photo. Veuillez réessayer.",
+    "photoUpdated": "Photo de profil mise à jour.",
+    "profileUpdated": "Profil mis à jour.",
+    "profileSaveFailed": "Nous n'avons pas pu enregistrer vos modifications. Veuillez réessayer.",
+    "profileUpdatesNotConnected": "Les mises à jour du profil ne sont pas encore activées.",
+    "signOutFailed": "Impossible de se déconnecter en toute sécurité. Veuillez réessayer.",
+    "discardChangesTitle": "Abandonner les modifications ?",
+    "discardChangesBody": "Vous avez des modifications non enregistrées sur votre profil. Si vous quittez maintenant, ces modifications seront perdues.",
+    "keepEditing": "Continuer la modification",
+    "discard": "Abandonner",
+    "ancIdLabel": "ID ANC : #{id}",
+    "fullNameFieldLabel": "Nom complet",
+    "fullNameFieldError": "Veuillez saisir votre nom complet.",
+    "emailFieldLabel": "Adresse e-mail",
+    "phoneFieldLabel": "Numéro de téléphone",
+    "companyFieldLabel": "Entreprise",
+    "companyFieldError": "Veuillez saisir le nom de votre entreprise.",
+    "addressFieldLabel": "Adresse professionnelle",
+    "addressFieldError": "Veuillez saisir votre adresse professionnelle.",
+    "saveChanges": "Enregistrer les modifications",
+    "logout": "Déconnexion"
+  },
+  "validators": {
+    "emailRequired": "Veuillez saisir votre e-mail professionnel.",
+    "emailInvalid": "Veuillez saisir une adresse e-mail valide.",
+    "phoneRequired": "Veuillez saisir votre numéro de téléphone.",
+    "phoneInvalid": "Veuillez saisir un numéro de téléphone valide.",
+    "subjectRequired": "Veuillez sélectionner un sujet."
+  },
+  "balanceHistory": {
+    "heading": "Historique du solde",
+    "subtitle": "Analyse de tendance du {start} au {end}"
+  },
+  "balanceHistoryRange": {
+    "days30": "30 jours",
+    "days90": "90 jours",
+    "year1": "1 an"
+  },
+  "creditUtilization": {
+    "heading": "Utilisation du crédit",
+    "availableCredit": "Crédit disponible",
+    "usedCredit": "Crédit utilisé"
+  },
+  "fabricSpecs": {
+    "title": "Spécifications du tissu",
+    "sku": "SKU",
+    "color": "Couleur",
+    "weight": "Poids/GSM",
+    "quantity": "Quantité",
+    "composition": "Composition"
+  },
+  "lastPayment": {
+    "label": "Dernier paiement"
+  },
+  "paymentTimeline": {
+    "heading": "Historique des paiements"
+  },
+  "quickHistory": {
+    "heading": "HISTORIQUE RAPIDE"
+  },
+  "countryCodePicker": {
+    "selectTitle": "Sélectionner l'indicatif du pays",
+    "searchHint": "Rechercher par pays, indicatif ou code ISO",
+    "noResults": "Aucun pays trouvé"
+  }
+}

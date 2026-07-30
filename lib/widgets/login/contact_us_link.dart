@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 /// Tappable "Need help? Contact Us" link with a support icon.
@@ -21,7 +22,7 @@ class ContactUsLink extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Need help? Contact Us',
+                  context.t('login.contactUsLink'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

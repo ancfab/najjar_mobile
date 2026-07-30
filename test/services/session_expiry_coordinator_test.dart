@@ -17,10 +17,11 @@ import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/secure_auth_session_store.dart';
 import 'package:anc_fabrics/services/session_expiry_coordinator.dart';
-import 'package:anc_fabrics/services/session_messages.dart';
 import 'package:anc_fabrics/services/session_service.dart';
 
 import '../helpers/fake_secure_key_value_store.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 const _syntheticToken = 'synthetic-id|synthetic-secret';
 
@@ -81,10 +82,18 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           navigatorKey: navigatorKey,
           home: const _AuthenticatedScreen(),
         ),
       );
+      await tester.pump();
       expect(find.byType(_AuthenticatedScreen), findsOneWidget);
       expect(await sessionStore.read(), isNotNull);
 
@@ -106,7 +115,10 @@ void main() {
       // Login legitimately shows its own "session expired" message (the
       // same safe copy the cold-start startup gate uses) — what must never
       // appear is a separate endpoint-error toast on top of it.
-      expect(find.text(sessionExpiredMessage), findsOneWidget);
+      expect(
+        find.text('Your session has expired. Please sign in again.'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -127,10 +139,18 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           navigatorKey: navigatorKey,
           home: const _AuthenticatedScreen(),
         ),
       );
+      await tester.pump();
 
       await Future.wait([
         coordinator.handleUnauthorized(),
@@ -159,10 +179,18 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         navigatorKey: navigatorKey,
         home: const _AuthenticatedScreen(),
       ),
     );
+    await tester.pump();
 
     await coordinator.handleUnauthorized();
     await tester.pumpAndSettle();

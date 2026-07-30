@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Side-by-side Print / Download PDF action buttons for the Invoice Details
@@ -40,14 +41,14 @@ class InvoiceActionButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _buildPrintButton()),
+        Expanded(child: _buildPrintButton(context)),
         const SizedBox(width: 12),
-        Expanded(child: _buildDownloadPdfButton()),
+        Expanded(child: _buildDownloadPdfButton(context)),
       ],
     );
   }
 
-  Widget _buildPrintButton() {
+  Widget _buildPrintButton(BuildContext context) {
     return Material(
       key: const ValueKey('invoice-action-print-button'),
       color: Colors.white,
@@ -73,21 +74,21 @@ class InvoiceActionButtons extends StatelessWidget {
                     color: AppColors.darkTeal,
                   ),
                 )
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.print_outlined,
                       color: AppColors.darkTeal,
                       size: 18,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Print',
+                        context.t('invoiceWidgets.print'),
                         textAlign: TextAlign.center,
                         softWrap: true,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.darkTeal,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -101,7 +102,7 @@ class InvoiceActionButtons extends StatelessWidget {
     );
   }
 
-  Widget _buildDownloadPdfButton() {
+  Widget _buildDownloadPdfButton(BuildContext context) {
     return Material(
       key: const ValueKey('invoice-action-download-pdf-button'),
       color: AppColors.primaryNavy,
@@ -123,21 +124,21 @@ class InvoiceActionButtons extends StatelessWidget {
                     color: Colors.white,
                   ),
                 )
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.download_outlined,
                       color: Colors.white,
                       size: 18,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Download PDF',
+                        context.t('invoiceWidgets.downloadPdf'),
                         textAlign: TextAlign.center,
                         softWrap: true,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,

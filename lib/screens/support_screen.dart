@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/support_regions_data.dart';
+import '../localization/translations.dart';
 import '../models/support_region.dart';
 import '../services/phone_launcher.dart';
 import '../services/support_region_service.dart';
@@ -122,7 +123,10 @@ class _SupportScreenState extends State<SupportScreen> {
     final number = region.whatsappNumber;
     if (number == null || number.trim().isEmpty) {
       _showSnackBar(
-        'WhatsApp support is not available for ${region.displayName} yet.',
+        context.t(
+          'support.whatsappUnavailable',
+          params: {'region': region.displayName},
+        ),
       );
       return;
     }
@@ -133,8 +137,10 @@ class _SupportScreenState extends State<SupportScreen> {
       if (!mounted) return;
       if (!result.succeeded) {
         _showSnackBar(
-          "Couldn't open WhatsApp for ${region.displayName}. Please try "
-          'again later.',
+          context.t(
+            'support.whatsappOpenFailed',
+            params: {'region': region.displayName},
+          ),
         );
       }
     } finally {
@@ -167,9 +173,9 @@ class _SupportScreenState extends State<SupportScreen> {
         case PhoneLaunchOutcome.launched:
           break;
         case PhoneLaunchOutcome.unavailable:
-          _showSnackBar('This hotline number is not available.');
+          _showSnackBar(context.t('support.hotlineUnavailable'));
         case PhoneLaunchOutcome.failed:
-          _showSnackBar('Unable to open the phone dialer. Please try again.');
+          _showSnackBar(context.t('support.dialerUnavailable'));
       }
     } finally {
       if (mounted) setState(() => _isPhoneLaunching = false);
@@ -218,11 +224,13 @@ class _SupportScreenState extends State<SupportScreen> {
                   SupportInfoCard(
                     key: const ValueKey('support-corporate-office-card'),
                     icon: Icons.apartment_rounded,
-                    label: 'CORPORATE OFFICE',
+                    label: context.t('support.corporateOfficeLabel'),
                     child: Text(
                       _selectedRegion.officeAddress ??
-                          'Office details for ${_selectedRegion.displayName} '
-                              'will be added soon.',
+                          context.t(
+                            'support.officeDetailsFallback',
+                            params: {'region': _selectedRegion.displayName},
+                          ),
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.textNavy,
@@ -234,7 +242,7 @@ class _SupportScreenState extends State<SupportScreen> {
                   SupportInfoCard(
                     key: const ValueKey('support-hotline-card'),
                     icon: Icons.call_rounded,
-                    label: 'DIRECT HOTLINE',
+                    label: context.t('support.directHotlineLabel'),
                     child: _buildHotlineContent(),
                   ),
                   const SizedBox(height: 16),
@@ -242,8 +250,10 @@ class _SupportScreenState extends State<SupportScreen> {
                     key: const ValueKey('support-hours-card'),
                     scheduleText:
                         _selectedRegion.supportHours ??
-                        'Support hours for ${_selectedRegion.displayName} '
-                            'will be confirmed soon.',
+                        context.t(
+                          'support.hoursFallback',
+                          params: {'region': _selectedRegion.displayName},
+                        ),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -294,9 +304,9 @@ class _SupportScreenState extends State<SupportScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const Text(
-                'Support',
-                style: TextStyle(
+              Text(
+                context.t('support.title'),
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textNavy,
@@ -322,18 +332,18 @@ class _SupportScreenState extends State<SupportScreen> {
             color: AppColors.peach.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.support_agent_rounded,
                 size: 14,
                 color: AppColors.darkRedBrown,
               ),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text(
-                'SUPPORT CENTER',
-                style: TextStyle(
+                context.t('support.tag'),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.0,
@@ -344,9 +354,9 @@ class _SupportScreenState extends State<SupportScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
-          'How can we help your business thrive?',
-          style: TextStyle(
+        Text(
+          context.t('support.heroHeading'),
+          style: const TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.bold,
             color: AppColors.textNavy,
@@ -354,10 +364,9 @@ class _SupportScreenState extends State<SupportScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Our textile specialists and supply chain experts are available '
-          '24/7 to ensure your production remains seamless.',
-          style: TextStyle(
+        Text(
+          context.t('support.intro'),
+          style: const TextStyle(
             fontSize: 14,
             color: AppColors.grayText,
             height: 1.4,
@@ -379,8 +388,10 @@ class _SupportScreenState extends State<SupportScreen> {
     final numbers = _selectedRegion.hotlineNumbers;
     if (numbers.isEmpty) {
       return Text(
-        'Hotline numbers for ${_selectedRegion.displayName} will be added '
-        'soon.',
+        context.t(
+          'support.hotlineFallback',
+          params: {'region': _selectedRegion.displayName},
+        ),
         style: const TextStyle(
           fontSize: 14,
           color: AppColors.textNavy,
@@ -394,7 +405,7 @@ class _SupportScreenState extends State<SupportScreen> {
         for (final number in numbers)
           Semantics(
             button: true,
-            label: 'Call $number',
+            label: context.t('support.callNumber', params: {'number': number}),
             child: InkWell(
               key: ValueKey('support-hotline-number-$number'),
               onTap: () => _onCallHotline(number),

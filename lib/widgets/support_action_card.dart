@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Bordered "Live Specialist Support" card with a WhatsApp and an email
@@ -32,19 +33,18 @@ class SupportActionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Live Specialist Support',
-            style: TextStyle(
+          Text(
+            context.t('supportAction.heading'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
               color: AppColors.textNavy,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Instant connectivity with our textile specialists. Get '
-            'real-time updates on fabric availability and logistics.',
-            style: TextStyle(
+          Text(
+            context.t('supportAction.description'),
+            style: const TextStyle(
               fontSize: 13.5,
               color: AppColors.grayText,
               height: 1.4,
@@ -65,9 +65,9 @@ class SupportActionCard extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.chat_rounded, size: 18),
-              label: const Text(
-                'CHAT ON WHATSAPP',
-                style: TextStyle(
+              label: Text(
+                context.t('supportAction.chatWhatsapp'),
+                style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
                 ),
@@ -89,9 +89,9 @@ class SupportActionCard extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.mail_outline_rounded, size: 18),
-              label: const Text(
-                'EMAIL SUPPORT',
-                style: TextStyle(
+              label: Text(
+                context.t('supportAction.emailSupport'),
+                style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
                 ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/account_transaction.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
@@ -80,7 +81,9 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
                       if (!isNeutral) ...[
                         const SizedBox(height: 4),
                         Text(
-                          isCredit ? 'Credit' : 'Debit',
+                          isCredit
+                              ? context.t('accountTransaction.credit')
+                              : context.t('accountTransaction.debit'),
                           key: const ValueKey(
                             'account-transaction-details-type',
                           ),
@@ -93,12 +96,15 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
                       ],
                       const SizedBox(height: 18),
                       _DetailRow(
-                        label: 'Date',
+                        label: context.t('accountTransaction.date'),
                         value: formatDateOnly(transaction.occurredAt),
                       ),
                       if (reference != null && reference.isNotEmpty) ...[
                         const SizedBox(height: 14),
-                        _DetailRow(label: 'Reference', value: reference),
+                        _DetailRow(
+                          label: context.t('accountTransaction.reference'),
+                          value: reference,
+                        ),
                       ],
                     ],
                   ),
@@ -119,16 +125,16 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
       leading: IconButton(
         key: const ValueKey('account-transaction-details-menu-button'),
         icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Back',
+        tooltip: context.t('common.back'),
         // No navigation drawer/menu content is defined yet for this
         // screen, so the menu affordance falls back to simple back
         // navigation, matching AccountBalanceScreen's convention.
         onPressed: () => Navigator.of(context).maybePop(),
       ),
-      title: const Text('Transaction Details'),
+      title: Text(context.t('accountTransaction.title')),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 16),
+          padding: const EdgeInsetsDirectional.only(end: 16),
           child: Container(
             width: 32,
             height: 32,

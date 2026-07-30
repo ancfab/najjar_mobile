@@ -28,6 +28,8 @@ import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/valid_avatar_image.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 // Ledger-adapted fixture rows, matching what
 // adaptLedgerEntryToAccountTransaction would produce for real ledger
@@ -79,6 +81,13 @@ Future<void> _pumpAccountBalanceScreen(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: AccountBalanceScreen(
         service: service ?? FakeAccountBalanceService(),
         exporter: exporter ?? FakeAccountStatementExporter(),
@@ -322,6 +331,13 @@ void main() {
       final source = FakeQuickHistoryDataSource(pendingFuture: pending.future);
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
@@ -586,6 +602,13 @@ void main() {
       // instead.
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),

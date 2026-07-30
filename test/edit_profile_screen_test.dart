@@ -33,6 +33,8 @@ import 'helpers/fake_avatar_picker_service.dart';
 import 'helpers/fake_avatar_upload_service.dart';
 import 'helpers/fake_logout_service.dart';
 import 'helpers/fake_profile_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   // CurrentUserAvatarController.setAvatarPath/restorePersisted/clear read
@@ -64,6 +66,13 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: EditProfileScreen(
           service: service ?? FakeProfileService(),
           logoutService: logoutService ?? FakeLogoutService(),
@@ -96,6 +105,13 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
@@ -118,6 +134,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     await tester.tap(find.text('Open Edit Profile'));
     await tester.pumpAndSettle();
@@ -378,7 +395,7 @@ void main() {
           );
           final processor = FakeAvatarImageProcessor(
             throwError: const AvatarImageValidationException(
-              'Please choose a JPG, PNG, or HEIC photo.',
+              AvatarImageValidationReason.unsupportedFormat,
             ),
           );
           final cropper = FakeAvatarCropperService();

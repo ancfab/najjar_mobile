@@ -12,6 +12,8 @@ import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/widgets/balance_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpHomeScreen(WidgetTester tester, double width) async {
   tester.view.physicalSize = Size(width, 800);
@@ -19,7 +21,19 @@ Future<void> _pumpHomeScreen(WidgetTester tester, double width) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+  await tester.pumpWidget(
+    const MaterialApp(
+      supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: HomeScreen(),
+    ),
+  );
+  await tester.pump();
   // Home screen loads dashboard data via a mock delay on initState; advance
   // past it explicitly since pumpAndSettle won't wait for a bare Timer that
   // isn't tied to a scheduled frame.

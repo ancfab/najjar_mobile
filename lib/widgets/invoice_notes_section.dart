@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Bordered white card showing the invoice's "Internal Notes": a heading
@@ -46,9 +47,9 @@ class InvoiceNotesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Internal Notes',
-            style: TextStyle(
+          Text(
+            context.t('invoiceWidgets.internalNotes'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,
@@ -66,10 +67,7 @@ class InvoiceNotesSection extends StatelessWidget {
             ),
             child: Text(
               trimmedNote,
-              style: const TextStyle(
-                fontSize: 13.5,
-                color: AppColors.grayText,
-              ),
+              style: const TextStyle(fontSize: 13.5, color: AppColors.grayText),
             ),
           ),
         ],

@@ -9,11 +9,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 /// The mock Order Detail fetch has a simulated 400ms network delay;
 /// `pumpAndSettle` alone won't wait for that bare `Future.delayed` since it
 /// isn't tied to a scheduled frame.
 Future<void> _settleFetch(WidgetTester tester) async {
+  // Lets the translation delegate's async asset load resolve first, so the
+  // screen actually mounts (and its own fetch begins) before the
+  // mock-service delay below is counted down.
+  await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
 }
@@ -29,7 +35,16 @@ Future<void> _pumpOrderDetailScreen(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(home: OrderDetailScreen(orderId: orderId)),
+    MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: OrderDetailScreen(orderId: orderId),
+    ),
   );
   await _settleFetch(tester);
 }

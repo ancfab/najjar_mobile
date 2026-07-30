@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 class BalanceCard extends StatelessWidget {
@@ -16,8 +17,11 @@ class BalanceCard extends StatelessWidget {
     final borderRadius = BorderRadius.circular(8);
     return Semantics(
       button: onTap != null,
-      label: 'Current balance $amount',
-      hint: onTap != null ? 'Opens account balance details' : null,
+      label: context.t(
+        'balanceCard.semanticsCurrent',
+        params: {'amount': amount},
+      ),
+      hint: onTap != null ? context.t('balanceCard.semanticsHint') : null,
       child: Material(
         color: Colors.transparent,
         borderRadius: borderRadius,
@@ -59,11 +63,11 @@ class BalanceCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'CURRENT BALANCE',
+                    Text(
+                      context.t('balanceCard.label'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.2,
@@ -76,7 +80,7 @@ class BalanceCard extends StatelessWidget {
                     // digits.
                     FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(
                         amount,
                         maxLines: 1,

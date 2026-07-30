@@ -10,15 +10,18 @@ import 'package:anc_fabrics/services/invoice_pdf_service.dart';
 
 void main() {
   group('LocalInvoicePdfService.generate', () {
-    test('produces non-empty bytes starting with the PDF file signature', () async {
-      final bytes = await const LocalInvoicePdfService().generate(
-        kMockInvoices.first,
-      );
+    test(
+      'produces non-empty bytes starting with the PDF file signature',
+      () async {
+        final bytes = await const LocalInvoicePdfService().generate(
+          kMockInvoices.first,
+        );
 
-      expect(bytes, isNotEmpty);
-      // PDF files start with "%PDF-".
-      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
-    });
+        expect(bytes, isNotEmpty);
+        // PDF files start with "%PDF-".
+        expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      },
+    );
 
     test('succeeds for an invoice with no timeline events', () async {
       const invoice = Invoice(

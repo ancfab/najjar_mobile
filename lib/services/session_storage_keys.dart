@@ -23,4 +23,9 @@ class SessionStorageKeys {
   /// Path to the locally persisted mock avatar file (see
   /// `CurrentUserAvatarController`).
   static const String localAvatarPath = 'session_local_avatar_path';
+
+  /// The user's selected app language code (e.g. `'en'`, `'ar'`, `'fr'`) —
+  /// see `LocaleController`. Not sensitive, so plain SharedPreferences (not
+  /// secure storage) is the appropriate store.
+  static const String localeCode = 'session_locale_code';
 }

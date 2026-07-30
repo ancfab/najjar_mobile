@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
+
 /// Neutral subject categories offered in the Contact Us form's Subject
 /// dropdown.
 ///
@@ -13,20 +17,20 @@ enum ContactSubject {
 }
 
 extension ContactSubjectLabel on ContactSubject {
-  String get label {
+  String localizedLabel(BuildContext context) {
     switch (this) {
       case ContactSubject.orderStatusInquiry:
-        return 'Order Status Inquiry';
+        return context.t('contactSubject.orderStatusInquiry');
       case ContactSubject.productAvailability:
-        return 'Product Availability';
+        return context.t('contactSubject.productAvailability');
       case ContactSubject.invoiceOrPayment:
-        return 'Invoice or Payment';
+        return context.t('contactSubject.invoiceOrPayment');
       case ContactSubject.technicalSupport:
-        return 'Technical Support';
+        return context.t('contactSubject.technicalSupport');
       case ContactSubject.generalInquiry:
-        return 'General Inquiry';
+        return context.t('contactSubject.generalInquiry');
       case ContactSubject.other:
-        return 'Other';
+        return context.t('contactSubject.other');
     }
   }
 }

@@ -105,7 +105,7 @@ class OrderCard extends StatelessWidget {
                     Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
+                        alignment: AlignmentDirectional.centerEnd,
                         child: Text(
                           order.price,
                           maxLines: 1,

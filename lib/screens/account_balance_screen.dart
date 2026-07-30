@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
+import '../localization/translations.dart';
 import '../models/account_balance_summary.dart';
 import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
@@ -140,7 +141,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load account balance.';
+        _error = context.t('accountBalance.unableToLoad');
         _isLoading = false;
       });
     }
@@ -269,11 +270,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not generate the account statement. Please try again.',
-            ),
-          ),
+          SnackBar(content: Text(context.t('accountBalance.exportFailed'))),
         );
     } finally {
       if (mounted) setState(() => _isExportingPdf = false);
@@ -296,8 +293,8 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   // screen and route are confirmed as part of the project scope.
   void _openFullTransactionHistory() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Full transaction history is not available yet.'),
+      SnackBar(
+        content: Text(context.t('accountBalance.fullHistoryUnavailable')),
       ),
     );
   }
@@ -332,7 +329,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       leading: IconButton(
         key: const ValueKey('account-balance-menu-button'),
         icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Back',
+        tooltip: context.t('common.back'),
         // No navigation drawer/menu content is defined yet for this screen,
         // so the menu affordance falls back to simple back navigation,
         // matching InvoiceDetailsScreen's convention.
@@ -341,7 +338,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       title: ClampedTextScale(child: _buildBrandTitle()),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 16),
+          padding: const EdgeInsetsDirectional.only(end: 16),
           child: ListenableBuilder(
             listenable: _avatarController,
             builder: (context, _) => AvatarInitialsBadge(
@@ -452,9 +449,9 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
           ),
         );
       case _QuickHistoryState.empty:
-        return const _QuickHistorySectionShell(
-          key: ValueKey('quick-history-empty'),
-          message: 'No account statement entries are available yet.',
+        return _QuickHistorySectionShell(
+          key: const ValueKey('quick-history-empty'),
+          message: context.t('accountBalance.noStatementEntries'),
         );
       case _QuickHistoryState.error:
         return _QuickHistorySectionShell(
@@ -476,10 +473,13 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   /// `BusinessCentralOutcome`'s doc comments).
   String _quickHistoryErrorMessage() {
     return switch (_quickHistoryOutcome) {
-      BusinessCentralAccountNotLinked() =>
-        "Your account isn't fully set up yet. Please contact support.",
-      BusinessCentralTemporarilyUnavailable() => 'Temporarily unavailable.',
-      _ => "Couldn't load data right now.",
+      BusinessCentralAccountNotLinked() => context.t(
+        'accountBalance.errorAccountNotSetUp',
+      ),
+      BusinessCentralTemporarilyUnavailable() => context.t(
+        'accountBalance.errorTemporarilyUnavailable',
+      ),
+      _ => context.t('accountBalance.errorGeneric'),
     };
   }
 
@@ -497,7 +497,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? 'Unable to load account balance.',
+              _error ?? context.t('accountBalance.unableToLoad'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.grayText),
             ),
@@ -508,7 +508,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                 backgroundColor: AppColors.primaryNavy,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Retry'),
+              child: Text(context.t('common.retry')),
             ),
           ],
         ),
@@ -547,9 +547,9 @@ class _QuickHistorySectionShell extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'QUICK HISTORY',
-            style: TextStyle(
+          Text(
+            context.t('accountBalance.quickHistoryTitle'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,
@@ -568,7 +568,7 @@ class _QuickHistorySectionShell extends StatelessWidget {
               Center(
                 child: TextButton(
                   onPressed: onRetry,
-                  child: const Text('Retry'),
+                  child: Text(context.t('common.retry')),
                 ),
               ),
             ],

@@ -22,10 +22,23 @@ import 'package:anc_fabrics/widgets/support_info_card.dart';
 import 'package:anc_fabrics/widgets/support_region_selector.dart';
 
 import 'helpers/fake_url_launcher_client.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   Future<void> pumpSupport(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SupportScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -211,6 +224,13 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: SupportScreen(regions: [region], whatsAppLauncher: launcher),
         ),
       );
@@ -372,6 +392,13 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: SupportScreen(
               regions: [regionA, regionB],
               whatsAppLauncher: WhatsAppLauncher(client: client),
@@ -445,6 +472,13 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: SupportScreen(regions: regions, phoneLauncher: launcher),
         ),
       );
@@ -711,6 +745,13 @@ void main() {
         final pending = Completer<List<SupportRegionData>>();
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: SupportScreen(
               regionService: _ControlledSupportRegionService(pending.future),
             ),
@@ -742,9 +783,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
-            home: SupportScreen(
-              regionService: _ThrowingSupportRegionService(),
-            ),
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: SupportScreen(regionService: _ThrowingSupportRegionService()),
           ),
         );
         await tester.pumpAndSettle();
@@ -762,9 +808,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
-            home: SupportScreen(
-              regionService: _EmptySupportRegionService(),
-            ),
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: SupportScreen(regionService: _EmptySupportRegionService()),
           ),
         );
         await tester.pumpAndSettle();
@@ -785,7 +836,16 @@ void main() {
           displayName: 'OverrideLand',
         );
         await tester.pumpWidget(
-          MaterialApp(home: SupportScreen(regions: [region])),
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: SupportScreen(regions: [region]),
+          ),
         );
         await tester.pump();
 

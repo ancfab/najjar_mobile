@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../data/mock_profile_data.dart';
+import '../localization/translations.dart';
 import '../models/user_profile.dart';
 import '../services/avatar_cropper_service.dart';
 import '../services/avatar_image_processor.dart';
@@ -42,7 +43,7 @@ const int _navIndexProfile = 3;
 /// TODO(api): Replace mock profile display/prefill data (see
 /// [kMockUserProfile]) once the profile API/backend contract is confirmed.
 class EditProfileScreen extends StatefulWidget {
-  EditProfileScreen({
+  const EditProfileScreen({
     super.key,
     this.profile = kMockUserProfile,
     ProfileService? service,
@@ -270,20 +271,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Maps a validation failure reason to a neutral, safe, localized message
+  /// — never a raw exception/implementation detail.
+  String _messageForValidationReason(AvatarImageValidationReason reason) {
+    switch (reason) {
+      case AvatarImageValidationReason.fileNotFound:
+        return context.t('editProfile.fileNotFound');
+      case AvatarImageValidationReason.emptyFile:
+        return context.t('editProfile.emptyFile');
+      case AvatarImageValidationReason.tooLarge:
+        return context.t('editProfile.tooLarge');
+      case AvatarImageValidationReason.unreadableFile:
+        return context.t('editProfile.unreadableFile');
+      case AvatarImageValidationReason.unsupportedFormat:
+        return context.t('editProfile.unsupportedFormat');
+      case AvatarImageValidationReason.corruptImage:
+        return context.t('editProfile.corruptImage');
+    }
+  }
+
   void _showPermanentlyDeniedSnackBar(AvatarImageSource source) {
     final label = source == AvatarImageSource.camera
-        ? 'Camera'
-        : 'Photo library';
+        ? context.t('editProfile.cameraSource')
+        : context.t('editProfile.gallerySource');
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(
-            '$label access is turned off for this app. Enable it in '
-            'Settings to continue.',
+            context.t('editProfile.accessTurnedOff', params: {'label': label}),
           ),
           action: SnackBarAction(
-            label: 'Open Settings',
+            label: context.t('editProfile.openSettings'),
             onPressed: () {
               widget.avatarPermissionService.openSettings();
             },
@@ -367,21 +386,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ListTile(
               key: const ValueKey('edit-profile-avatar-source-camera'),
               leading: const Icon(Icons.camera_alt_rounded),
-              title: const Text('Take Photo'),
+              title: Text(context.t('editProfile.takePhoto')),
               onTap: () =>
                   Navigator.of(sheetContext).pop(AvatarImageSource.camera),
             ),
             ListTile(
               key: const ValueKey('edit-profile-avatar-source-gallery'),
               leading: const Icon(Icons.photo_library_rounded),
-              title: const Text('Choose from Gallery'),
+              title: Text(context.t('editProfile.chooseFromGallery')),
               onTap: () =>
                   Navigator.of(sheetContext).pop(AvatarImageSource.gallery),
             ),
             ListTile(
               key: const ValueKey('edit-profile-avatar-source-cancel'),
               leading: const Icon(Icons.close_rounded),
-              title: const Text('Cancel'),
+              title: Text(context.t('common.cancel')),
               onTap: () => Navigator.of(sheetContext).pop(),
             ),
             const SizedBox(height: 8),
@@ -410,14 +429,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       case AvatarPermissionStatus.denied:
         _showSnackBar(
           source == AvatarImageSource.camera
-              ? 'Camera access is needed to take a photo. Please allow '
-                    'access and try again.'
-              : 'Photo library access is needed to choose a photo. '
-                    'Please allow access and try again.',
+              ? context.t('editProfile.cameraAccessNeeded')
+              : context.t('editProfile.galleryAccessNeeded'),
         );
         return null;
       case AvatarPermissionStatus.restricted:
-        _showSnackBar('That access is restricted on this device.');
+        _showSnackBar(context.t('editProfile.accessRestricted'));
         return null;
       case AvatarPermissionStatus.permanentlyDenied:
         _showPermanentlyDeniedSnackBar(source);
@@ -431,7 +448,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // Technical detail only — never shown to the user.
       debugPrint('Avatar picker failed: $error');
       if (mounted) {
-        _showSnackBar("We couldn't open the picker. Please try again.");
+        _showSnackBar(context.t('editProfile.pickerFailed'));
       }
       return null;
     }
@@ -441,12 +458,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await widget.avatarImageProcessor.validate(picked.path);
     } on AvatarImageValidationException catch (error) {
-      if (mounted) _showSnackBar(error.message);
+      if (mounted) _showSnackBar(_messageForValidationReason(error.reason));
       return null;
     } catch (error) {
       debugPrint('Avatar validation failed: $error');
       if (mounted) {
-        _showSnackBar("That photo couldn't be used. Please choose another.");
+        _showSnackBar(context.t('editProfile.photoUnusable'));
       }
       return null;
     }
@@ -458,12 +475,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       final croppedPath = await widget.avatarCropperService.cropToSquare(
         sourcePath,
+        toolbarTitle: context.t('editProfile.cropToolbarTitle'),
       );
       return croppedPath; // null == user cancelled cropping.
     } catch (error) {
       debugPrint('Avatar crop failed: $error');
       if (mounted) {
-        _showSnackBar("We couldn't crop that photo. Please try again.");
+        _showSnackBar(context.t('editProfile.cropFailed'));
       }
       return null;
     }
@@ -477,7 +495,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         key: const ValueKey('edit-profile-avatar-preview-dialog'),
-        title: const Text('Preview Photo'),
+        title: Text(context.t('editProfile.previewTitle')),
         content: SizedBox(
           width: 160,
           height: 160,
@@ -494,20 +512,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             key: const ValueKey('edit-profile-avatar-preview-cancel'),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_AvatarPreviewAction.cancel),
-            child: const Text('Cancel'),
+            child: Text(context.t('common.cancel')),
           ),
           TextButton(
             key: const ValueKey('edit-profile-avatar-preview-choose-again'),
             onPressed: () => Navigator.of(
               dialogContext,
             ).pop(_AvatarPreviewAction.chooseAgain),
-            child: const Text('Choose Again'),
+            child: Text(context.t('editProfile.chooseAgain')),
           ),
           TextButton(
             key: const ValueKey('edit-profile-avatar-preview-use-photo'),
             onPressed: () =>
                 Navigator.of(dialogContext).pop(_AvatarPreviewAction.usePhoto),
-            child: const Text('Use Photo'),
+            child: Text(context.t('editProfile.usePhoto')),
           ),
         ],
       ),
@@ -525,7 +543,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (error) {
       debugPrint('Avatar update failed: $error');
       if (mounted) {
-        _showSnackBar("We couldn't update your photo. Please try again.");
+        _showSnackBar(context.t('editProfile.photoUpdateFailed'));
       }
       return;
     }
@@ -534,10 +552,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (result.succeeded) {
       await _avatarController.setAvatarPath(result.localPath!);
       if (!mounted) return;
-      _showSnackBar(result.message ?? 'Profile photo updated.');
+      _showSnackBar(
+        result.message ??
+            (result.isLocalOnly
+                ? context.t('editProfile.photoUpdatedOnDevice')
+                : context.t('editProfile.photoUpdated')),
+      );
     } else {
       _showSnackBar(
-        result.message ?? "We couldn't update your photo. Please try again.",
+        result.message ?? context.t('editProfile.photoUpdateFailed'),
       );
     }
   }
@@ -575,20 +598,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _initialPhone = request.phone;
           _initialCompany = request.company;
           _initialBusinessAddress = request.businessAddress;
-          _showSnackBar(result.message ?? 'Profile updated.');
+          _showSnackBar(
+            result.message ?? context.t('editProfile.profileUpdated'),
+          );
         case ProfileUpdateOutcome.failure:
           _showSnackBar(
-            result.message ??
-                "We couldn't save your changes. Please try again.",
+            result.message ?? context.t('editProfile.profileSaveFailed'),
           );
         case ProfileUpdateOutcome.unavailable:
-          _showSnackBar('Profile updates are not connected yet.');
+          _showSnackBar(context.t('editProfile.profileUpdatesNotConnected'));
       }
     } catch (error) {
       // Technical detail only — never the submitted profile fields.
       debugPrint('Profile update failed: $error');
       if (!mounted) return;
-      _showSnackBar("We couldn't save your changes. Please try again.");
+      _showSnackBar(context.t('editProfile.profileSaveFailed'));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -634,7 +658,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } on SessionStorageException {
       if (!mounted) return;
       setState(() => _isLoggingOut = false);
-      _showSnackBar('Unable to sign out securely. Please try again.');
+      _showSnackBar(context.t('editProfile.signOutFailed'));
     }
   }
 
@@ -658,22 +682,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         key: const ValueKey('edit-profile-discard-dialog'),
-        title: const Text('Discard changes?'),
-        content: const Text(
-          'You have unsaved changes to your profile. If you leave now, '
-          'these changes will be lost.',
-        ),
+        title: Text(context.t('editProfile.discardChangesTitle')),
+        content: Text(context.t('editProfile.discardChangesBody')),
         actions: [
           TextButton(
             key: const ValueKey('edit-profile-discard-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep Editing'),
+            child: Text(context.t('editProfile.keepEditing')),
           ),
           TextButton(
             key: const ValueKey('edit-profile-discard-confirm'),
             style: TextButton.styleFrom(foregroundColor: AppColors.dangerRed),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Discard'),
+            child: Text(context.t('editProfile.discard')),
           ),
         ],
       ),
@@ -746,14 +767,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       titleSpacing: 0,
       leading: IconButton(
         key: const ValueKey('edit-profile-back-button'),
-        icon: const Icon(Icons.arrow_back_rounded),
-        tooltip: 'Back',
+        icon: Transform.flip(
+          flipX: Directionality.of(context) == TextDirection.rtl,
+          child: const Icon(Icons.arrow_back_rounded),
+        ),
+        tooltip: context.t('common.back'),
         onPressed: () => Navigator.of(context).maybePop(),
       ),
-      title: const ClampedTextScale(
+      title: ClampedTextScale(
         child: Text(
-          'Edit Profile',
-          style: TextStyle(
+          context.t('editProfile.title'),
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
             color: AppColors.textNavy,
@@ -765,7 +789,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // wired to invented behavior.
       actions: const [
         Padding(
-          padding: EdgeInsets.only(right: 16),
+          padding: EdgeInsetsDirectional.only(end: 16),
           child: Icon(Icons.more_vert_rounded, color: AppColors.textNavy),
         ),
       ],
@@ -856,14 +880,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   );
                 },
               ),
-              Positioned(
-                right: -6,
+              PositionedDirectional(
+                end: -6,
                 bottom: -6,
                 child: Tooltip(
-                  message: 'Change profile photo',
+                  message: context.t('editProfile.changePhotoTooltip'),
                   child: Semantics(
                     button: true,
-                    label: 'Change profile photo',
+                    label: context.t('editProfile.changePhotoTooltip'),
                     child: GestureDetector(
                       key: const ValueKey('edit-profile-camera-button'),
                       onTap: _isAvatarFlowActive ? null : _handleChangePhoto,
@@ -897,7 +921,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'ANC ID: #${profile.ancId}',
+            context.t('editProfile.ancIdLabel', params: {'id': profile.ancId}),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -919,7 +943,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ContactFormField(
-          label: 'Full Name',
+          label: context.t('editProfile.fullNameFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-full-name-field'),
             controller: _fullNameController,
@@ -928,13 +952,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _emailFocusNode.requestFocus(),
-            validator: (value) =>
-                validateRequiredField(value, 'Please enter your full name.'),
+            validator: (value) => validateRequiredField(
+              value,
+              context.t('editProfile.fullNameFieldError'),
+            ),
           ),
         ),
         const SizedBox(height: 20),
         ContactFormField(
-          label: 'Email Address',
+          label: context.t('editProfile.emailFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-email-field'),
             controller: _emailController,
@@ -944,12 +970,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _phoneFocusNode.requestFocus(),
-            validator: validateEmailField,
+            validator: (value) => validateEmailField(context, value),
           ),
         ),
         const SizedBox(height: 20),
         ContactFormField(
-          label: 'Phone Number',
+          label: context.t('editProfile.phoneFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-phone-field'),
             controller: _phoneController,
@@ -959,12 +985,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _companyFocusNode.requestFocus(),
-            validator: validatePhoneField,
+            validator: (value) => validatePhoneField(context, value),
           ),
         ),
         const SizedBox(height: 20),
         ContactFormField(
-          label: 'Company',
+          label: context.t('editProfile.companyFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-company-field'),
             controller: _companyController,
@@ -974,13 +1000,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _businessAddressFocusNode.requestFocus(),
-            validator: (value) =>
-                validateRequiredField(value, 'Please enter your company.'),
+            validator: (value) => validateRequiredField(
+              value,
+              context.t('editProfile.companyFieldError'),
+            ),
           ),
         ),
         const SizedBox(height: 20),
         ContactFormField(
-          label: 'Business Address',
+          label: context.t('editProfile.addressFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-business-address-field'),
             controller: _businessAddressController,
@@ -994,7 +1022,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             decoration: _fieldDecoration(),
             validator: (value) => validateRequiredField(
               value,
-              'Please enter your business address.',
+              context.t('editProfile.addressFieldError'),
             ),
           ),
         ),
@@ -1059,9 +1087,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       color: Colors.white,
                     ),
                   )
-                : const Text(
-                    'Save Changes',
-                    style: TextStyle(
+                : Text(
+                    context.t('editProfile.saveChanges'),
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1096,9 +1124,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text(
-                      'Logout',
-                      style: TextStyle(
+                  : Text(
+                      context.t('editProfile.logout'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

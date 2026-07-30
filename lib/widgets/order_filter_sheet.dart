@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/fabric_order.dart';
 import '../models/fabric_order_filter.dart';
 import '../theme/app_colors.dart';
@@ -126,20 +127,20 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Filter Orders',
-                  style: TextStyle(
+                Text(
+                  context.t('orderFilter.title'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textNavy,
                   ),
                 ),
                 const SizedBox(height: 20),
-                _sectionLabel('Status'),
+                _sectionLabel(context.t('orderFilter.status')),
                 const SizedBox(height: 8),
                 _buildStatusOptions(),
                 const SizedBox(height: 20),
-                _sectionLabel('Date Range'),
+                _sectionLabel(context.t('orderFilter.dateRange')),
                 const SizedBox(height: 8),
                 _buildDateRangeOptions(),
                 if (_dateRange == DateRangeFilter.custom) ...[
@@ -150,7 +151,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
                 // Fabric type is a frontend/mock-only filter for now.
                 // TODO: Confirm the official fabric type/category values with
                 // the backend/API team before connecting live data.
-                _sectionLabel('Fabric Type'),
+                _sectionLabel(context.t('orderFilter.fabricType')),
                 const SizedBox(height: 8),
                 _buildFabricTypeOptions(),
                 const SizedBox(height: 24),
@@ -165,7 +166,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
                           side: const BorderSide(color: AppColors.border),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text('Reset'),
+                        child: Text(context.t('common.reset')),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -178,7 +179,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text('Apply'),
+                        child: Text(context.t('common.apply')),
                       ),
                     ),
                   ],
@@ -210,9 +211,11 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
         for (final status in _statusOptions)
           _choiceChip(
             key: ValueKey(
-              'filter-sheet-status-${status == null ? 'All' : orderStatusLabel(status)}',
+              'filter-sheet-status-${status == null ? 'All' : status.name}',
             ),
-            label: status == null ? 'All' : orderStatusLabel(status),
+            label: status == null
+                ? context.t('common.all')
+                : localizedOrderStatusLabel(context, status),
             selected: _status == status,
             onTap: () => setState(() => _status = status),
           ),
@@ -228,7 +231,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
         for (final option in _dateRangeOptions)
           _choiceChip(
             key: ValueKey('filter-sheet-date-${option.name}'),
-            label: dateRangeFilterLabel(option),
+            label: dateRangeFilterLabel(context, option),
             selected: _dateRange == option,
             onTap: () => setState(() => _dateRange = option),
           ),
@@ -243,7 +246,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
       children: [
         _choiceChip(
           key: const ValueKey('filter-sheet-fabric-type-All'),
-          label: 'All',
+          label: context.t('common.all'),
           selected: _fabricType == null,
           onTap: () => setState(() => _fabricType = null),
         ),
@@ -260,7 +263,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
 
   Widget _buildCustomDateRow() {
     String formatDate(DateTime? date) {
-      if (date == null) return 'Select date';
+      if (date == null) return context.t('common.selectDate');
       return '${date.month}/${date.day}/${date.year}';
     }
 
@@ -269,7 +272,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
         Expanded(
           child: _dateField(
             key: const ValueKey('filter-sheet-custom-start'),
-            label: 'Start date',
+            label: context.t('orderFilter.startDate'),
             value: formatDate(_customStart),
             onTap: _pickCustomStart,
           ),
@@ -278,7 +281,7 @@ class _OrderFilterSheetState extends State<OrderFilterSheet> {
         Expanded(
           child: _dateField(
             key: const ValueKey('filter-sheet-custom-end'),
-            label: 'End date',
+            label: context.t('orderFilter.endDate'),
             value: formatDate(_customEnd),
             onTap: _pickCustomEnd,
           ),

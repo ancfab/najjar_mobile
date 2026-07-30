@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/screens/account_transaction_details_screen.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 final _creditTransaction = AccountTransaction(
   id: 'txn-client-deposit',
@@ -39,9 +41,17 @@ Future<void> _pumpScreen(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: AccountTransactionDetailsScreen(transaction: transaction),
     ),
   );
+  await tester.pump();
 }
 
 void main() {
@@ -150,6 +160,13 @@ void main() {
     testWidgets('The menu/back button pops the screen', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => Scaffold(
               body: Center(
@@ -168,6 +185,7 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
 
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();

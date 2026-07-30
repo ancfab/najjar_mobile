@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 import 'invoice_line_items_columns.dart';
 
@@ -25,29 +26,38 @@ class InvoiceLineItemsHeader extends StatelessWidget {
         children: [
           Expanded(
             flex: kInvoiceItemDetailsColumnFlex,
-            child: _label('ITEM DETAILS'),
+            child: _label(context.t('invoiceWidgets.itemDetails')),
           ),
           const SizedBox(width: kInvoiceColumnGap),
           Expanded(
             flex: kInvoiceQuantityColumnFlex,
-            child: _label('QTY', textAlign: TextAlign.center),
+            child: _label(
+              context.t('invoiceWidgets.qty'),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(width: kInvoiceColumnGap),
           Expanded(
             flex: kInvoiceUnitPriceColumnFlex,
-            child: _label('UNIT PRICE', textAlign: TextAlign.right),
+            child: _label(
+              context.t('invoiceWidgets.unitPrice'),
+              textAlign: TextAlign.end,
+            ),
           ),
           const SizedBox(width: kInvoiceColumnGap),
           Expanded(
             flex: kInvoiceTotalColumnFlex,
-            child: _label('TOTAL', textAlign: TextAlign.right),
+            child: _label(
+              context.t('invoiceWidgets.total'),
+              textAlign: TextAlign.end,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _label(String label, {TextAlign textAlign = TextAlign.left}) {
+  Widget _label(String label, {TextAlign textAlign = TextAlign.start}) {
     return Text(
       label,
       textAlign: textAlign,

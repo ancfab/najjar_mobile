@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 
@@ -26,25 +27,25 @@ class ScanStockScreen extends StatelessWidget {
   // availability API once camera scanning is integrated.
   void _checkStockAvailability(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Stock availability check coming soon')),
+      SnackBar(content: Text(context.t('scanStock.stockCheckComingSoon'))),
     );
   }
 
   // Opens the full scan history list.
   // TODO: Navigate to a real Scan History screen once it exists.
   void _openScanHistory(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Scan history coming soon')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.t('scanStock.scanHistoryComingSoon'))),
+    );
   }
 
   // Toggles the camera torch/flash while scanning.
   // TODO: Wire this to the real camera flash control once a scanner
   // dependency is integrated.
   void _toggleFlash(BuildContext context) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Flash toggle coming soon')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.t('scanStock.flashToggleComingSoon'))),
+    );
   }
 
   @override
@@ -55,11 +56,11 @@ class ScanStockScreen extends StatelessWidget {
         backgroundColor: AppColors.primaryNavy,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Scan Stock'),
+        title: Text(context.t('scanStock.title')),
         actions: [
           IconButton(
             icon: const Icon(Icons.flash_on_rounded),
-            tooltip: 'Toggle flash',
+            tooltip: context.t('scanStock.toggleFlashTooltip'),
             onPressed: () => _toggleFlash(context),
           ),
         ],
@@ -103,10 +104,10 @@ class _ScanPreviewArea extends StatelessWidget {
             children: [
               const _QrFrame(),
               const SizedBox(height: 24),
-              const Text(
-                'Center the QR code within the frame',
+              Text(
+                context.t('scanStock.centerQrInstruction'),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
               const SizedBox(height: 20),
               TextButton(
@@ -118,9 +119,12 @@ class _ScanPreviewArea extends StatelessWidget {
                     vertical: 10,
                   ),
                 ),
-                child: const Text(
-                  'Check Stock Availability',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                child: Text(
+                  context.t('scanStock.checkStockButton'),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -233,9 +237,9 @@ class _RecentScanCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'RECENT SCAN',
-                    style: TextStyle(
+                  Text(
+                    context.t('scanStock.recentScanLabel'),
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.1,
@@ -259,9 +263,9 @@ class _RecentScanCard extends StatelessWidget {
             const SizedBox(width: 8),
             TextButton(
               onPressed: () => onViewHistory(context),
-              child: const Text(
-                'View History',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              child: Text(
+                context.t('scanStock.viewHistoryButton'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],

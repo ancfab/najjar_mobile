@@ -19,8 +19,8 @@ class _StatusBadgeMeta {
 /// are a temporary mock-only mapping. Any status that isn't one of the
 /// confirmed values resolves to [OrderStatus.unknown] (via [mapOrderStatus])
 /// and renders as a neutral "Unknown" badge instead of crashing the UI.
-_StatusBadgeMeta _metaForStatus(OrderStatus status) {
-  final label = orderStatusLabel(status);
+_StatusBadgeMeta _metaForStatus(BuildContext context, OrderStatus status) {
+  final label = localizedOrderStatusLabel(context, status);
   switch (status) {
     case OrderStatus.delivered:
       return _StatusBadgeMeta(label, AppColors.mint, AppColors.darkTeal);
@@ -51,7 +51,7 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = _metaForStatus(status);
+    final meta = _metaForStatus(context, status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

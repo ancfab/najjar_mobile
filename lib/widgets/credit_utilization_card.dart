@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/credit_utilization_data.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
@@ -31,9 +32,9 @@ class CreditUtilizationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Credit Utilization',
-            style: TextStyle(
+          Text(
+            context.t('creditUtilization.heading'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,
@@ -42,7 +43,7 @@ class CreditUtilizationCard extends StatelessWidget {
           const SizedBox(height: 18),
           _CreditRow(
             key: const ValueKey('credit-utilization-available-row'),
-            label: 'Available Credit',
+            label: context.t('creditUtilization.availableCredit'),
             amount: data.availableCredit,
             ratio: data.availableCreditRatio,
             barColor: AppColors.darkTeal,
@@ -50,7 +51,7 @@ class CreditUtilizationCard extends StatelessWidget {
           const SizedBox(height: 18),
           _CreditRow(
             key: const ValueKey('credit-utilization-used-row'),
-            label: 'Used Credit',
+            label: context.t('creditUtilization.usedCredit'),
             amount: data.usedCredit,
             ratio: data.usedCreditRatio,
             barColor: AppColors.darkRedBrown,

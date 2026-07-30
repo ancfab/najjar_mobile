@@ -12,6 +12,8 @@ import 'package:anc_fabrics/models/paginated_fabric_orders.dart';
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/services/mock_orders_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 /// Every Orders query (initial load, filter/search/pagination change,
 /// retry) goes through the mock service's simulated 600ms network delay.
@@ -34,8 +36,21 @@ Future<void> _pumpOrdersScreen(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   await tester.pumpWidget(
-    MaterialApp(home: OrdersScreen(ordersService: ordersService)),
+    MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: OrdersScreen(ordersService: ordersService),
+    ),
   );
+  // The translation delegate loads its JSON asset asynchronously — flush
+  // that first so OrdersScreen (and its initState fetch) actually mounts
+  // before _settleFetch starts counting down the mock service's delay.
+  await tester.pump();
   await _settleFetch(tester);
 }
 
@@ -156,7 +171,7 @@ void main() {
 
         await _openFilterSheet(tester);
         await tester.tap(
-          find.byKey(const ValueKey('filter-sheet-status-Delivered')),
+          find.byKey(const ValueKey('filter-sheet-status-delivered')),
         );
         await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
         await _settleFetch(tester);
@@ -176,7 +191,7 @@ void main() {
 
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Shipped')),
+        find.byKey(const ValueKey('filter-sheet-status-shipped')),
       );
       await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
       await _settleFetch(tester);
@@ -201,7 +216,7 @@ void main() {
       // (Silk is exclusive to the fixed, always-Delivered #ORD-9102).
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Shipped')),
+        find.byKey(const ValueKey('filter-sheet-status-shipped')),
       );
       await tester.tap(
         find.byKey(const ValueKey('filter-sheet-fabric-type-Silk')),
@@ -348,7 +363,7 @@ void main() {
 
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Delivered')),
+        find.byKey(const ValueKey('filter-sheet-status-delivered')),
       );
       await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
       await _settleFetch(tester);
@@ -475,7 +490,7 @@ void main() {
       await _scrollToTop(tester);
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Delivered')),
+        find.byKey(const ValueKey('filter-sheet-status-delivered')),
       );
       await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
       await _settleFetch(tester);
@@ -518,7 +533,7 @@ void main() {
 
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Delivered')),
+        find.byKey(const ValueKey('filter-sheet-status-delivered')),
       );
       await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
       await _settleFetch(tester);
@@ -581,7 +596,18 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: OrdersScreen(),
+        ),
+      );
       await tester.pump();
 
       expect(
@@ -617,7 +643,7 @@ void main() {
       // service is set up to fail on.
       await _openFilterSheet(tester);
       await tester.tap(
-        find.byKey(const ValueKey('filter-sheet-status-Delivered')),
+        find.byKey(const ValueKey('filter-sheet-status-delivered')),
       );
       await tester.tap(find.byKey(const ValueKey('filter-sheet-apply')));
       await _settleFetch(tester);

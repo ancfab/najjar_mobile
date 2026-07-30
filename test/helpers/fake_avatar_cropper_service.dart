@@ -30,7 +30,10 @@ class FakeAvatarCropperService implements AvatarCropperService {
   final List<String> croppedSourcePaths = [];
 
   @override
-  Future<String?> cropToSquare(String sourcePath) async {
+  Future<String?> cropToSquare(
+    String sourcePath, {
+    String toolbarTitle = 'Crop Photo',
+  }) async {
     croppedSourcePaths.add(sourcePath);
     if (pending != null) return pending!.future;
     if (throwError != null) throw throwError!;

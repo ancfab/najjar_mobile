@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/fabric_specs.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
@@ -40,9 +41,9 @@ class FabricSpecsSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Fabric Specs',
-                  style: TextStyle(
+                Text(
+                  context.t('fabricSpecs.title'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textNavy,
@@ -57,12 +58,18 @@ class FabricSpecsSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildSpecRow('SKU', specs.sku),
-                _buildSpecRow('Color', specs.color),
-                _buildSpecRow('Weight/GSM', specs.weight),
-                _buildSpecRow('Quantity', specs.quantity),
+                _buildSpecRow(context.t('fabricSpecs.sku'), specs.sku),
+                _buildSpecRow(context.t('fabricSpecs.color'), specs.color),
+                _buildSpecRow(context.t('fabricSpecs.weight'), specs.weight),
+                _buildSpecRow(
+                  context.t('fabricSpecs.quantity'),
+                  specs.quantity,
+                ),
                 if (specs.composition != null)
-                  _buildSpecRow('Composition', specs.composition!),
+                  _buildSpecRow(
+                    context.t('fabricSpecs.composition'),
+                    specs.composition!,
+                  ),
               ],
             ),
           ),

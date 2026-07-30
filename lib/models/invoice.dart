@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
+
 /// Invoice status as understood by the Invoice Details UI.
 ///
 /// TODO: Confirm the complete list of possible invoice statuses (e.g. Paid,
@@ -5,12 +9,22 @@
 /// Only [paid] is confirmed for the current mock design.
 enum InvoiceStatus { paid }
 
-/// Human-readable label for an [InvoiceStatus]. Shared by [InvoiceStatusBadge]
-/// so the display text only lives in one place.
-String invoiceStatusLabel(InvoiceStatus status) {
+/// English-only label for an [InvoiceStatus]. Used only where no
+/// [BuildContext] is available (e.g. the invoice PDF export) — UI display
+/// goes through [invoiceStatusLabel] instead so the shown text is translated.
+String invoiceStatusLabelEn(InvoiceStatus status) {
   switch (status) {
     case InvoiceStatus.paid:
       return 'Paid';
+  }
+}
+
+/// Localized human-readable label for an [InvoiceStatus]. Shared by
+/// [InvoiceStatusBadge] so the display text only lives in one place.
+String invoiceStatusLabel(BuildContext context, InvoiceStatus status) {
+  switch (status) {
+    case InvoiceStatus.paid:
+      return context.t('invoiceStatus.paid');
   }
 }
 

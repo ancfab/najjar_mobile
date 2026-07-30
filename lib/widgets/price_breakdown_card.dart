@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/order_price_breakdown.dart';
 import '../theme/app_colors.dart';
 
@@ -31,9 +32,9 @@ class PriceBreakdownCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'PRICE BREAKDOWN',
-            style: TextStyle(
+          Text(
+            context.t('priceBreakdown.heading'),
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.1,
@@ -41,17 +42,21 @@ class PriceBreakdownCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _buildRow('Subtotal', breakdown.subtotal),
+          _buildRow(context.t('priceBreakdown.subtotal'), breakdown.subtotal),
           const SizedBox(height: 10),
-          _buildRow('Shipping', breakdown.shipping),
+          _buildRow(context.t('priceBreakdown.shipping'), breakdown.shipping),
           const SizedBox(height: 10),
-          _buildRow('VAT', breakdown.vat),
+          _buildRow(context.t('priceBreakdown.vat'), breakdown.vat),
           const SizedBox(height: 12),
           const Divider(height: 1, color: Colors.white24),
           const SizedBox(height: 12),
-          _buildRow('Total amount', breakdown.totalAmount, emphasized: true),
+          _buildRow(
+            context.t('priceBreakdown.totalAmount'),
+            breakdown.totalAmount,
+            emphasized: true,
+          ),
           const SizedBox(height: 16),
-          _buildInvoiceButton(),
+          _buildInvoiceButton(context),
         ],
       ),
     );
@@ -74,7 +79,7 @@ class PriceBreakdownCard extends StatelessWidget {
         Flexible(
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerEnd,
             child: Text(
               value,
               maxLines: 1,
@@ -90,7 +95,7 @@ class PriceBreakdownCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInvoiceButton() {
+  Widget _buildInvoiceButton(BuildContext context) {
     return Material(
       key: const ValueKey('price-breakdown-invoice-button'),
       color: AppColors.actionGreen,
@@ -101,14 +106,14 @@ class PriceBreakdownCard extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: 48),
           alignment: Alignment.center,
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.receipt_outlined, color: Colors.white, size: 18),
-              SizedBox(width: 8),
+              const Icon(Icons.receipt_outlined, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
               Text(
-                'INVOICE',
-                style: TextStyle(
+                context.t('priceBreakdown.invoiceButton'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,

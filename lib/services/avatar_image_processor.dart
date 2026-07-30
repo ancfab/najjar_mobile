@@ -2,15 +2,27 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-/// Thrown by [AvatarImageProcessor.validate] when a picked file can't be
-/// accepted as an avatar. [message] is safe to show directly to the user.
-class AvatarImageValidationException implements Exception {
-  const AvatarImageValidationException(this.message);
+/// Why a picked file was rejected by [AvatarImageProcessor.validate] —
+/// mapped to a localized, user-safe message by the caller (see
+/// `EditProfileScreen`) rather than carrying a fixed-language message here.
+enum AvatarImageValidationReason {
+  fileNotFound,
+  emptyFile,
+  tooLarge,
+  unreadableFile,
+  unsupportedFormat,
+  corruptImage,
+}
 
-  final String message;
+/// Thrown by [AvatarImageProcessor.validate] when a picked file can't be
+/// accepted as an avatar.
+class AvatarImageValidationException implements Exception {
+  const AvatarImageValidationException(this.reason);
+
+  final AvatarImageValidationReason reason;
 
   @override
-  String toString() => 'AvatarImageValidationException: $message';
+  String toString() => 'AvatarImageValidationException: $reason';
 }
 
 /// Validates a picked (pre-crop) avatar image before it is handed to the
@@ -47,19 +59,19 @@ class DefaultAvatarImageProcessor implements AvatarImageProcessor {
 
     if (!await file.exists()) {
       throw const AvatarImageValidationException(
-        "We couldn't find that photo. Please try again.",
+        AvatarImageValidationReason.fileNotFound,
       );
     }
 
     final length = await file.length();
     if (length <= 0) {
       throw const AvatarImageValidationException(
-        'That file appears to be empty. Please choose another photo.',
+        AvatarImageValidationReason.emptyFile,
       );
     }
     if (length > _maxSourceBytes) {
       throw const AvatarImageValidationException(
-        'That photo is too large. Please choose a smaller image.',
+        AvatarImageValidationReason.tooLarge,
       );
     }
 
@@ -68,13 +80,13 @@ class DefaultAvatarImageProcessor implements AvatarImageProcessor {
       bytes = await file.readAsBytes();
     } on FileSystemException {
       throw const AvatarImageValidationException(
-        "We couldn't read that photo. Please try again.",
+        AvatarImageValidationReason.unreadableFile,
       );
     }
 
     if (!_hasSupportedImageSignature(bytes)) {
       throw const AvatarImageValidationException(
-        'Please choose a JPG, PNG, or HEIC photo.',
+        AvatarImageValidationReason.unsupportedFormat,
       );
     }
 
@@ -83,7 +95,7 @@ class DefaultAvatarImageProcessor implements AvatarImageProcessor {
       await codec.getNextFrame();
     } catch (_) {
       throw const AvatarImageValidationException(
-        "That file isn't a valid image. Please choose another photo.",
+        AvatarImageValidationReason.corruptImage,
       );
     }
   }

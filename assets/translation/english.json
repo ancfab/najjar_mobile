@@ -1,0 +1,364 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "back": "Back",
+    "ok": "OK",
+    "close": "Close",
+    "reset": "Reset",
+    "apply": "Apply",
+    "all": "All",
+    "search": "Search",
+    "clear": "Clear",
+    "selectDate": "Select date",
+    "errorGeneric": "Something went wrong. Please try again."
+  },
+  "language": {
+    "selectorTitle": "Select Language",
+    "iconTooltip": "Change language",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français"
+  },
+  "nav": {
+    "home": "Home",
+    "orders": "Orders",
+    "support": "Support",
+    "profile": "Profile"
+  },
+  "session": {
+    "expired": "Your session has expired. Please sign in again.",
+    "restoreFailed": "We could not restore your secure session. Please sign in again.",
+    "validationUnavailable": "We could not verify your session. Please check your connection and sign in again."
+  },
+  "home": {
+    "unableToLoadDashboard": "Unable to load dashboard data.",
+    "unableToRefreshDashboard": "Unable to refresh dashboard data.",
+    "enterCatalogueCodeValidation": "Please enter a catalogue code.",
+    "availableAtWarehouse": "{quantity} yd available at {warehouse}.",
+    "noAvailabilityFound": "No availability found for \"{code}\".",
+    "catalogueLookupError": "Something went wrong. Please try again.",
+    "settingsComingSoon": "Settings screen coming soon",
+    "scanFabricAvailability": "Scan Fabric Availability",
+    "checkAvailability": "Check Availability",
+    "enterCatalogueCode": "Enter Catalogue Code",
+    "checkAvailabilityHelper": "Quickly check availability across all warehouses.",
+    "activeOrders": "Active Orders",
+    "overdueInvoices": "Overdue Invoices"
+  },
+  "balanceCard": {
+    "label": "CURRENT BALANCE",
+    "semanticsCurrent": "Current balance {amount}",
+    "semanticsHint": "Opens account balance details"
+  },
+  "accountBalance": {
+    "unableToLoad": "Unable to load account balance.",
+    "exportFailed": "Could not generate the account statement. Please try again.",
+    "fullHistoryUnavailable": "Full transaction history is not available yet.",
+    "noStatementEntries": "No account statement entries are available yet.",
+    "errorAccountNotSetUp": "Your account isn't fully set up yet. Please contact support.",
+    "errorTemporarilyUnavailable": "Temporarily unavailable.",
+    "errorGeneric": "Couldn't load data right now.",
+    "quickHistoryTitle": "QUICK HISTORY",
+    "exportPdf": "Export PDF",
+    "generatingPdf": "Generating...",
+    "globalAccountBalance": "GLOBAL ACCOUNT BALANCE"
+  },
+  "accountTransaction": {
+    "title": "Transaction Details",
+    "credit": "Credit",
+    "debit": "Debit",
+    "date": "Date",
+    "reference": "Reference"
+  },
+  "login": {
+    "welcomeBack": "Welcome back.",
+    "validationRequiredFields": "Please fill in all required fields.",
+    "validationMobileDigitsOnly": "Mobile number should contain digits only.",
+    "failureRequiredFields": "Please fill in all required fields.",
+    "failureInvalidCredentials": "Please check your login details and try again.",
+    "failureInvalidMobile": "Please enter a valid mobile number.",
+    "failureNoConnection": "Unable to connect. Check your internet connection and try again.",
+    "failureServiceUnavailable": "The service is temporarily unavailable. Please try again.",
+    "failureGeneric": "We could not complete the login. Please try again.",
+    "failureSessionNotSaved": "Login succeeded, but the session could not be saved securely. Please try again.",
+    "mobileNumberLabel": "MOBILE NUMBER",
+    "mobileNumberHint": "50 123 4567",
+    "clientNameLabel": "CLIENT NAME",
+    "clientNameHint": "Enter your name",
+    "passwordLabel": "PASSWORD",
+    "passwordHint": "Enter your password",
+    "loginButton": "LOGIN",
+    "backButton": "BACK",
+    "contactUsLink": "Need help? Contact Us",
+    "footerCopyright": "© 2024 INDIGO LOOM TEXTILE PORTAL. ALL RIGHTS RESERVED.",
+    "privacyPolicy": "Privacy Policy",
+    "termsOfService": "Terms of Service"
+  },
+  "orders": {
+    "unableToLoad": "Unable to load orders.",
+    "unableToRefresh": "Unable to refresh orders.",
+    "cancelSearch": "Cancel",
+    "searchOrdersTooltip": "Search orders",
+    "clientPortalTitle": "Client Portal",
+    "searchHint": "Search order ID, fabric, status...",
+    "clearSearchTooltip": "Clear search",
+    "globalLogisticsEyebrow": "GLOBAL LOGISTICS",
+    "fabricOrdersTitle": "Fabric Orders",
+    "filterButton": "Filter",
+    "filterButtonWithCount": "Filter ({count})",
+    "showingCount": "Showing {shown} of {total} orders",
+    "pageOf": "Page {page} of {totalPages}",
+    "noOrdersFiltered": "No orders match the selected filters.",
+    "noOrdersYet": "No orders yet.",
+    "resetFilters": "Reset filters"
+  },
+  "orderDetail": {
+    "unableToLoad": "Unable to load order details.",
+    "historyComingSoon": "Order history coming soon",
+    "title": "Order Detail",
+    "breadcrumbOrders": "Orders",
+    "placedOn": "Placed on {date}",
+    "itemsHeader": "ORDER ITEMS",
+    "fabricSpecsAction": "FABRIC SPECS",
+    "historyHeader": "ORDER HISTORY",
+    "viewTimelineAction": "VIEW ORDER TIMELINE"
+  },
+  "orderStatus": {
+    "delivered": "Delivered",
+    "shipped": "Shipped",
+    "processing": "Processing",
+    "unknown": "Unknown"
+  },
+  "dateRangeFilter": {
+    "all": "All dates",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "custom": "Custom range"
+  },
+  "orderFilter": {
+    "title": "Filter Orders",
+    "status": "Status",
+    "dateRange": "Date Range",
+    "fabricType": "Fabric Type",
+    "startDate": "Start date",
+    "endDate": "End date"
+  },
+  "invoices": {
+    "overdueTitle": "Overdue Invoices",
+    "title": "Invoices",
+    "overdueListComingSoon": "Overdue invoices list coming soon",
+    "listComingSoon": "Invoices list coming soon"
+  },
+  "invoiceDetails": {
+    "title": "Invoice Details",
+    "unableToLoad": "Unable to load invoice details.",
+    "printCancelled": "Printing was cancelled.",
+    "printFailed": "Unable to print the invoice. Please try again.",
+    "downloadCancelled": "Download was cancelled.",
+    "downloadFailed": "Unable to prepare the invoice PDF. Please try again.",
+    "emailNotAvailable": "Emailing the billing contact is not available yet."
+  },
+  "invoiceStatus": {
+    "paid": "Paid"
+  },
+  "invoiceWidgets": {
+    "invoiceNumber": "Invoice Number",
+    "issuedDate": "Issued Date",
+    "billedTo": "BILLED TO",
+    "dueDate": "DUE DATE",
+    "paymentMethod": "PAYMENT METHOD",
+    "itemDetails": "ITEM DETAILS",
+    "qty": "QTY",
+    "unitPrice": "UNIT PRICE",
+    "total": "TOTAL",
+    "logisticsHeading": "Logistics",
+    "status": "STATUS",
+    "estDelivery": "EST. DELIVERY",
+    "internalNotes": "Internal Notes",
+    "paymentEnding": "{method} (Ending ...{reference})",
+    "subtotal": "Subtotal",
+    "tax": "Tax",
+    "totalAmount": "Total Amount",
+    "print": "Print",
+    "downloadPdf": "Download PDF"
+  },
+  "priceBreakdown": {
+    "heading": "PRICE BREAKDOWN",
+    "subtotal": "Subtotal",
+    "shipping": "Shipping",
+    "vat": "VAT",
+    "totalAmount": "Total amount",
+    "invoiceButton": "INVOICE"
+  },
+  "scanStock": {
+    "title": "Scan Stock",
+    "stockCheckComingSoon": "Stock availability check coming soon",
+    "scanHistoryComingSoon": "Scan history coming soon",
+    "flashToggleComingSoon": "Flash toggle coming soon",
+    "toggleFlashTooltip": "Toggle flash",
+    "centerQrInstruction": "Center the QR code within the frame",
+    "checkStockButton": "Check Stock Availability",
+    "recentScanLabel": "RECENT SCAN",
+    "viewHistoryButton": "View History"
+  },
+  "support": {
+    "title": "Support",
+    "tag": "SUPPORT CENTER",
+    "heroHeading": "How can we help your business thrive?",
+    "intro": "Our textile specialists and supply chain experts are available 24/7 to ensure your production remains seamless.",
+    "whatsappUnavailable": "WhatsApp support is not available for {region} yet.",
+    "whatsappOpenFailed": "Couldn't open WhatsApp for {region}. Please try again later.",
+    "hotlineUnavailable": "This hotline number is not available.",
+    "dialerUnavailable": "Unable to open the phone dialer. Please try again.",
+    "corporateOfficeLabel": "CORPORATE OFFICE",
+    "officeDetailsFallback": "Office details for {region} will be added soon.",
+    "directHotlineLabel": "DIRECT HOTLINE",
+    "hoursFallback": "Support hours for {region} will be confirmed soon.",
+    "hotlineFallback": "Hotline numbers for {region} will be added soon.",
+    "callNumber": "Call {number}"
+  },
+  "supportAction": {
+    "heading": "Live Specialist Support",
+    "description": "Instant connectivity with our textile specialists. Get real-time updates on fabric availability and logistics.",
+    "chatWhatsapp": "CHAT ON WHATSAPP",
+    "emailSupport": "EMAIL SUPPORT"
+  },
+  "supportHours": {
+    "label": "SUPPORT HOURS"
+  },
+  "supportTextileVisual": {
+    "tagline": "24/7 Precision"
+  },
+  "supportRegion": {
+    "uae": "UAE",
+    "syria": "Syria",
+    "iraq": "Iraq",
+    "oman": "Oman",
+    "lebanon": "Lebanon"
+  },
+  "contactUs": {
+    "title": "Contact Us",
+    "tag": "SUPPORT CENTER",
+    "intro": "Connect with our textile experts to streamline your supply chain or inquire about our premium weave collections.",
+    "successMessage": "Thanks — we've received your message and will be in touch soon.",
+    "failureMessage": "We couldn't send your message. Please try again.",
+    "emailUnavailable": "Email support submission is not connected yet.",
+    "backToSupport": "Back to Support",
+    "emailUsLabel": "EMAIL US",
+    "emailFallback": "Support email details will be added soon.",
+    "mainOfficeLabel": "MAIN OFFICE",
+    "officeFallback": "Office details for {region} will be added soon.",
+    "fullNameLabel": "FULL NAME",
+    "fullNameHint": "Jane Weaver",
+    "fullNameError": "Please enter your full name.",
+    "workEmailLabel": "WORK EMAIL",
+    "workEmailHint": "jane@textile.co",
+    "subjectLabel": "SUBJECT",
+    "selectSubjectHint": "Select a subject",
+    "messageLabel": "MESSAGE BODY",
+    "messageHint": "Tell us more about your project requirements...",
+    "messageError": "Please enter a message.",
+    "sendButton": "SEND EMAIL"
+  },
+  "contactSubject": {
+    "orderStatusInquiry": "Order Status Inquiry",
+    "productAvailability": "Product Availability",
+    "invoiceOrPayment": "Invoice or Payment",
+    "technicalSupport": "Technical Support",
+    "generalInquiry": "General Inquiry",
+    "other": "Other"
+  },
+  "editProfile": {
+    "title": "Edit Profile",
+    "changePhotoTooltip": "Change profile photo",
+    "cameraSource": "Camera",
+    "gallerySource": "Photo library",
+    "accessTurnedOff": "{label} access is turned off for this app. Enable it in Settings to continue.",
+    "openSettings": "Open Settings",
+    "takePhoto": "Take Photo",
+    "chooseFromGallery": "Choose from Gallery",
+    "cameraAccessNeeded": "Camera access is needed to take a photo. Please allow access and try again.",
+    "galleryAccessNeeded": "Photo library access is needed to choose a photo. Please allow access and try again.",
+    "accessRestricted": "That access is restricted on this device.",
+    "pickerFailed": "We couldn't open the picker. Please try again.",
+    "photoUnusable": "That photo couldn't be used. Please choose another.",
+    "fileNotFound": "We couldn't find that photo. Please try again.",
+    "emptyFile": "That file appears to be empty. Please choose another photo.",
+    "tooLarge": "That photo is too large. Please choose a smaller image.",
+    "unreadableFile": "We couldn't read that photo. Please try again.",
+    "unsupportedFormat": "Please choose a JPG, PNG, or HEIC photo.",
+    "corruptImage": "That file isn't a valid image. Please choose another photo.",
+    "photoUpdatedOnDevice": "Profile photo updated on this device.",
+    "cropFailed": "We couldn't crop that photo. Please try again.",
+    "cropToolbarTitle": "Crop Photo",
+    "previewTitle": "Preview Photo",
+    "chooseAgain": "Choose Again",
+    "usePhoto": "Use Photo",
+    "photoUpdateFailed": "We couldn't update your photo. Please try again.",
+    "photoUpdated": "Profile photo updated.",
+    "profileUpdated": "Profile updated.",
+    "profileSaveFailed": "We couldn't save your changes. Please try again.",
+    "profileUpdatesNotConnected": "Profile updates are not connected yet.",
+    "signOutFailed": "Unable to sign out securely. Please try again.",
+    "discardChangesTitle": "Discard changes?",
+    "discardChangesBody": "You have unsaved changes to your profile. If you leave now, these changes will be lost.",
+    "keepEditing": "Keep Editing",
+    "discard": "Discard",
+    "ancIdLabel": "ANC ID: #{id}",
+    "fullNameFieldLabel": "Full Name",
+    "fullNameFieldError": "Please enter your full name.",
+    "emailFieldLabel": "Email Address",
+    "phoneFieldLabel": "Phone Number",
+    "companyFieldLabel": "Company",
+    "companyFieldError": "Please enter your company.",
+    "addressFieldLabel": "Business Address",
+    "addressFieldError": "Please enter your business address.",
+    "saveChanges": "Save Changes",
+    "logout": "Logout"
+  },
+  "validators": {
+    "emailRequired": "Please enter your work email.",
+    "emailInvalid": "Please enter a valid email address.",
+    "phoneRequired": "Please enter your phone number.",
+    "phoneInvalid": "Please enter a valid phone number.",
+    "subjectRequired": "Please select a subject."
+  },
+  "balanceHistory": {
+    "heading": "Balance History",
+    "subtitle": "Trend analysis for {start} - {end}"
+  },
+  "balanceHistoryRange": {
+    "days30": "30 Days",
+    "days90": "90 Days",
+    "year1": "1 Year"
+  },
+  "creditUtilization": {
+    "heading": "Credit Utilization",
+    "availableCredit": "Available Credit",
+    "usedCredit": "Used Credit"
+  },
+  "fabricSpecs": {
+    "title": "Fabric Specs",
+    "sku": "SKU",
+    "color": "Color",
+    "weight": "Weight/GSM",
+    "quantity": "Quantity",
+    "composition": "Composition"
+  },
+  "lastPayment": {
+    "label": "Last Payment"
+  },
+  "paymentTimeline": {
+    "heading": "Payment Timeline"
+  },
+  "quickHistory": {
+    "heading": "QUICK HISTORY"
+  },
+  "countryCodePicker": {
+    "selectTitle": "Select country code",
+    "searchHint": "Search by country, code, or ISO",
+    "noResults": "No countries found"
+  }
+}

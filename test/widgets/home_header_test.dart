@@ -12,6 +12,8 @@ import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/widgets/home_header.dart';
 
 import '../helpers/valid_avatar_image.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   setUp(() {
@@ -29,6 +31,13 @@ void main() {
     final avatarController = CurrentUserAvatarController();
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Scaffold(
           body: HomeHeader(
             userName: 'Alex Sterling',
@@ -37,6 +46,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     final circleAvatar = tester.widget<CircleAvatar>(find.byType(CircleAvatar));
     expect(circleAvatar.backgroundImage, isNull);
@@ -50,6 +60,13 @@ void main() {
       final avatarController = CurrentUserAvatarController();
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: HomeHeader(
               userName: 'Alex Sterling',
@@ -58,6 +75,7 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
 
       late File tempFile;
       await tester.runAsync(() async {

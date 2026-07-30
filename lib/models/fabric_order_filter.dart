@@ -1,20 +1,23 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
 import 'fabric_order.dart';
 
 /// Date-range presets available in the Orders filter sheet.
 enum DateRangeFilter { all, last7Days, last30Days, custom }
 
-/// Display label for a [DateRangeFilter] value, shared by the filter sheet
-/// and the active-filter chip on the Orders screen.
-String dateRangeFilterLabel(DateRangeFilter value) {
+/// Localized display label for a [DateRangeFilter] value, shared by the
+/// filter sheet and the active-filter chip on the Orders screen.
+String dateRangeFilterLabel(BuildContext context, DateRangeFilter value) {
   switch (value) {
     case DateRangeFilter.all:
-      return 'All dates';
+      return context.t('dateRangeFilter.all');
     case DateRangeFilter.last7Days:
-      return 'Last 7 days';
+      return context.t('dateRangeFilter.last7Days');
     case DateRangeFilter.last30Days:
-      return 'Last 30 days';
+      return context.t('dateRangeFilter.last30Days');
     case DateRangeFilter.custom:
-      return 'Custom range';
+      return context.t('dateRangeFilter.custom');
   }
 }
 

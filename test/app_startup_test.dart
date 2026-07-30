@@ -35,6 +35,7 @@ import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/secure_auth_session_store.dart';
+import 'package:anc_fabrics/services/session_messages.dart';
 import 'package:anc_fabrics/services/session_storage_keys.dart';
 
 import 'helpers/fake_secure_key_value_store.dart';
@@ -127,6 +128,7 @@ void main() {
     '(matches a fresh, logged-out install)',
     (tester) async {
       await tester.pumpWidget(MyApp());
+      await tester.pump();
 
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(find.byType(HomeScreen), findsNothing);
@@ -138,6 +140,7 @@ void main() {
     '(e.g. after logout cleared the session, or a stored token was revoked)',
     (tester) async {
       await tester.pumpWidget(MyApp(isLoggedIn: false));
+      await tester.pump();
 
       expect(find.byType(LoginScreen), findsOneWidget);
       expect(find.byType(HomeScreen), findsNothing);
@@ -147,6 +150,7 @@ void main() {
   testWidgets('Opens on Home when the startup session check reports an active '
       'session', (tester) async {
     await tester.pumpWidget(MyApp(isLoggedIn: true));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
     expect(find.byType(HomeScreen), findsOneWidget);
@@ -158,7 +162,12 @@ void main() {
     const message =
         'We could not restore your secure session. Please sign in again.';
 
-    await tester.pumpWidget(MyApp(isLoggedIn: false, startupMessage: message));
+    await tester.pumpWidget(
+      MyApp(
+        isLoggedIn: false,
+        startupMessage: LoginStartupMessage.restoreFailed,
+      ),
+    );
     await tester.pump(); // let the post-frame callback fire
     await tester.pump(); // let the SnackBar animate in
 
@@ -328,8 +337,9 @@ void main() {
       );
 
       expect(result.isLoggedIn, isFalse);
-      expect(result.startupMessage, isNotNull);
-      expect(result.startupMessage, isNot(contains('Keystore')));
+      // A typed reason (never a raw formatted string) so it can never leak
+      // a storage implementation detail like "Keystore".
+      expect(result.startupMessage, LoginStartupMessage.restoreFailed);
       expect(result.sessionInvalidated, isFalse);
     });
 

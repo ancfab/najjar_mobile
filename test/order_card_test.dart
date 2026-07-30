@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/fabric_order.dart';
 import 'package:anc_fabrics/widgets/order_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   testWidgets('OrderCard displays all required order details', (tester) async {
@@ -22,9 +24,17 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Scaffold(body: OrderCard(order: order)),
       ),
     );
+    await tester.pump();
 
     // Thumbnail placeholder area.
     expect(find.byIcon(Icons.texture_rounded), findsOneWidget);
@@ -58,9 +68,17 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(body: OrderCard(order: order)),
         ),
       );
+      await tester.pump();
 
       expect(find.byIcon(Icons.texture_rounded), findsOneWidget);
       expect(find.byType(Image), findsNothing);
@@ -83,11 +101,19 @@ void main() {
     var tapped = false;
     await tester.pumpWidget(
       MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Scaffold(
           body: OrderCard(order: order, onTap: () => tapped = true),
         ),
       ),
     );
+    await tester.pump();
 
     await tester.tap(find.byType(OrderCard));
     expect(tapped, isTrue);

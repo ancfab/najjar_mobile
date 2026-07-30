@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
+import '../localization/translations.dart';
 import '../models/catalogue_lookup_result.dart';
 import '../models/home_dashboard_data.dart';
 import '../services/catalogue_lookup_service.dart';
@@ -84,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _dashboardError = 'Unable to load dashboard data.';
+        _dashboardError = context.t('home.unableToLoadDashboard');
         _isDashboardLoading = false;
       });
     }
@@ -101,7 +102,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _dashboardError = 'Unable to refresh dashboard data.');
+      setState(
+        () => _dashboardError = context.t('home.unableToRefreshDashboard'),
+      );
     }
   }
 
@@ -121,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!validateCatalogueCodeInput(catalogueCode)) {
       setState(() {
         _catalogueUiState = _CatalogueLookupUiState.error;
-        _catalogueMessage = 'Please enter a catalogue code.';
+        _catalogueMessage = context.t('home.enterCatalogueCodeValidation');
       });
       return;
     }
@@ -146,13 +149,19 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       if (result.status == CatalogueLookupStatus.success) {
         _catalogueUiState = _CatalogueLookupUiState.success;
-        _catalogueMessage =
-            '${result.availableQuantity} yd available at '
-            '${result.warehouseName}.';
+        _catalogueMessage = context.t(
+          'home.availableAtWarehouse',
+          params: {
+            'quantity': '${result.availableQuantity}',
+            'warehouse': result.warehouseName ?? '',
+          },
+        );
       } else {
         _catalogueUiState = _CatalogueLookupUiState.empty;
-        _catalogueMessage =
-            'No availability found for "${result.catalogueCode}".';
+        _catalogueMessage = context.t(
+          'home.noAvailabilityFound',
+          params: {'code': result.catalogueCode},
+        );
       }
     });
   }
@@ -162,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {
       _catalogueUiState = _CatalogueLookupUiState.error;
-      _catalogueMessage = 'Something went wrong. Please try again.';
+      _catalogueMessage = context.t('home.catalogueLookupError');
     });
   }
 
@@ -178,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // TODO: No Settings screen exists yet in this app — destination needs
     // confirmation. Showing a safe placeholder instead of navigating.
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings screen coming soon')),
+      SnackBar(content: Text(context.t('home.settingsComingSoon'))),
     );
   }
 
@@ -271,15 +280,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         _buildDashboardSection(),
                         const SizedBox(height: 16),
                         ScanFabricButton(
-                          label: 'Scan Fabric Availability',
+                          label: context.t('home.scanFabricAvailability'),
                           onTap: _openScanStockScreen,
                         ),
                         const SizedBox(height: 16),
                         AvailabilitySearchCard(
-                          title: 'Check Availability',
-                          hintText: 'Enter Catalogue Code',
-                          helperText:
-                              'Quickly check availability across all warehouses.',
+                          title: context.t('home.checkAvailability'),
+                          hintText: context.t('home.enterCatalogueCode'),
+                          helperText: context.t('home.checkAvailabilityHelper'),
                           controller: _catalogueCodeController,
                           onSearch: searchFabricAvailabilityByCatalogueCode,
                           isLoading:
@@ -337,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
           iconBoxColor: AppColors.darkTeal,
           backgroundColor: AppColors.mint,
           valueText: data.activeOrdersCount,
-          subtitle: 'Active Orders',
+          subtitle: context.t('home.activeOrders'),
           contentColor: AppColors.darkTeal,
           onTap: _openActiveOrders,
         ),
@@ -348,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: AppColors.peach,
           borderColor: AppColors.border,
           valueText: data.overdueInvoicesAmount,
-          subtitle: 'Overdue Invoices',
+          subtitle: context.t('home.overdueInvoices'),
           contentColor: AppColors.darkRedBrown,
           onTap: _openOverdueInvoices,
         ),
@@ -408,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _dashboardError ?? 'Unable to load dashboard data.',
+            _dashboardError ?? context.t('home.unableToLoadDashboard'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.grayText),
           ),
@@ -419,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: AppColors.primaryNavy,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Retry'),
+            child: Text(context.t('common.retry')),
           ),
         ],
       ),

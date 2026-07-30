@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/quick_history_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 final _transactions = [
   AccountTransaction(
@@ -51,6 +53,13 @@ Future<void> _pumpCard(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: SingleChildScrollView(
           child: QuickHistoryCard(
@@ -62,6 +71,10 @@ Future<void> _pumpCard(
       ),
     ),
   );
+  await tester.pump();
+  // The translation delegate loads its JSON asset asynchronously; one
+  // extra pump lets that resolve before this card's heading/text renders.
+  await tester.pump();
 }
 
 void main() {

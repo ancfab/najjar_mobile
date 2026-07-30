@@ -23,11 +23,14 @@ import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
+import 'package:anc_fabrics/services/session_messages.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 import 'package:anc_fabrics/services/session_storage_keys.dart';
 import 'package:anc_fabrics/widgets/login/primary_login_button.dart';
 
 import 'helpers/fake_auth_session_store.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 class _RecordingHttpClient extends http.BaseClient {
   _RecordingHttpClient(this._respond);
@@ -93,10 +96,17 @@ AuthService _authServiceOver(
 Future<void> _pumpLoginScreen(
   WidgetTester tester, {
   AuthService? authService,
-  String? startupMessage,
+  LoginStartupMessage? startupMessage,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: LoginScreen(
         authService: authService,
         startupMessage: startupMessage,
@@ -465,6 +475,7 @@ void main() {
 
         // Disposes LoginScreen while the request is still pending.
         await tester.pumpWidget(const SizedBox());
+        await tester.pump();
 
         completer.complete(
           _jsonResponse(
@@ -490,6 +501,7 @@ void main() {
       await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
 
       await tester.pumpWidget(const SizedBox());
+      await tester.pump();
 
       expect(http_.closed, isFalse);
     });
@@ -500,6 +512,7 @@ void main() {
         await _pumpLoginScreen(tester);
 
         await tester.pumpWidget(const SizedBox());
+        await tester.pump();
 
         expect(tester.takeException(), isNull);
       },
@@ -538,7 +551,10 @@ void main() {
     ) async {
       const message =
           'We could not restore your secure session. Please sign in again.';
-      await _pumpLoginScreen(tester, startupMessage: message);
+      await _pumpLoginScreen(
+        tester,
+        startupMessage: LoginStartupMessage.restoreFailed,
+      );
       await tester.pump();
       await tester.pump();
 

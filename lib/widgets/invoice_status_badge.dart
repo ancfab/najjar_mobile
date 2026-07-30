@@ -19,7 +19,7 @@ class InvoiceStatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        invoiceStatusLabel(status).toUpperCase(),
+        invoiceStatusLabel(context, status).toUpperCase(),
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,

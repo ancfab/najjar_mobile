@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/mock_invoices_data.dart';
+import '../localization/translations.dart';
 import '../models/fabric_order.dart';
 import '../models/fabric_order_detail.dart';
 import '../services/mock_orders_service.dart';
@@ -70,7 +71,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load order details.';
+        _error = context.t('orderDetail.unableToLoad');
         _isLoading = false;
       });
     }
@@ -126,9 +127,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   /// details (once that exists) — then wire up real order status history
   /// data.
   void _openOrderHistory() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Order history coming soon')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.t('orderDetail.historyComingSoon'))),
+    );
   }
 
   @override
@@ -148,15 +149,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       leading: IconButton(
         key: const ValueKey('order-detail-menu-button'),
         icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Back',
+        tooltip: context.t('common.back'),
         // No navigation drawer/menu content is defined yet for this screen,
         // so the menu affordance falls back to simple back navigation.
         onPressed: () => Navigator.of(context).maybePop(),
       ),
-      title: const Text('Order Detail'),
+      title: Text(context.t('orderDetail.title')),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 16),
+          padding: const EdgeInsetsDirectional.only(end: 16),
           child: Container(
             width: 32,
             height: 32,
@@ -230,7 +231,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? 'Unable to load order details.',
+              _error ?? context.t('orderDetail.unableToLoad'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.grayText),
             ),
@@ -241,7 +242,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 backgroundColor: AppColors.primaryNavy,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Retry'),
+              child: Text(context.t('common.retry')),
             ),
           ],
         ),
@@ -257,20 +258,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         GestureDetector(
           key: const ValueKey('order-detail-breadcrumb-orders'),
           onTap: () => Navigator.of(context).maybePop(),
-          child: const Text(
-            'Orders',
-            style: TextStyle(
+          child: Text(
+            context.t('orderDetail.breadcrumbOrders'),
+            style: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
               color: AppColors.primaryNavy,
             ),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Text(
-            '>',
-            style: TextStyle(fontSize: 12.5, color: AppColors.grayText),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Transform.flip(
+            flipX: Directionality.of(context) == TextDirection.rtl,
+            child: const Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: AppColors.grayText,
+            ),
           ),
         ),
         Expanded(
@@ -309,7 +314,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Placed on ${order.date}',
+                context.t('orderDetail.placedOn', params: {'date': order.date}),
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.grayText,
@@ -337,9 +342,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'ORDER ITEMS',
-            style: TextStyle(
+          Text(
+            context.t('orderDetail.itemsHeader'),
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0,
@@ -411,19 +416,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: _openFabricSpecs,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.description_outlined,
                 size: 18,
                 color: AppColors.primaryNavy,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
-                'FABRIC SPECS',
-                style: TextStyle(
+                context.t('orderDetail.fabricSpecsAction'),
+                style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
@@ -453,9 +458,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'ORDER HISTORY',
-            style: TextStyle(
+          Text(
+            context.t('orderDetail.historyHeader'),
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0,
@@ -479,20 +484,20 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: _openOrderHistory,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(vertical: 4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.history_rounded,
                 size: 18,
                 color: AppColors.primaryNavy,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'VIEW ORDER TIMELINE',
-                  style: TextStyle(
+                  context.t('orderDetail.viewTimelineAction'),
+                  style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.4,
@@ -500,10 +505,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ),
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: AppColors.grayText,
+              Transform.flip(
+                flipX: Directionality.of(context) == TextDirection.rtl,
+                child: const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppColors.grayText,
+                ),
               ),
             ],
           ),

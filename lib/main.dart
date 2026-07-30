@@ -1,38 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'localization/app_locale.dart';
+import 'localization/app_translations_delegate.dart';
 import 'models/auth/session_validation_result.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'services/current_user_avatar_controller.dart';
+import 'services/locale_controller.dart';
 import 'services/session_expiry_coordinator.dart';
 import 'services/session_messages.dart';
 import 'theme/app_colors.dart';
 
-/// Safe, one-time message shown on Login after the locally persisted
-/// session itself could not be read (a secure-storage I/O failure) — never
-/// a storage implementation detail.
-const String _secureSessionRestoreFailedMessage =
-    'We could not restore your secure session. Please sign in again.';
-
-/// Safe, one-time message shown on Login when a stored session could not be
-/// confirmed because `/auth/me` could not be reached or the ANC API failed
-/// to service the request. Deliberately distinct from
-/// [_sessionExpiredMessage]: a transient network/service failure is not
-/// evidence of invalid credentials, and the secure session is left intact
-/// so a later launch with connectivity can still succeed.
-const String _sessionValidationUnavailableMessage =
-    'We could not verify your session. Please check your connection and '
-    'sign in again.';
-
 /// App-startup auth-gate result: whether a previously-established secure
 /// session is both present and confirmed still valid, an optional safe
-/// message to show once on Login when that could not be determined, and
-/// whether the session was actively invalidated during this check (as
-/// opposed to simply never having existed) — see [resolveStartupSession].
+/// message reason to show once on Login when that could not be determined
+/// (resolved to localized text by [LoginScreen] itself, since this runs
+/// before any `Localizations`-wrapped widget tree exists), and whether the
+/// session was actively invalidated during this check (as opposed to simply
+/// never having existed) — see [resolveStartupSession].
 typedef StartupSession = ({
   bool isLoggedIn,
-  String? startupMessage,
+  LoginStartupMessage? startupMessage,
   bool sessionInvalidated,
 });
 
@@ -56,22 +46,22 @@ Future<StartupSession> resolveStartupSession(AuthService authService) async {
     ),
     SessionValidationRevoked() => (
       isLoggedIn: false,
-      startupMessage: sessionExpiredMessage,
+      startupMessage: LoginStartupMessage.sessionExpired,
       sessionInvalidated: true,
     ),
     SessionValidationUnusable() => (
       isLoggedIn: false,
-      startupMessage: sessionExpiredMessage,
+      startupMessage: LoginStartupMessage.sessionExpired,
       sessionInvalidated: true,
     ),
     SessionValidationUnavailable() => (
       isLoggedIn: false,
-      startupMessage: _sessionValidationUnavailableMessage,
+      startupMessage: LoginStartupMessage.validationUnavailable,
       sessionInvalidated: false,
     ),
     SessionValidationStorageFailure() => (
       isLoggedIn: false,
-      startupMessage: _secureSessionRestoreFailedMessage,
+      startupMessage: LoginStartupMessage.restoreFailed,
       sessionInvalidated: false,
     ),
   };
@@ -86,6 +76,11 @@ Future<void> main() async {
   final authService = AuthService.production();
   final startup = await resolveStartupSession(authService);
   authService.close();
+
+  // Restores the user's previously selected language (if any) before the
+  // first frame, so the app never flashes the fallback language then
+  // switches.
+  await localeController.restorePersisted();
 
   if (startup.isLoggedIn) {
     // Restores the temporary local/mock avatar (see
@@ -136,9 +131,10 @@ class MyApp extends StatelessWidget {
   /// same behavior as a fresh, logged-out install.
   final bool isLoggedIn;
 
-  /// A safe, one-time message to show on Login after a startup secure-
-  /// session restore failure, or null when nothing needs to be shown.
-  final String? startupMessage;
+  /// A safe, one-time message reason to show on Login after a startup
+  /// secure-session restore failure, or null when nothing needs to be
+  /// shown.
+  final LoginStartupMessage? startupMessage;
 
   /// The app's root [Navigator] key. Defaults to the shared
   /// [appNavigatorKey] that [SessionExpiryCoordinator] uses to replace the
@@ -149,21 +145,34 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'ANC Fabrics',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primaryNavy,
-          surface: AppColors.background,
-        ),
-      ),
-      home: isLoggedIn
-          ? const HomeScreen()
-          : LoginScreen(startupMessage: startupMessage),
+    return ListenableBuilder(
+      listenable: localeController,
+      builder: (context, _) {
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          title: 'ANC Fabrics',
+          debugShowCheckedModeBanner: false,
+          locale: localeController.locale,
+          supportedLocales: AppLocale.supportedLocales,
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: ThemeData(
+            useMaterial3: true,
+            scaffoldBackgroundColor: AppColors.background,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.primaryNavy,
+              surface: AppColors.background,
+            ),
+          ),
+          home: isLoggedIn
+              ? const HomeScreen()
+              : LoginScreen(startupMessage: startupMessage),
+        );
+      },
     );
   }
 }

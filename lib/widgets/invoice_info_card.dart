@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import 'invoice_info_section.dart';
@@ -40,14 +41,17 @@ class InvoiceInfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildSummaryRow(),
+          _buildSummaryRow(context),
           const SizedBox(height: 16),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 16),
-          InvoiceInfoSection(label: 'BILLED TO', child: _buildBilledTo()),
+          InvoiceInfoSection(
+            label: context.t('invoiceWidgets.billedTo'),
+            child: _buildBilledTo(context),
+          ),
           const SizedBox(height: 16),
           InvoiceInfoSection(
-            label: 'DUE DATE',
+            label: context.t('invoiceWidgets.dueDate'),
             child: Text(
               invoice.dueDate,
               style: const TextStyle(
@@ -59,7 +63,7 @@ class InvoiceInfoCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           InvoiceInfoSection(
-            label: 'PAYMENT METHOD',
+            label: context.t('invoiceWidgets.paymentMethod'),
             child: InvoicePaymentMethodRow(
               method: invoice.paymentMethod,
               maskedReference: invoice.paymentReferenceMasked,
@@ -72,7 +76,7 @@ class InvoiceInfoCard extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryRow() {
+  Widget _buildSummaryRow(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -82,9 +86,9 @@ class InvoiceInfoCard extends StatelessWidget {
             children: [
               InvoiceStatusBadge(status: invoice.status),
               const SizedBox(height: 10),
-              const Text(
-                'Invoice Number',
-                style: TextStyle(fontSize: 12, color: AppColors.grayText),
+              Text(
+                context.t('invoiceWidgets.invoiceNumber'),
+                style: const TextStyle(fontSize: 12, color: AppColors.grayText),
               ),
               const SizedBox(height: 2),
               Text(
@@ -105,17 +109,17 @@ class InvoiceInfoCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text(
-                'Issued Date',
-                textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 12, color: AppColors.grayText),
+              Text(
+                context.t('invoiceWidgets.issuedDate'),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12, color: AppColors.grayText),
               ),
               const SizedBox(height: 2),
               Text(
                 invoice.issuedDate,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
+                textAlign: TextAlign.end,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -129,7 +133,7 @@ class InvoiceInfoCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBilledTo() {
+  Widget _buildBilledTo(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

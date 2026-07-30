@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 /// Full-width secondary red BACK button.
@@ -20,10 +21,10 @@ class SecondaryBackButton extends StatelessWidget {
           width: double.infinity,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
-            child: const Center(
+            child: Center(
               child: Text(
-                'BACK',
-                style: TextStyle(
+                context.t('login.backButton'),
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

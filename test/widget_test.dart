@@ -7,6 +7,10 @@ import 'package:anc_fabrics/main.dart';
 void main() {
   testWidgets('Login screen renders key content', (WidgetTester tester) async {
     await tester.pumpWidget(MyApp());
+    await tester.pump();
+    // The translation delegate loads its JSON asset asynchronously; one
+    // extra pump lets that resolve before asserting on localized text.
+    await tester.pump();
 
     expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.text('MOBILE NUMBER'), findsOneWidget);
@@ -23,6 +27,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(MyApp());
+    await tester.pump();
 
     Finder findPasswordField() => find.ancestor(
       of: find.text('Enter your password'),
@@ -45,6 +50,7 @@ void main() {
   group('Login screen country code picker (real screen, not isolated)', () {
     Future<void> openPicker(WidgetTester tester) async {
       await tester.pumpWidget(MyApp());
+      await tester.pump();
       expect(find.text('+971'), findsOneWidget); // default selection: UAE
       await tester.tap(find.text('+971'));
       await tester.pumpAndSettle();

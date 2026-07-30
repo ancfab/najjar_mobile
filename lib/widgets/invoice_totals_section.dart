@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
@@ -18,11 +19,15 @@ class InvoiceTotalsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildRow('Subtotal', invoice.subtotal),
+        _buildRow(context.t('invoiceWidgets.subtotal'), invoice.subtotal),
         const SizedBox(height: 8),
-        _buildRow('Tax', invoice.taxAmount),
+        _buildRow(context.t('invoiceWidgets.tax'), invoice.taxAmount),
         const SizedBox(height: 10),
-        _buildRow('Total Amount', invoice.totalAmount, emphasized: true),
+        _buildRow(
+          context.t('invoiceWidgets.totalAmount'),
+          invoice.totalAmount,
+          emphasized: true,
+        ),
       ],
     );
   }
@@ -45,7 +50,7 @@ class InvoiceTotalsSection extends StatelessWidget {
         Flexible(
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerEnd,
             child: Text(
               formatCurrency(amount),
               maxLines: 1,

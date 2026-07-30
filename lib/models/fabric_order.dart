@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
+
 /// Order status as understood by the Fabric Orders UI.
 ///
 /// TODO: Confirm the complete list of possible order statuses with the
@@ -26,9 +30,10 @@ OrderStatus mapOrderStatus(String rawStatus) {
   }
 }
 
-/// Human-readable label for an [OrderStatus]. Shared by [StatusBadge], the
-/// Orders filter UI, and mock search/filter matching so the display text
-/// only lives in one place.
+/// Human-readable (English) label for an [OrderStatus]. Used only for
+/// mock/local search-matching (see `MockOrdersService`) where no
+/// [BuildContext] is available — UI display always goes through
+/// [localizedOrderStatusLabel] instead so the shown text is translated.
 String orderStatusLabel(OrderStatus status) {
   switch (status) {
     case OrderStatus.delivered:
@@ -39,6 +44,22 @@ String orderStatusLabel(OrderStatus status) {
       return 'Processing';
     case OrderStatus.unknown:
       return 'Unknown';
+  }
+}
+
+/// Localized display label for an [OrderStatus]. Shared by [StatusBadge],
+/// the Orders filter UI, and the active-filter chip so the display text
+/// only lives in one place.
+String localizedOrderStatusLabel(BuildContext context, OrderStatus status) {
+  switch (status) {
+    case OrderStatus.delivered:
+      return context.t('orderStatus.delivered');
+    case OrderStatus.shipped:
+      return context.t('orderStatus.shipped');
+    case OrderStatus.processing:
+      return context.t('orderStatus.processing');
+    case OrderStatus.unknown:
+      return context.t('orderStatus.unknown');
   }
 }
 

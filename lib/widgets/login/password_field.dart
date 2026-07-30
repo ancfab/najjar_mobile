@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 /// Password field with a show/hide toggle. Masked by default.
@@ -20,9 +21,9 @@ class _PasswordFieldState extends State<PasswordField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'PASSWORD',
-          style: TextStyle(
+        Text(
+          context.t('login.passwordLabel'),
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: Color(0xFF1A1A1A),
@@ -38,7 +39,7 @@ class _PasswordFieldState extends State<PasswordField> {
             textInputAction: TextInputAction.done,
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: InputDecoration(
-              hintText: 'Enter your password',
+              hintText: context.t('login.passwordHint'),
               hintStyle: const TextStyle(
                 color: AppColors.grayText,
                 fontSize: 15,

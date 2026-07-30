@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/invoice.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/invoice_document_actions.dart';
@@ -122,7 +123,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load invoice details.';
+        _error = context.t('invoiceDetails.unableToLoad');
         _isLoading = false;
       });
     }
@@ -153,8 +154,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     await _runPdfAction(
       action: _InvoicePdfAction.print,
       perform: (bytes, filename) => _documentActions.printPdf(bytes, filename),
-      cancelledMessage: 'Printing was cancelled.',
-      failureMessage: 'Unable to print the invoice. Please try again.',
+      cancelledMessage: context.t('invoiceDetails.printCancelled'),
+      failureMessage: context.t('invoiceDetails.printFailed'),
     );
   }
 
@@ -165,8 +166,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     await _runPdfAction(
       action: _InvoicePdfAction.download,
       perform: (bytes, filename) => _documentActions.savePdf(bytes, filename),
-      cancelledMessage: 'Download was cancelled.',
-      failureMessage: 'Unable to prepare the invoice PDF. Please try again.',
+      cancelledMessage: context.t('invoiceDetails.downloadCancelled'),
+      failureMessage: context.t('invoiceDetails.downloadFailed'),
     );
   }
 
@@ -223,9 +224,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   /// behavior.
   void _emailBilledContact() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Emailing the billing contact is not available yet.'),
-      ),
+      SnackBar(content: Text(context.t('invoiceDetails.emailNotAvailable'))),
     );
   }
 
@@ -248,7 +247,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       leading: IconButton(
         key: const ValueKey('invoice-details-menu-button'),
         icon: const Icon(Icons.menu_rounded),
-        tooltip: 'Back',
+        tooltip: context.t('common.back'),
         // No navigation drawer/menu content is defined yet for this screen,
         // so the menu affordance falls back to simple back navigation.
         onPressed: () => Navigator.of(context).maybePop(),
@@ -256,7 +255,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       title: ClampedTextScale(child: _buildBrandTitle()),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: 16),
+          padding: const EdgeInsetsDirectional.only(end: 16),
           child: GestureDetector(
             key: const ValueKey('invoice-details-avatar'),
             onTap: _openProfile,
@@ -347,9 +346,9 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               onInvoicesTap: _openInvoices,
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Invoice Details',
-              style: TextStyle(
+            Text(
+              context.t('invoiceDetails.title'),
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textNavy,
@@ -403,7 +402,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? 'Unable to load invoice details.',
+              _error ?? context.t('invoiceDetails.unableToLoad'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.grayText),
             ),
@@ -414,7 +413,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                 backgroundColor: AppColors.primaryNavy,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Retry'),
+              child: Text(context.t('common.retry')),
             ),
           ],
         ),

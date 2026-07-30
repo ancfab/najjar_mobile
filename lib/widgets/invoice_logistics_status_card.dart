@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_time_format.dart';
@@ -54,9 +55,9 @@ class InvoiceLogisticsStatusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Logistics',
-            style: TextStyle(
+          Text(
+            context.t('invoiceWidgets.logisticsHeading'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,
@@ -136,7 +137,7 @@ class _StatusBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _FieldLabel('STATUS'),
+          _FieldLabel(context.t('invoiceWidgets.status')),
           const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -183,7 +184,7 @@ class _DeliveryBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _FieldLabel('EST. DELIVERY'),
+          _FieldLabel(context.t('invoiceWidgets.estDelivery')),
           const SizedBox(height: 10),
           Text(
             formatDateOnly(estimatedDeliveryDate),

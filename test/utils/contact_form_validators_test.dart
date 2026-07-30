@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:anc_fabrics/models/contact_subject.dart';
 import 'package:anc_fabrics/utils/contact_form_validators.dart';
 
+import '../helpers/localized_test_context.dart';
+
 void main() {
   group('validateRequiredField', () {
     test('returns the message for null input', () {
@@ -30,120 +32,180 @@ void main() {
   });
 
   group('validateEmailField', () {
-    test('returns a required message for null input', () {
-      expect(validateEmailField(null), 'Please enter your work email.');
-    });
-
-    test('returns a required message for empty input', () {
-      expect(validateEmailField(''), 'Please enter your work email.');
-    });
-
-    test('returns a required message for whitespace-only input', () {
-      expect(validateEmailField('   '), 'Please enter your work email.');
-    });
-
-    test('rejects a value missing @', () {
+    testWidgets('returns a required message for null input', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validateEmailField('jane.textile.co'),
+        validateEmailField(context, null),
+        'Please enter your work email.',
+      );
+    });
+
+    testWidgets('returns a required message for empty input', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validateEmailField(context, ''), 'Please enter your work email.');
+    });
+
+    testWidgets('returns a required message for whitespace-only input', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validateEmailField(context, '   '),
+        'Please enter your work email.',
+      );
+    });
+
+    testWidgets('rejects a value missing @', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validateEmailField(context, 'jane.textile.co'),
         'Please enter a valid email address.',
       );
     });
 
-    test('rejects a value missing the local part', () {
+    testWidgets('rejects a value missing the local part', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validateEmailField('@textile.co'),
+        validateEmailField(context, '@textile.co'),
         'Please enter a valid email address.',
       );
     });
 
-    test('rejects a value missing the domain', () {
+    testWidgets('rejects a value missing the domain', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validateEmailField('jane@'),
+        validateEmailField(context, 'jane@'),
         'Please enter a valid email address.',
       );
     });
 
-    test('rejects a value missing a dot in the domain', () {
+    testWidgets('rejects a value missing a dot in the domain', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validateEmailField('jane@textile'),
+        validateEmailField(context, 'jane@textile'),
         'Please enter a valid email address.',
       );
     });
 
-    test('rejects a value containing internal whitespace', () {
+    testWidgets('rejects a value containing internal whitespace', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validateEmailField('jane weaver@textile.co'),
+        validateEmailField(context, 'jane weaver@textile.co'),
         'Please enter a valid email address.',
       );
     });
 
-    test('accepts an ordinary valid address', () {
-      expect(validateEmailField('jane@textile.co'), isNull);
+    testWidgets('accepts an ordinary valid address', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validateEmailField(context, 'jane@textile.co'), isNull);
     });
 
-    test('accepts a valid address with a subdomain and plus tag', () {
-      expect(validateEmailField('jane+support@mail.textile.co'), isNull);
+    testWidgets('accepts a valid address with a subdomain and plus tag', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validateEmailField(context, 'jane+support@mail.textile.co'),
+        isNull,
+      );
     });
 
-    test('trims surrounding whitespace before validating', () {
-      expect(validateEmailField('  jane@textile.co  '), isNull);
+    testWidgets('trims surrounding whitespace before validating', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validateEmailField(context, '  jane@textile.co  '), isNull);
     });
   });
 
   group('validatePhoneField', () {
-    test('returns a required message for null input', () {
-      expect(validatePhoneField(null), 'Please enter your phone number.');
-    });
-
-    test('returns a required message for empty input', () {
-      expect(validatePhoneField(''), 'Please enter your phone number.');
-    });
-
-    test('returns a required message for whitespace-only input', () {
-      expect(validatePhoneField('   '), 'Please enter your phone number.');
-    });
-
-    test('rejects letters', () {
+    testWidgets('returns a required message for null input', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validatePhoneField('abc123'),
+        validatePhoneField(context, null),
+        'Please enter your phone number.',
+      );
+    });
+
+    testWidgets('returns a required message for empty input', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validatePhoneField(context, ''),
+        'Please enter your phone number.',
+      );
+    });
+
+    testWidgets('returns a required message for whitespace-only input', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validatePhoneField(context, '   '),
+        'Please enter your phone number.',
+      );
+    });
+
+    testWidgets('rejects letters', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validatePhoneField(context, 'abc123'),
         'Please enter a valid phone number.',
       );
     });
 
-    test('rejects too few digits', () {
-      expect(validatePhoneField('12345'), 'Please enter a valid phone number.');
-    });
-
-    test('rejects too many digits', () {
+    testWidgets('rejects too few digits', (tester) async {
+      final context = await pumpLocalizedContext(tester);
       expect(
-        validatePhoneField('1234567890123456'),
+        validatePhoneField(context, '12345'),
         'Please enter a valid phone number.',
       );
     });
 
-    test('accepts a plain international number', () {
-      expect(validatePhoneField('+9613123456'), isNull);
+    testWidgets('rejects too many digits', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validatePhoneField(context, '1234567890123456'),
+        'Please enter a valid phone number.',
+      );
     });
 
-    test(
+    testWidgets('accepts a plain international number', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validatePhoneField(context, '+9613123456'), isNull);
+    });
+
+    testWidgets(
       'accepts a number formatted with spaces, hyphens, and parentheses',
-      () {
-        expect(validatePhoneField('+1 (555) 902-3481'), isNull);
+      (tester) async {
+        final context = await pumpLocalizedContext(tester);
+        expect(validatePhoneField(context, '+1 (555) 902-3481'), isNull);
       },
     );
 
-    test('trims surrounding whitespace before validating', () {
-      expect(validatePhoneField('  +1 (555) 902-3481  '), isNull);
+    testWidgets('trims surrounding whitespace before validating', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validatePhoneField(context, '  +1 (555) 902-3481  '), isNull);
     });
   });
 
   group('validateSubjectField', () {
-    test('returns a message when no subject is selected', () {
-      expect(validateSubjectField(null), 'Please select a subject.');
+    testWidgets('returns a message when no subject is selected', (
+      tester,
+    ) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(validateSubjectField(context, null), 'Please select a subject.');
     });
 
-    test('returns null once a subject is selected', () {
-      expect(validateSubjectField(ContactSubject.generalInquiry), isNull);
+    testWidgets('returns null once a subject is selected', (tester) async {
+      final context = await pumpLocalizedContext(tester);
+      expect(
+        validateSubjectField(context, ContactSubject.generalInquiry),
+        isNull,
+      );
     });
   });
 }

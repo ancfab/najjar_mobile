@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Teal bank icon plus the bold payment method line (e.g. "Bank Transfer
@@ -37,7 +38,10 @@ class InvoicePaymentMethodRow extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            '$method (Ending ...$maskedReference)',
+            context.t(
+              'invoiceWidgets.paymentEnding',
+              params: {'method': method, 'reference': maskedReference},
+            ),
             softWrap: true,
             style: const TextStyle(
               fontSize: 14.5,

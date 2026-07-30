@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 
@@ -29,7 +30,11 @@ class InvoicesScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textNavy,
         elevation: 0,
-        title: Text(isOverdue ? 'Overdue Invoices' : 'Invoices'),
+        title: Text(
+          isOverdue
+              ? context.t('invoices.overdueTitle')
+              : context.t('invoices.title'),
+        ),
       ),
       body: SafeArea(
         child: CenteredScrollable(
@@ -37,8 +42,8 @@ class InvoicesScreen extends StatelessWidget {
           child: Center(
             child: Text(
               isOverdue
-                  ? 'Overdue invoices list coming soon'
-                  : 'Invoices list coming soon',
+                  ? context.t('invoices.overdueListComingSoon')
+                  : context.t('invoices.listComingSoon'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.grayText),
             ),

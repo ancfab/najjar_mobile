@@ -29,13 +29,13 @@ class BalanceHistoryRangeSelector extends StatelessWidget {
       child: Row(
         children: [
           for (final range in BalanceHistoryRange.values)
-            Expanded(child: _buildSegment(range)),
+            Expanded(child: _buildSegment(context, range)),
         ],
       ),
     );
   }
 
-  Widget _buildSegment(BalanceHistoryRange range) {
+  Widget _buildSegment(BuildContext context, BalanceHistoryRange range) {
     final isSelected = range == selected;
     return GestureDetector(
       key: ValueKey('balance-history-range-${range.name}'),
@@ -48,7 +48,7 @@ class BalanceHistoryRangeSelector extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: Text(
-          range.label,
+          range.localizedLabel(context),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/invoice.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_time_format.dart';
@@ -43,9 +44,9 @@ class PaymentTimeline extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Payment Timeline',
-            style: TextStyle(
+          Text(
+            context.t('paymentTimeline.heading'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,

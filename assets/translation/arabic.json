@@ -1,0 +1,364 @@
+{
+  "common": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "retry": "إعادة المحاولة",
+    "back": "رجوع",
+    "ok": "موافق",
+    "close": "إغلاق",
+    "reset": "إعادة تعيين",
+    "apply": "تطبيق",
+    "all": "الكل",
+    "search": "بحث",
+    "clear": "مسح",
+    "selectDate": "اختر التاريخ",
+    "errorGeneric": "حدث خطأ ما. يرجى المحاولة مرة أخرى."
+  },
+  "language": {
+    "selectorTitle": "اختر اللغة",
+    "iconTooltip": "تغيير اللغة",
+    "english": "English",
+    "arabic": "العربية",
+    "french": "Français"
+  },
+  "nav": {
+    "home": "الرئيسية",
+    "orders": "الطلبات",
+    "support": "الدعم",
+    "profile": "الملف الشخصي"
+  },
+  "session": {
+    "expired": "انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى.",
+    "restoreFailed": "تعذّر استعادة جلستك الآمنة. يرجى تسجيل الدخول مرة أخرى.",
+    "validationUnavailable": "تعذّر التحقق من جلستك. يرجى التحقق من اتصالك وتسجيل الدخول مرة أخرى."
+  },
+  "home": {
+    "unableToLoadDashboard": "تعذّر تحميل بيانات لوحة المعلومات.",
+    "unableToRefreshDashboard": "تعذّر تحديث بيانات لوحة المعلومات.",
+    "enterCatalogueCodeValidation": "يرجى إدخال رمز الكتالوج.",
+    "availableAtWarehouse": "يتوفر {quantity} ياردة في {warehouse}.",
+    "noAvailabilityFound": "لم يتم العثور على توفر لـ \"{code}\".",
+    "catalogueLookupError": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "settingsComingSoon": "شاشة الإعدادات قريبًا",
+    "scanFabricAvailability": "مسح رمز توفر القماش",
+    "checkAvailability": "التحقق من التوفر",
+    "enterCatalogueCode": "أدخل رمز الكتالوج",
+    "checkAvailabilityHelper": "تحقق بسرعة من التوفر في جميع المستودعات.",
+    "activeOrders": "الطلبات النشطة",
+    "overdueInvoices": "الفواتير المتأخرة"
+  },
+  "balanceCard": {
+    "label": "الرصيد الحالي",
+    "semanticsCurrent": "الرصيد الحالي {amount}",
+    "semanticsHint": "يفتح تفاصيل رصيد الحساب"
+  },
+  "accountBalance": {
+    "unableToLoad": "تعذّر تحميل رصيد الحساب.",
+    "exportFailed": "تعذّر إنشاء كشف الحساب. يرجى المحاولة مرة أخرى.",
+    "fullHistoryUnavailable": "السجل الكامل للمعاملات غير متوفر بعد.",
+    "noStatementEntries": "لا توجد بنود كشف حساب متاحة بعد.",
+    "errorAccountNotSetUp": "لم يتم إعداد حسابك بالكامل بعد. يرجى التواصل مع الدعم.",
+    "errorTemporarilyUnavailable": "غير متاح مؤقتًا.",
+    "errorGeneric": "تعذّر تحميل البيانات الآن.",
+    "quickHistoryTitle": "السجل السريع",
+    "exportPdf": "تصدير PDF",
+    "generatingPdf": "جارٍ الإنشاء...",
+    "globalAccountBalance": "الرصيد الإجمالي للحساب"
+  },
+  "accountTransaction": {
+    "title": "تفاصيل المعاملة",
+    "credit": "دائن",
+    "debit": "مدين",
+    "date": "التاريخ",
+    "reference": "المرجع"
+  },
+  "login": {
+    "welcomeBack": "مرحبًا بعودتك.",
+    "validationRequiredFields": "يرجى تعبئة جميع الحقول المطلوبة.",
+    "validationMobileDigitsOnly": "يجب أن يحتوي رقم الجوال على أرقام فقط.",
+    "failureRequiredFields": "يرجى تعبئة جميع الحقول المطلوبة.",
+    "failureInvalidCredentials": "يرجى التحقق من بيانات الدخول والمحاولة مرة أخرى.",
+    "failureInvalidMobile": "يرجى إدخال رقم جوال صحيح.",
+    "failureNoConnection": "تعذّر الاتصال. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.",
+    "failureServiceUnavailable": "الخدمة غير متاحة مؤقتًا. يرجى المحاولة مرة أخرى.",
+    "failureGeneric": "تعذّر إتمام تسجيل الدخول. يرجى المحاولة مرة أخرى.",
+    "failureSessionNotSaved": "تم تسجيل الدخول بنجاح، لكن تعذّر حفظ الجلسة بأمان. يرجى المحاولة مرة أخرى.",
+    "mobileNumberLabel": "رقم الجوال",
+    "mobileNumberHint": "50 123 4567",
+    "clientNameLabel": "اسم العميل",
+    "clientNameHint": "أدخل اسمك",
+    "passwordLabel": "كلمة المرور",
+    "passwordHint": "أدخل كلمة المرور",
+    "loginButton": "تسجيل الدخول",
+    "backButton": "رجوع",
+    "contactUsLink": "بحاجة إلى مساعدة؟ تواصل معنا",
+    "footerCopyright": "© 2024 INDIGO LOOM TEXTILE PORTAL. جميع الحقوق محفوظة.",
+    "privacyPolicy": "سياسة الخصوصية",
+    "termsOfService": "شروط الخدمة"
+  },
+  "orders": {
+    "unableToLoad": "تعذّر تحميل الطلبات.",
+    "unableToRefresh": "تعذّر تحديث الطلبات.",
+    "cancelSearch": "إلغاء",
+    "searchOrdersTooltip": "البحث في الطلبات",
+    "clientPortalTitle": "بوابة العملاء",
+    "searchHint": "البحث برقم الطلب أو القماش أو الحالة...",
+    "clearSearchTooltip": "مسح البحث",
+    "globalLogisticsEyebrow": "الخدمات اللوجستية العالمية",
+    "fabricOrdersTitle": "طلبات الأقمشة",
+    "filterButton": "تصفية",
+    "filterButtonWithCount": "تصفية ({count})",
+    "showingCount": "عرض {shown} من {total} طلب",
+    "pageOf": "صفحة {page} من {totalPages}",
+    "noOrdersFiltered": "لا توجد طلبات مطابقة للتصفية المحددة.",
+    "noOrdersYet": "لا توجد طلبات بعد.",
+    "resetFilters": "إعادة تعيين التصفية"
+  },
+  "orderDetail": {
+    "unableToLoad": "تعذّر تحميل تفاصيل الطلب.",
+    "historyComingSoon": "سجل الطلب قريبًا",
+    "title": "تفاصيل الطلب",
+    "breadcrumbOrders": "الطلبات",
+    "placedOn": "تم الطلب في {date}",
+    "itemsHeader": "عناصر الطلب",
+    "fabricSpecsAction": "مواصفات القماش",
+    "historyHeader": "سجل الطلب",
+    "viewTimelineAction": "عرض الجدول الزمني للطلب"
+  },
+  "orderStatus": {
+    "delivered": "تم التسليم",
+    "shipped": "تم الشحن",
+    "processing": "قيد المعالجة",
+    "unknown": "غير معروف"
+  },
+  "dateRangeFilter": {
+    "all": "كل التواريخ",
+    "last7Days": "آخر 7 أيام",
+    "last30Days": "آخر 30 يومًا",
+    "custom": "نطاق مخصص"
+  },
+  "orderFilter": {
+    "title": "تصفية الطلبات",
+    "status": "الحالة",
+    "dateRange": "النطاق الزمني",
+    "fabricType": "نوع القماش",
+    "startDate": "تاريخ البدء",
+    "endDate": "تاريخ الانتهاء"
+  },
+  "invoices": {
+    "overdueTitle": "الفواتير المتأخرة",
+    "title": "الفواتير",
+    "overdueListComingSoon": "قائمة الفواتير المتأخرة قريبًا",
+    "listComingSoon": "قائمة الفواتير قريبًا"
+  },
+  "invoiceDetails": {
+    "title": "تفاصيل الفاتورة",
+    "unableToLoad": "تعذّر تحميل تفاصيل الفاتورة.",
+    "printCancelled": "تم إلغاء الطباعة.",
+    "printFailed": "تعذّرت طباعة الفاتورة. يرجى المحاولة مرة أخرى.",
+    "downloadCancelled": "تم إلغاء التنزيل.",
+    "downloadFailed": "تعذّر تجهيز ملف PDF للفاتورة. يرجى المحاولة مرة أخرى.",
+    "emailNotAvailable": "إرسال البريد الإلكتروني لجهة الفوترة غير متاح بعد."
+  },
+  "invoiceStatus": {
+    "paid": "مدفوعة"
+  },
+  "invoiceWidgets": {
+    "invoiceNumber": "رقم الفاتورة",
+    "issuedDate": "تاريخ الإصدار",
+    "billedTo": "الفاتورة موجهة إلى",
+    "dueDate": "تاريخ الاستحقاق",
+    "paymentMethod": "طريقة الدفع",
+    "itemDetails": "تفاصيل الصنف",
+    "qty": "الكمية",
+    "unitPrice": "سعر الوحدة",
+    "total": "الإجمالي",
+    "logisticsHeading": "الخدمات اللوجستية",
+    "status": "الحالة",
+    "estDelivery": "موعد التسليم المتوقع",
+    "internalNotes": "ملاحظات داخلية",
+    "paymentEnding": "{method} (ينتهي بـ ...{reference})",
+    "subtotal": "المجموع الفرعي",
+    "tax": "الضريبة",
+    "totalAmount": "المبلغ الإجمالي",
+    "print": "طباعة",
+    "downloadPdf": "تنزيل PDF"
+  },
+  "priceBreakdown": {
+    "heading": "تفاصيل السعر",
+    "subtotal": "المجموع الفرعي",
+    "shipping": "الشحن",
+    "vat": "ضريبة القيمة المضافة",
+    "totalAmount": "المبلغ الإجمالي",
+    "invoiceButton": "الفاتورة"
+  },
+  "scanStock": {
+    "title": "مسح المخزون",
+    "stockCheckComingSoon": "التحقق من توفر المخزون قريبًا",
+    "scanHistoryComingSoon": "سجل المسح قريبًا",
+    "flashToggleComingSoon": "تبديل الفلاش قريبًا",
+    "toggleFlashTooltip": "تبديل الفلاش",
+    "centerQrInstruction": "ضع رمز الاستجابة السريعة في وسط الإطار",
+    "checkStockButton": "التحقق من توفر المخزون",
+    "recentScanLabel": "آخر عملية مسح",
+    "viewHistoryButton": "عرض السجل"
+  },
+  "support": {
+    "title": "الدعم",
+    "tag": "مركز الدعم",
+    "heroHeading": "كيف يمكننا مساعدة عملك على الازدهار؟",
+    "intro": "متخصصو المنسوجات وخبراء سلسلة التوريد لدينا متاحون على مدار الساعة لضمان استمرارية إنتاجك دون انقطاع.",
+    "whatsappUnavailable": "دعم واتساب غير متاح لـ {region} بعد.",
+    "whatsappOpenFailed": "تعذّر فتح واتساب لـ {region}. يرجى المحاولة لاحقًا.",
+    "hotlineUnavailable": "رقم الخط الساخن هذا غير متاح.",
+    "dialerUnavailable": "تعذّر فتح تطبيق الاتصال. يرجى المحاولة مرة أخرى.",
+    "corporateOfficeLabel": "المكتب الرئيسي",
+    "officeDetailsFallback": "سيتم إضافة تفاصيل المكتب لـ {region} قريبًا.",
+    "directHotlineLabel": "الخط الساخن المباشر",
+    "hoursFallback": "سيتم تأكيد ساعات الدعم لـ {region} قريبًا.",
+    "hotlineFallback": "سيتم إضافة أرقام الخط الساخن لـ {region} قريبًا.",
+    "callNumber": "اتصال بـ {number}"
+  },
+  "supportAction": {
+    "heading": "دعم مباشر من متخصص",
+    "description": "تواصل فوري مع متخصصي المنسوجات لدينا. احصل على تحديثات لحظية حول توفر الأقمشة والخدمات اللوجستية.",
+    "chatWhatsapp": "الدردشة عبر واتساب",
+    "emailSupport": "الدعم عبر البريد الإلكتروني"
+  },
+  "supportHours": {
+    "label": "ساعات الدعم"
+  },
+  "supportTextileVisual": {
+    "tagline": "دقة على مدار الساعة"
+  },
+  "supportRegion": {
+    "uae": "الإمارات العربية المتحدة",
+    "syria": "سوريا",
+    "iraq": "العراق",
+    "oman": "عُمان",
+    "lebanon": "لبنان"
+  },
+  "contactUs": {
+    "title": "تواصل معنا",
+    "tag": "مركز الدعم",
+    "intro": "تواصل مع خبراء المنسوجات لدينا لتحسين سلسلة التوريد الخاصة بك أو للاستفسار عن مجموعات النسيج الفاخرة لدينا.",
+    "successMessage": "شكرًا لك — لقد استلمنا رسالتك وسنتواصل معك قريبًا.",
+    "failureMessage": "تعذّر إرسال رسالتك. يرجى المحاولة مرة أخرى.",
+    "emailUnavailable": "إرسال البريد الإلكتروني للدعم غير مفعّل بعد.",
+    "backToSupport": "العودة إلى الدعم",
+    "emailUsLabel": "راسلنا عبر البريد الإلكتروني",
+    "emailFallback": "سيتم إضافة تفاصيل البريد الإلكتروني للدعم قريبًا.",
+    "mainOfficeLabel": "المكتب الرئيسي",
+    "officeFallback": "سيتم إضافة تفاصيل المكتب لـ {region} قريبًا.",
+    "fullNameLabel": "الاسم الكامل",
+    "fullNameHint": "جين ويفر",
+    "fullNameError": "يرجى إدخال اسمك الكامل.",
+    "workEmailLabel": "البريد الإلكتروني للعمل",
+    "workEmailHint": "jane@textile.co",
+    "subjectLabel": "الموضوع",
+    "selectSubjectHint": "اختر موضوعًا",
+    "messageLabel": "نص الرسالة",
+    "messageHint": "أخبرنا المزيد عن متطلبات مشروعك...",
+    "messageError": "يرجى إدخال رسالة.",
+    "sendButton": "إرسال البريد الإلكتروني"
+  },
+  "contactSubject": {
+    "orderStatusInquiry": "استفسار عن حالة الطلب",
+    "productAvailability": "توفر المنتج",
+    "invoiceOrPayment": "الفاتورة أو الدفع",
+    "technicalSupport": "الدعم الفني",
+    "generalInquiry": "استفسار عام",
+    "other": "أخرى"
+  },
+  "editProfile": {
+    "title": "تعديل الملف الشخصي",
+    "changePhotoTooltip": "تغيير صورة الملف الشخصي",
+    "cameraSource": "الكاميرا",
+    "gallerySource": "مكتبة الصور",
+    "accessTurnedOff": "الوصول إلى {label} مغلق لهذا التطبيق. فعّله من الإعدادات للمتابعة.",
+    "openSettings": "فتح الإعدادات",
+    "takePhoto": "التقاط صورة",
+    "chooseFromGallery": "اختيار من المعرض",
+    "cameraAccessNeeded": "الوصول إلى الكاميرا مطلوب لالتقاط صورة. يرجى السماح بالوصول والمحاولة مرة أخرى.",
+    "galleryAccessNeeded": "الوصول إلى مكتبة الصور مطلوب لاختيار صورة. يرجى السماح بالوصول والمحاولة مرة أخرى.",
+    "accessRestricted": "هذا الوصول مقيّد على هذا الجهاز.",
+    "pickerFailed": "تعذّر فتح أداة الاختيار. يرجى المحاولة مرة أخرى.",
+    "photoUnusable": "تعذّر استخدام هذه الصورة. يرجى اختيار صورة أخرى.",
+    "fileNotFound": "تعذّر العثور على هذه الصورة. يرجى المحاولة مرة أخرى.",
+    "emptyFile": "يبدو أن هذا الملف فارغ. يرجى اختيار صورة أخرى.",
+    "tooLarge": "هذه الصورة كبيرة جدًا. يرجى اختيار صورة أصغر.",
+    "unreadableFile": "تعذّرت قراءة هذه الصورة. يرجى المحاولة مرة أخرى.",
+    "unsupportedFormat": "يرجى اختيار صورة بصيغة JPG أو PNG أو HEIC.",
+    "corruptImage": "هذا الملف ليس صورة صالحة. يرجى اختيار صورة أخرى.",
+    "photoUpdatedOnDevice": "تم تحديث صورة الملف الشخصي على هذا الجهاز.",
+    "cropFailed": "تعذّر قص هذه الصورة. يرجى المحاولة مرة أخرى.",
+    "cropToolbarTitle": "قص الصورة",
+    "previewTitle": "معاينة الصورة",
+    "chooseAgain": "اختيار مرة أخرى",
+    "usePhoto": "استخدام الصورة",
+    "photoUpdateFailed": "تعذّر تحديث صورتك. يرجى المحاولة مرة أخرى.",
+    "photoUpdated": "تم تحديث صورة الملف الشخصي.",
+    "profileUpdated": "تم تحديث الملف الشخصي.",
+    "profileSaveFailed": "تعذّر حفظ تغييراتك. يرجى المحاولة مرة أخرى.",
+    "profileUpdatesNotConnected": "تحديثات الملف الشخصي غير مفعّلة بعد.",
+    "signOutFailed": "تعذّر تسجيل الخروج بأمان. يرجى المحاولة مرة أخرى.",
+    "discardChangesTitle": "تجاهل التغييرات؟",
+    "discardChangesBody": "لديك تغييرات غير محفوظة في ملفك الشخصي. إذا غادرت الآن، ستفقد هذه التغييرات.",
+    "keepEditing": "متابعة التعديل",
+    "discard": "تجاهل",
+    "ancIdLabel": "رقم ANC: #{id}",
+    "fullNameFieldLabel": "الاسم الكامل",
+    "fullNameFieldError": "يرجى إدخال اسمك الكامل.",
+    "emailFieldLabel": "البريد الإلكتروني",
+    "phoneFieldLabel": "رقم الهاتف",
+    "companyFieldLabel": "الشركة",
+    "companyFieldError": "يرجى إدخال اسم شركتك.",
+    "addressFieldLabel": "عنوان العمل",
+    "addressFieldError": "يرجى إدخال عنوان عملك.",
+    "saveChanges": "حفظ التغييرات",
+    "logout": "تسجيل الخروج"
+  },
+  "validators": {
+    "emailRequired": "يرجى إدخال بريدك الإلكتروني للعمل.",
+    "emailInvalid": "يرجى إدخال بريد إلكتروني صحيح.",
+    "phoneRequired": "يرجى إدخال رقم هاتفك.",
+    "phoneInvalid": "يرجى إدخال رقم هاتف صحيح.",
+    "subjectRequired": "يرجى اختيار موضوع."
+  },
+  "balanceHistory": {
+    "heading": "سجل الرصيد",
+    "subtitle": "تحليل الاتجاه من {start} إلى {end}"
+  },
+  "balanceHistoryRange": {
+    "days30": "30 يومًا",
+    "days90": "90 يومًا",
+    "year1": "سنة واحدة"
+  },
+  "creditUtilization": {
+    "heading": "استخدام الائتمان",
+    "availableCredit": "الائتمان المتاح",
+    "usedCredit": "الائتمان المستخدم"
+  },
+  "fabricSpecs": {
+    "title": "مواصفات القماش",
+    "sku": "رمز الصنف",
+    "color": "اللون",
+    "weight": "الوزن/GSM",
+    "quantity": "الكمية",
+    "composition": "التركيبة"
+  },
+  "lastPayment": {
+    "label": "آخر دفعة"
+  },
+  "paymentTimeline": {
+    "heading": "الجدول الزمني للدفعات"
+  },
+  "quickHistory": {
+    "heading": "السجل السريع"
+  },
+  "countryCodePicker": {
+    "selectTitle": "اختر رمز الدولة",
+    "searchHint": "ابحث بالدولة أو الرمز أو رمز ISO",
+    "noResults": "لم يتم العثور على دول"
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 /// Full-width primary navy LOGIN button with a trailing icon and optional
@@ -36,20 +37,20 @@ class PrimaryLoginButton extends StatelessWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Row(
+                  : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'LOGIN',
-                          style: TextStyle(
+                          context.t('login.loginButton'),
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,
                           ),
                         ),
-                        SizedBox(width: 8),
-                        Icon(
+                        const SizedBox(width: 8),
+                        const Icon(
                           Icons.login_rounded,
                           color: Colors.white,
                           size: 20,

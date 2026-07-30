@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
 import '../models/contact_subject.dart';
 
 /// Validates a required text field (e.g. name, message body): rejects
@@ -17,13 +20,13 @@ String? validateRequiredField(String? value, String requiredMessage) {
 /// ordinary valid addresses.
 final RegExp emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-String? validateEmailField(String? value) {
+String? validateEmailField(BuildContext context, String? value) {
   final trimmed = value?.trim() ?? '';
   if (trimmed.isEmpty) {
-    return 'Please enter your work email.';
+    return context.t('validators.emailRequired');
   }
   if (!emailPattern.hasMatch(trimmed)) {
-    return 'Please enter a valid email address.';
+    return context.t('validators.emailInvalid');
   }
   return null;
 }
@@ -38,16 +41,16 @@ final RegExp _phoneAllowedCharacters = RegExp(r'^\+?[0-9\s\-()]+$');
 /// than digits/`+`/spaces/hyphens/parentheses, and digit counts outside the
 /// 7-15 range international numbers (with their country code, if included)
 /// fall into.
-String? validatePhoneField(String? value) {
+String? validatePhoneField(BuildContext context, String? value) {
   final trimmed = value?.trim() ?? '';
   if (trimmed.isEmpty) {
-    return 'Please enter your phone number.';
+    return context.t('validators.phoneRequired');
   }
   final digitCount = trimmed.replaceAll(RegExp(r'[^0-9]'), '').length;
   if (!_phoneAllowedCharacters.hasMatch(trimmed) ||
       digitCount < 7 ||
       digitCount > 15) {
-    return 'Please enter a valid phone number.';
+    return context.t('validators.phoneInvalid');
   }
   return null;
 }
@@ -55,9 +58,9 @@ String? validatePhoneField(String? value) {
 /// Requires an explicit subject selection — the dropdown's placeholder
 /// hint ("Select a subject") is not itself a selectable value, so a `null`
 /// selection is the only invalid state to check for here.
-String? validateSubjectField(ContactSubject? value) {
+String? validateSubjectField(BuildContext context, ContactSubject? value) {
   if (value == null) {
-    return 'Please select a subject.';
+    return context.t('validators.subjectRequired');
   }
   return null;
 }

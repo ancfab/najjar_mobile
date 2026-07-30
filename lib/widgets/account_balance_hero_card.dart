@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
 
@@ -56,9 +57,9 @@ class AccountBalanceHeroCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'GLOBAL ACCOUNT BALANCE',
-                style: TextStyle(
+              Text(
+                context.t('accountBalance.globalAccountBalance'),
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.2,
@@ -68,7 +69,7 @@ class AccountBalanceHeroCard extends StatelessWidget {
               const SizedBox(height: 10),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: Text(
                   formatCurrency(balance),
                   maxLines: 1,
@@ -106,7 +107,7 @@ class AccountBalanceHeroCard extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: ElevatedButton(
                   key: const ValueKey('account-balance-export-pdf-button'),
                   onPressed: isExporting ? null : onExportPdf,
@@ -125,10 +126,10 @@ class AccountBalanceHeroCard extends StatelessWidget {
                     ),
                   ),
                   child: isExporting
-                      ? const Row(
+                      ? Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               key: ValueKey(
                                 'account-balance-export-pdf-loading',
                               ),
@@ -139,10 +140,10 @@ class AccountBalanceHeroCard extends StatelessWidget {
                                 color: Colors.white,
                               ),
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                'Generating...',
+                                context.t('accountBalance.generatingPdf'),
                                 textAlign: TextAlign.center,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -150,18 +151,18 @@ class AccountBalanceHeroCard extends StatelessWidget {
                             ),
                           ],
                         )
-                      : const Row(
+                      : Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.upload_file_rounded,
                               size: 16,
                               color: Colors.white,
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                'Export PDF',
+                                context.t('accountBalance.exportPdf'),
                                 textAlign: TextAlign.center,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

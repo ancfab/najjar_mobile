@@ -37,6 +37,8 @@ import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 // Recommended test dimensions from the audit brief: small, standard, and
 // large phones, plus a tablet.
@@ -66,6 +68,10 @@ Future<void> _setSize(
 /// services' ~600ms delay) so `pumpAndSettle` always has real data to settle
 /// on instead of a perpetual loading state.
 Future<void> _settleFetch(WidgetTester tester) async {
+  // Lets the translation delegate's async asset load resolve first,
+  // so the screen actually mounts (and its own fetch begins) before
+  // the mock-service delay below is counted down.
+  await tester.pump();
   await tester.pump(const Duration(milliseconds: 700));
   await tester.pumpAndSettle();
 }
@@ -101,7 +107,18 @@ void main() {
 
   group('Home screen', () {
     Future<void> pumpHome(WidgetTester tester) async {
-      await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: HomeScreen(),
+        ),
+      );
       await _settleFetch(tester);
     }
 
@@ -141,7 +158,18 @@ void main() {
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
-          await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+          await tester.pumpWidget(
+            const MaterialApp(
+              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+              localizationsDelegates: [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: OrdersScreen(),
+            ),
+          );
           await _settleFetch(tester);
           expect(tester.takeException(), isNull);
         },
@@ -150,14 +178,36 @@ void main() {
 
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: OrdersScreen(),
+        ),
+      );
       await _settleFetch(tester);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('No overflow in landscape', (tester) async {
       await _setSize(tester, const Size(844, 390));
-      await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: OrdersScreen(),
+        ),
+      );
       await _settleFetch(tester);
       expect(tester.takeException(), isNull);
     });
@@ -170,7 +220,16 @@ void main() {
         (tester) async {
           await _setSize(tester, size);
           await tester.pumpWidget(
-            const MaterialApp(home: OrderDetailScreen(orderId: '#ORD-8829')),
+            const MaterialApp(
+              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+              localizationsDelegates: [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: OrderDetailScreen(orderId: '#ORD-8829'),
+            ),
           );
           await _settleFetch(tester);
           expect(tester.takeException(), isNull);
@@ -181,7 +240,16 @@ void main() {
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
       await tester.pumpWidget(
-        const MaterialApp(home: OrderDetailScreen(orderId: '#ORD-8829')),
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: OrderDetailScreen(orderId: '#ORD-8829'),
+        ),
       );
       await _settleFetch(tester);
       expect(tester.takeException(), isNull);
@@ -194,7 +262,18 @@ void main() {
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
-          await tester.pumpWidget(const MaterialApp(home: ScanStockScreen()));
+          await tester.pumpWidget(
+            const MaterialApp(
+              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+              localizationsDelegates: [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ScanStockScreen(),
+            ),
+          );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
@@ -205,7 +284,18 @@ void main() {
       'No overflow in a short landscape height (e.g. small-phone landscape)',
       (tester) async {
         await _setSize(tester, const Size(568, 320));
-        await tester.pumpWidget(const MaterialApp(home: ScanStockScreen()));
+        await tester.pumpWidget(
+          const MaterialApp(
+            supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: ScanStockScreen(),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       },
@@ -213,7 +303,18 @@ void main() {
 
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(const MaterialApp(home: ScanStockScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ScanStockScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
@@ -226,6 +327,13 @@ void main() {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: Builder(
                 builder: (context) => TextButton(
@@ -257,6 +365,7 @@ void main() {
             ),
           ),
         );
+        await tester.pump();
 
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
@@ -272,6 +381,13 @@ void main() {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: Builder(
                 builder: (context) => TextButton(
@@ -292,6 +408,7 @@ void main() {
             ),
           ),
         );
+        await tester.pump();
 
         await tester.tap(find.text('Open'));
         await tester.pumpAndSettle();
@@ -308,6 +425,13 @@ void main() {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: CountryCodePicker(
                 selectedCountry: kDefaultCountryCode,
@@ -316,6 +440,7 @@ void main() {
             ),
           ),
         );
+        await tester.pump();
 
         await tester.tap(find.text(kDefaultCountryCode.dialCode));
         await tester.pumpAndSettle();
@@ -332,7 +457,18 @@ void main() {
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
-          await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+          await tester.pumpWidget(
+            const MaterialApp(
+              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+              localizationsDelegates: [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: SupportScreen(),
+            ),
+          );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
@@ -341,21 +477,54 @@ void main() {
 
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('No overflow in landscape', (tester) async {
       await _setSize(tester, const Size(844, 390));
-      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('Content column is width-capped on tablet', (tester) async {
       await _setSize(tester, _tablet);
-      await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final cardWidth = tester
@@ -374,7 +543,18 @@ void main() {
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
-          await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+          await tester.pumpWidget(
+            const MaterialApp(
+              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+              localizationsDelegates: [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ContactUsScreen(),
+            ),
+          );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
@@ -383,21 +563,54 @@ void main() {
 
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ContactUsScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('No overflow in landscape', (tester) async {
       await _setSize(tester, const Size(844, 390));
-      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ContactUsScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('Content column is width-capped on tablet', (tester) async {
       await _setSize(tester, _tablet);
-      await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ContactUsScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final cardWidth = tester
@@ -415,7 +628,18 @@ void main() {
       'Invoices screen has no overflow at small width + 1.5x text scale',
       (tester) async {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
-        await tester.pumpWidget(const MaterialApp(home: InvoicesScreen()));
+        await tester.pumpWidget(
+          const MaterialApp(
+            supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: InvoicesScreen(),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       },
@@ -426,6 +650,13 @@ void main() {
     Future<void> pumpAccountBalance(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
@@ -487,6 +718,13 @@ void main() {
     Future<void> pumpTransactionDetails(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: AccountTransactionDetailsScreen(transaction: transaction),
         ),
       );
@@ -536,6 +774,13 @@ void main() {
     Future<void> pumpInvoiceDetails(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: InvoiceDetailsScreen(
             invoiceNumber: '#INV-8821',
             pdfService: FakeInvoicePdfService(),
@@ -587,9 +832,17 @@ void main() {
     Future<void> pumpBottomNav(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(body: CustomBottomNav(currentIndex: 0, onTap: (_) {})),
         ),
       );
+      await tester.pump();
     }
 
     for (final size in _sizes) {
@@ -619,7 +872,18 @@ void main() {
   group('Edit Profile screen', () {
     testWidgets('No overflow at small width + 1.5x text scale', (tester) async {
       await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
-      await tester.pumpWidget(MaterialApp(home: EditProfileScreen()));
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: EditProfileScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });

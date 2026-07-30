@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/widgets/invoice_action_buttons.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpButtons(
   WidgetTester tester, {
@@ -15,6 +17,13 @@ Future<void> _pumpButtons(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: InvoiceActionButtons(
           onPrint: onPrint ?? () {},
@@ -25,6 +34,7 @@ Future<void> _pumpButtons(
       ),
     ),
   );
+  await tester.pump();
 }
 
 void main() {
@@ -83,9 +93,7 @@ void main() {
       onDownloadPdf: () => downloadTaps++,
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('invoice-action-print-button')),
-    );
+    await tester.tap(find.byKey(const ValueKey('invoice-action-print-button')));
     await tester.tap(
       find.byKey(const ValueKey('invoice-action-download-pdf-button')),
     );

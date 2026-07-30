@@ -101,12 +101,16 @@ class InvoiceLineItemRow extends StatelessWidget {
     );
   }
 
-  Widget _buildAmount(String value, {required Color color, required bool bold}) {
+  Widget _buildAmount(
+    String value, {
+    required Color color,
+    required bool bold,
+  }) {
     return Align(
-      alignment: Alignment.centerRight,
+      alignment: AlignmentDirectional.centerEnd,
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        alignment: Alignment.centerRight,
+        alignment: AlignmentDirectional.centerEnd,
         child: Text(
           value,
           maxLines: 1,

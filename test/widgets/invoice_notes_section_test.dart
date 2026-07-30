@@ -6,11 +6,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/widgets/invoice_notes_section.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpSection(WidgetTester tester, String? note) async {
   await tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: InvoiceNotesSection(note: note))),
+    MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Scaffold(body: InvoiceNotesSection(note: note)),
+    ),
   );
+  await tester.pump();
 }
 
 void main() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/fabric_order.dart';
 import '../models/fabric_order_filter.dart';
 import '../models/paginated_fabric_orders.dart';
@@ -90,7 +91,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load orders.';
+        _error = context.t('orders.unableToLoad');
         _isLoading = false;
       });
     }
@@ -111,7 +112,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Unable to refresh orders.');
+      setState(() => _error = context.t('orders.unableToRefresh'));
     }
   }
 
@@ -252,9 +253,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
             TextButton(
               key: const ValueKey('orders-search-cancel'),
               onPressed: _closeSearch,
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
+              child: Text(
+                context.t('orders.cancelSearch'),
+                style: const TextStyle(
                   color: AppColors.textNavy,
                   fontWeight: FontWeight.w600,
                 ),
@@ -264,7 +265,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             IconButton(
               key: const ValueKey('orders-search-open'),
               icon: const Icon(Icons.search_rounded),
-              tooltip: 'Search orders',
+              tooltip: context.t('orders.searchOrdersTooltip'),
               onPressed: _openSearch,
             ),
         ],
@@ -342,9 +343,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const Text(
-                'Client Portal',
-                style: TextStyle(
+              Text(
+                context.t('orders.clientPortalTitle'),
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textNavy,
@@ -370,14 +371,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
       decoration: InputDecoration(
         isDense: true,
         border: InputBorder.none,
-        hintText: 'Search order ID, fabric, status...',
+        hintText: context.t('orders.searchHint'),
         hintStyle: const TextStyle(fontSize: 14, color: AppColors.grayText),
         suffixIcon: _searchController.text.isEmpty
             ? null
             : IconButton(
                 key: const ValueKey('orders-search-clear'),
                 icon: const Icon(Icons.close_rounded, size: 18),
-                tooltip: 'Clear search',
+                tooltip: context.t('orders.clearSearchTooltip'),
                 onPressed: _clearSearchText,
               ),
       ),
@@ -386,22 +387,22 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _buildPageIntro() {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'GLOBAL LOGISTICS',
-          style: TextStyle(
+          context.t('orders.globalLogisticsEyebrow'),
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.2,
             color: AppColors.grayText,
           ),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
-          'Fabric Orders',
-          style: TextStyle(
+          context.t('orders.fabricOrdersTitle'),
+          style: const TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
             color: AppColors.textNavy,
@@ -473,7 +474,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                isActive ? 'Filter ($count)' : 'Filter',
+                isActive
+                    ? context.t(
+                        'orders.filterButtonWithCount',
+                        params: {'count': '$count'},
+                      )
+                    : context.t('orders.filterButton'),
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
@@ -493,7 +499,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       chips.add(
         _activeFilterChip(
           key: const ValueKey('active-filter-status'),
-          label: orderStatusLabel(_filter.status!),
+          label: localizedOrderStatusLabel(context, _filter.status!),
           onClear: _clearStatusFilter,
         ),
       );
@@ -502,7 +508,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       chips.add(
         _activeFilterChip(
           key: const ValueKey('active-filter-date-range'),
-          label: dateRangeFilterLabel(_filter.dateRange),
+          label: dateRangeFilterLabel(context, _filter.dateRange),
           onClear: _clearDateRangeFilter,
         ),
       );
@@ -673,7 +679,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
           children: [
             Expanded(
               child: Text(
-                'Showing ${result.items.length} of ${result.totalCount} orders',
+                context.t(
+                  'orders.showingCount',
+                  params: {
+                    'shown': '${result.items.length}',
+                    'total': '${result.totalCount}',
+                  },
+                ),
                 key: const ValueKey('orders-results-counter'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -700,7 +712,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Page ${result.page} of ${result.totalPages}',
+          context.t(
+            'orders.pageOf',
+            params: {
+              'page': '${result.page}',
+              'totalPages': '${result.totalPages}',
+            },
+          ),
           key: const ValueKey('orders-page-indicator'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -733,7 +751,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
         minimumSize: const Size(32, 32),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      child: Icon(icon, size: 18),
+      child: Transform.flip(
+        flipX: Directionality.of(context) == TextDirection.rtl,
+        child: Icon(icon, size: 18),
+      ),
     );
   }
 
@@ -757,7 +778,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _error ?? 'Unable to load orders.',
+            _error ?? context.t('orders.unableToLoad'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.grayText),
           ),
@@ -768,7 +789,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               backgroundColor: AppColors.primaryNavy,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Retry'),
+            child: Text(context.t('common.retry')),
           ),
         ],
       ),
@@ -793,8 +814,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
           const SizedBox(height: 8),
           Text(
             hasActiveCriteria
-                ? 'No orders match the selected filters.'
-                : 'No orders yet.',
+                ? context.t('orders.noOrdersFiltered')
+                : context.t('orders.noOrdersYet'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.grayText),
           ),
@@ -803,7 +824,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             TextButton(
               key: const ValueKey('orders-empty-reset-filters'),
               onPressed: _resetAllFiltersAndSearch,
-              child: const Text('Reset filters'),
+              child: Text(context.t('orders.resetFilters')),
             ),
           ],
         ],

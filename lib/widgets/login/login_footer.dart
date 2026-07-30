@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 /// Footer with copyright text and tappable Privacy Policy / Terms of Service
@@ -18,10 +19,10 @@ class LoginFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Text(
-          '© 2024 INDIGO LOOM TEXTILE PORTAL. ALL RIGHTS RESERVED.',
+        Text(
+          context.t('login.footerCopyright'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: Color(0xFF1A1A1A),
@@ -34,8 +35,14 @@ class LoginFooter extends StatelessWidget {
           spacing: 16,
           runSpacing: 4,
           children: [
-            _FooterLink(text: 'Privacy Policy', onTap: onPrivacyPolicyTap),
-            _FooterLink(text: 'Terms of Service', onTap: onTermsOfServiceTap),
+            _FooterLink(
+              text: context.t('login.privacyPolicy'),
+              onTap: onPrivacyPolicyTap,
+            ),
+            _FooterLink(
+              text: context.t('login.termsOfService'),
+              onTap: onTermsOfServiceTap,
+            ),
           ],
         ),
       ],

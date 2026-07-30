@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Breadcrumb shown at the top of the Invoice Details screen: "Invoices >
@@ -24,21 +25,24 @@ class InvoiceBreadcrumb extends StatelessWidget {
         GestureDetector(
           key: const ValueKey('invoice-details-breadcrumb-invoices'),
           onTap: onInvoicesTap,
-          child: const Text(
-            'Invoices',
-            style: TextStyle(
+          child: Text(
+            context.t('invoices.title'),
+            style: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
               color: AppColors.grayText,
             ),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Icon(
-            Icons.chevron_right_rounded,
-            size: 16,
-            color: AppColors.grayText,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Transform.flip(
+            flipX: Directionality.of(context) == TextDirection.rtl,
+            child: const Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: AppColors.grayText,
+            ),
           ),
         ),
         Expanded(

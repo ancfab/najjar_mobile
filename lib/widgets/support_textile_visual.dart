@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 /// Decorative indigo textile panel shown between the Live Specialist
@@ -40,7 +41,7 @@ class SupportTextileVisual extends StatelessWidget {
                 right: 16,
                 bottom: 14,
                 child: Text(
-                  '24/7 Precision',
+                  context.t('supportTextileVisual.tagline'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

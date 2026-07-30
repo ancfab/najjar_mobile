@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/invoice.dart';
 import 'package:anc_fabrics/widgets/payment_timeline.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 final _events = [
   InvoiceTimelineEvent(
@@ -36,11 +38,19 @@ Future<void> _pumpTimeline(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: SingleChildScrollView(child: PaymentTimeline(events: events)),
       ),
     ),
   );
+  await tester.pump();
 }
 
 void main() {

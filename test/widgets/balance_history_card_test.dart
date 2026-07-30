@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:anc_fabrics/models/balance_history_point.dart';
 import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/widgets/balance_history_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 final _points = [
   BalanceHistoryPoint(date: DateTime(2023, 10, 1), balance: 38100.00),
@@ -24,6 +26,13 @@ Future<void> _pumpCard(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: BalanceHistoryCard(
           points: points,
@@ -34,6 +43,7 @@ Future<void> _pumpCard(
       ),
     ),
   );
+  await tester.pump();
 }
 
 void main() {

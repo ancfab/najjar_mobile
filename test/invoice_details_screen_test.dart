@@ -18,11 +18,17 @@ import 'package:anc_fabrics/services/invoice_pdf_service.dart';
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
 import 'helpers/valid_avatar_image.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 /// The mock Invoice Details fetch has a simulated 400ms network delay;
 /// `pumpAndSettle` alone won't wait for that bare `Future.delayed` since it
 /// isn't tied to a scheduled frame.
 Future<void> _settleFetch(WidgetTester tester) async {
+  // Lets the translation delegate's async asset load resolve first, so the
+  // screen actually mounts (and its own fetch begins) before the
+  // mock-service delay below is counted down.
+  await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
 }
@@ -42,6 +48,13 @@ Future<void> _pumpInvoiceDetailsScreen(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: InvoiceDetailsScreen(
         invoiceNumber: invoiceNumber,
         pdfService: pdfService,

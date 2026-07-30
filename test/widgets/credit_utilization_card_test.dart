@@ -8,13 +8,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/credit_utilization_data.dart';
 import 'package:anc_fabrics/widgets/credit_utilization_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpCard(WidgetTester tester, CreditUtilizationData data) async {
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(body: CreditUtilizationCard(data: data)),
     ),
   );
+  await tester.pump();
 }
 
 void main() {

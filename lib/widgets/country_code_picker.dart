@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/country_codes.dart';
+import '../localization/translations.dart';
 import '../models/country_code.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
@@ -165,7 +166,7 @@ class _CountryCodeSearchSheetState extends State<_CountryCodeSearchSheet> {
                   ),
                 ),
                 Text(
-                  'Select country code',
+                  context.t('countryCodePicker.selectTitle'),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -183,7 +184,7 @@ class _CountryCodeSearchSheetState extends State<_CountryCodeSearchSheet> {
                     color: AppColors.textNavy,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Search by country, code, or ISO',
+                    hintText: context.t('countryCodePicker.searchHint'),
                     hintStyle: const TextStyle(
                       color: AppColors.grayText,
                       fontSize: 14,
@@ -214,12 +215,12 @@ class _CountryCodeSearchSheetState extends State<_CountryCodeSearchSheet> {
                 const SizedBox(height: 8),
                 Flexible(
                   child: _results.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 32),
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
                           child: Center(
                             child: Text(
-                              'No countries found',
-                              style: TextStyle(
+                              context.t('countryCodePicker.noResults'),
+                              style: const TextStyle(
                                 color: AppColors.grayText,
                                 fontSize: 14,
                               ),

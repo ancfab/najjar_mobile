@@ -79,16 +79,11 @@ class LocalAvatarUploadService implements AvatarUploadService {
     try {
       final sourceFile = File(croppedImagePath);
       if (!await sourceFile.exists()) {
-        return const AvatarUpdateResult(
-          AvatarUpdateOutcome.failure,
-          message: "We couldn't find that photo. Please try again.",
-        );
+        return const AvatarUpdateResult(AvatarUpdateOutcome.failure);
       }
 
       final supportDir = await getApplicationSupportDirectory();
-      final avatarsDir = Directory(
-        '${supportDir.path}/$_avatarsSubdirectory',
-      );
+      final avatarsDir = Directory('${supportDir.path}/$_avatarsSubdirectory');
       if (!await avatarsDir.exists()) {
         await avatarsDir.create(recursive: true);
       }
@@ -100,16 +95,12 @@ class LocalAvatarUploadService implements AvatarUploadService {
       return AvatarUpdateResult(
         AvatarUpdateOutcome.success,
         localPath: destinationPath,
-        message: 'Profile photo updated on this device.',
         isLocalOnly: true,
       );
     } catch (error) {
       // Technical detail only — never shown to the user.
       debugPrint('Local avatar update failed: $error');
-      return const AvatarUpdateResult(
-        AvatarUpdateOutcome.failure,
-        message: "We couldn't update your photo. Please try again.",
-      );
+      return const AvatarUpdateResult(AvatarUpdateOutcome.failure);
     }
   }
 }

@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/invoice.dart';
 import 'package:anc_fabrics/widgets/invoice_logistics_status_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpCard(
   WidgetTester tester,
@@ -21,6 +23,13 @@ Future<void> _pumpCard(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         // Matches how InvoiceDetailsScreen actually hosts this card: inside
         // a scrollable, so unbounded height is available and a long-status/
@@ -31,6 +40,7 @@ Future<void> _pumpCard(
       ),
     ),
   );
+  await tester.pump();
 }
 
 void main() {
@@ -183,47 +193,43 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Fields remain stacked (not side by side) at a narrow width',
-      (tester) async {
-        await _pumpCard(
-          tester,
-          InvoiceLogisticsInfo(
-            statusLabel: 'In Production',
-            estimatedDeliveryDate: DateTime(2023, 10, 30),
-          ),
-          width: 220,
-        );
+    testWidgets('Fields remain stacked (not side by side) at a narrow width', (
+      tester,
+    ) async {
+      await _pumpCard(
+        tester,
+        InvoiceLogisticsInfo(
+          statusLabel: 'In Production',
+          estimatedDeliveryDate: DateTime(2023, 10, 30),
+        ),
+        width: 220,
+      );
 
-        final statusY = tester.getTopLeft(find.text('STATUS')).dy;
-        final deliveryY = tester.getTopLeft(find.text('EST. DELIVERY')).dy;
-        expect(deliveryY, greaterThan(statusY));
-        expect(tester.takeException(), isNull);
-      },
-    );
+      final statusY = tester.getTopLeft(find.text('STATUS')).dy;
+      final deliveryY = tester.getTopLeft(find.text('EST. DELIVERY')).dy;
+      expect(deliveryY, greaterThan(statusY));
+      expect(tester.takeException(), isNull);
+    });
 
-    testWidgets(
-      'A single field still renders as a full-width box',
-      (tester) async {
-        await _pumpCard(
-          tester,
-          const InvoiceLogisticsInfo(statusLabel: 'In Production'),
-          width: 400,
-        );
+    testWidgets('A single field still renders as a full-width box', (
+      tester,
+    ) async {
+      await _pumpCard(
+        tester,
+        const InvoiceLogisticsInfo(statusLabel: 'In Production'),
+        width: 400,
+      );
 
-        final cardWidth = tester
-            .getRect(find.byKey(const ValueKey('invoice-logistics-card')))
-            .width;
-        final statusBoxWidth = tester
-            .getRect(
-              find.byKey(const ValueKey('invoice-logistics-status-box')),
-            )
-            .width;
-        // Full width relative to the card's content area (card width minus
-        // its own horizontal padding).
-        expect(statusBoxWidth, greaterThan(cardWidth * 0.7));
-      },
-    );
+      final cardWidth = tester
+          .getRect(find.byKey(const ValueKey('invoice-logistics-card')))
+          .width;
+      final statusBoxWidth = tester
+          .getRect(find.byKey(const ValueKey('invoice-logistics-status-box')))
+          .width;
+      // Full width relative to the card's content area (card width minus
+      // its own horizontal padding).
+      expect(statusBoxWidth, greaterThan(cardWidth * 0.7));
+    });
   });
 
   group('Status dot', () {
@@ -239,7 +245,9 @@ void main() {
       );
 
       final dotX = tester
-          .getTopLeft(find.byKey(const ValueKey('invoice-logistics-status-dot')))
+          .getTopLeft(
+            find.byKey(const ValueKey('invoice-logistics-status-dot')),
+          )
           .dx;
       final textX = tester.getTopLeft(find.text('In Production')).dx;
       expect(dotX, lessThan(textX));

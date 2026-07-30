@@ -68,7 +68,9 @@ class SessionExpiryCoordinator {
 
     _navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => LoginScreen(startupMessage: sessionExpiredMessage),
+        builder: (_) => const LoginScreen(
+          startupMessage: LoginStartupMessage.sessionExpired,
+        ),
       ),
       (route) => false,
     );

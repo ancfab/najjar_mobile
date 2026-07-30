@@ -63,10 +63,7 @@ class LocalInvoicePdfService implements InvoicePdfService {
           children: [
             pw.Text(
               'INVOICE',
-              style: pw.TextStyle(
-                fontSize: 22,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
             pw.Text(invoice.invoiceNumber),
@@ -75,7 +72,7 @@ class LocalInvoicePdfService implements InvoicePdfService {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Text(invoiceStatusLabel(invoice.status).toUpperCase()),
+            pw.Text(invoiceStatusLabelEn(invoice.status).toUpperCase()),
             pw.SizedBox(height: 4),
             pw.Text('Issued: ${invoice.issuedDate}'),
           ],

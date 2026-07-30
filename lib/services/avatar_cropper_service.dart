@@ -8,9 +8,17 @@ abstract class AvatarCropperService {
   /// Returns the cropped image's file path, or `null` if the user
   /// cancelled cropping.
   ///
+  /// [toolbarTitle] is the native cropper UI's title — resolved by the
+  /// caller (which has a `BuildContext`) since this platform UI renders
+  /// outside the Flutter widget tree and can't look up localized text
+  /// itself.
+  ///
   /// May throw if the platform cropper itself fails; callers are
   /// responsible for catching this and showing user-facing feedback.
-  Future<String?> cropToSquare(String sourcePath);
+  Future<String?> cropToSquare(
+    String sourcePath, {
+    required String toolbarTitle,
+  });
 }
 
 /// Real [AvatarCropperService] backed by the `image_cropper` plugin.
@@ -28,7 +36,10 @@ class ImageCropperAvatarCropperService implements AvatarCropperService {
   static const int _compressQuality = 85;
 
   @override
-  Future<String?> cropToSquare(String sourcePath) async {
+  Future<String?> cropToSquare(
+    String sourcePath, {
+    required String toolbarTitle,
+  }) async {
     final cropped = await ImageCropper().cropImage(
       sourcePath: sourcePath,
       maxWidth: _maxDimension,
@@ -38,13 +49,13 @@ class ImageCropperAvatarCropperService implements AvatarCropperService {
       compressQuality: _compressQuality,
       uiSettings: [
         AndroidUiSettings(
-          toolbarTitle: 'Crop Photo',
+          toolbarTitle: toolbarTitle,
           cropStyle: CropStyle.circle,
           lockAspectRatio: true,
           hideBottomControls: true,
         ),
         IOSUiSettings(
-          title: 'Crop Photo',
+          title: toolbarTitle,
           cropStyle: CropStyle.circle,
           aspectRatioLockEnabled: true,
           resetAspectRatioEnabled: false,

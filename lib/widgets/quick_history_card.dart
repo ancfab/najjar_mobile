@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/account_transaction.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
@@ -43,10 +44,10 @@ class QuickHistoryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'QUICK HISTORY',
-                  style: TextStyle(
+                  context.t('quickHistory.heading'),
+                  style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textNavy,
@@ -59,12 +60,15 @@ class QuickHistoryCard extends StatelessWidget {
                   key: const ValueKey('quick-history-see-all-button'),
                   borderRadius: BorderRadius.circular(16),
                   onTap: onSeeAll,
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: AppColors.primaryNavy,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Transform.flip(
+                      flipX: Directionality.of(context) == TextDirection.rtl,
+                      child: const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: AppColors.primaryNavy,
+                      ),
                     ),
                   ),
                 ),

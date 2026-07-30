@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../data/country_codes.dart';
+import '../localization/translations.dart';
 import '../models/auth/login_failure.dart';
 import '../models/country_code.dart';
 import '../services/auth_service.dart';
+import '../services/session_messages.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../widgets/country_code_picker.dart';
@@ -41,10 +43,10 @@ class LoginScreen extends StatefulWidget {
   /// touching real secure storage.
   final AuthService? authService;
 
-  /// A safe, one-time message to show after a startup secure-session
+  /// A safe, one-time message reason to show after a startup secure-session
   /// restore failure (see `main.dart`'s `resolveStartupSession`), or null
   /// when nothing needs to be shown.
-  final String? startupMessage;
+  final LoginStartupMessage? startupMessage;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -86,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // ScaffoldMessenger is reachable yet.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _showMessage(message);
+        _showMessage(_messageForStartupReason(message));
       });
     }
   }
@@ -111,12 +113,12 @@ class _LoginScreenState extends State<LoginScreen> {
         mobileNumber.isEmpty ||
         username.trim().isEmpty ||
         password.isEmpty) {
-      _showMessage('Please fill in all required fields.');
+      _showMessage(context.t('login.validationRequiredFields'));
       return;
     }
 
     if (!_digitsOnly.hasMatch(mobileNumber)) {
-      _showMessage('Mobile number should contain digits only.');
+      _showMessage(context.t('login.validationMobileDigitsOnly'));
       return;
     }
 
@@ -160,21 +162,32 @@ class _LoginScreenState extends State<LoginScreen> {
   String _messageFor(AuthLoginFailure failure) {
     switch (failure.type) {
       case AuthLoginFailureType.invalidInput:
-        return 'Please fill in all required fields.';
+        return context.t('login.failureRequiredFields');
       case AuthLoginFailureType.invalidCredentials:
-        return 'Please check your login details and try again.';
+        return context.t('login.failureInvalidCredentials');
       case AuthLoginFailureType.invalidPhone:
-        return failure.phoneError ?? 'Please enter a valid mobile number.';
+        return failure.phoneError ?? context.t('login.failureInvalidMobile');
       case AuthLoginFailureType.network:
-        return 'Unable to connect. Check your internet connection and '
-            'try again.';
+        return context.t('login.failureNoConnection');
       case AuthLoginFailureType.serviceUnavailable:
-        return 'The service is temporarily unavailable. Please try again.';
+        return context.t('login.failureServiceUnavailable');
       case AuthLoginFailureType.invalidResponse:
-        return 'We could not complete the login. Please try again.';
+        return context.t('login.failureGeneric');
       case AuthLoginFailureType.secureStorage:
-        return 'Login succeeded, but the session could not be saved '
-            'securely. Please try again.';
+        return context.t('login.failureSessionNotSaved');
+    }
+  }
+
+  /// Maps a [LoginStartupMessage] reason to one neutral, safe, localized
+  /// message — mirroring [_messageFor]'s pattern for login failures.
+  String _messageForStartupReason(LoginStartupMessage reason) {
+    switch (reason) {
+      case LoginStartupMessage.sessionExpired:
+        return context.t('session.expired');
+      case LoginStartupMessage.validationUnavailable:
+        return context.t('session.validationUnavailable');
+      case LoginStartupMessage.restoreFailed:
+        return context.t('session.restoreFailed');
     }
   }
 
@@ -218,9 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const LoginHeader(),
                   const SizedBox(height: 28),
-                  const Text(
-                    'MOBILE NUMBER',
-                    style: TextStyle(
+                  Text(
+                    context.t('login.mobileNumberLabel'),
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF1A1A1A),
@@ -246,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: AppColors.textNavy,
                       ),
                       decoration: InputDecoration(
-                        hintText: '50 123 4567',
+                        hintText: context.t('login.mobileNumberHint'),
                         hintStyle: const TextStyle(
                           color: AppColors.grayText,
                           fontSize: 15,
@@ -275,8 +288,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 20),
                   LoginTextField(
-                    label: 'CLIENT NAME',
-                    hintText: 'Enter your name',
+                    label: context.t('login.clientNameLabel'),
+                    hintText: context.t('login.clientNameHint'),
                     controller: _usernameController,
                     keyboardType: TextInputType.name,
                     textInputAction: TextInputAction.next,

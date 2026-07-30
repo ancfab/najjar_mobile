@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/widgets/account_balance_hero_card.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 Future<void> _pumpCard(
   WidgetTester tester, {
@@ -23,6 +25,13 @@ Future<void> _pumpCard(
 
   await tester.pumpWidget(
     MaterialApp(
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: AccountBalanceHeroCard(
           balance: balance,
@@ -34,6 +43,7 @@ Future<void> _pumpCard(
       ),
     ),
   );
+  await tester.pump();
 }
 
 void main() {

@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../theme/app_colors.dart';
@@ -47,9 +48,9 @@ class BalanceHistoryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Balance History',
-            style: TextStyle(
+          Text(
+            context.t('balanceHistory.heading'),
+            style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,
@@ -57,7 +58,7 @@ class BalanceHistoryCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            _subtitle,
+            _subtitle(context),
             key: const ValueKey('balance-history-subtitle'),
             style: const TextStyle(fontSize: 12.5, color: AppColors.grayText),
           ),
@@ -77,7 +78,7 @@ class BalanceHistoryCard extends StatelessWidget {
     );
   }
 
-  String get _subtitle {
+  String _subtitle(BuildContext context) {
     if (points.isEmpty) return '';
     final startDate = points.first.date;
     final endDate = points.last.date;
@@ -88,7 +89,10 @@ class BalanceHistoryCard extends StatelessWidget {
         ? formatMonthDay(startDate)
         : formatDateOnly(startDate);
     final end = formatDateOnly(endDate);
-    return 'Trend analysis for $start - $end';
+    return context.t(
+      'balanceHistory.subtitle',
+      params: {'start': start, 'end': end},
+    );
   }
 
   Widget _buildChartArea() {

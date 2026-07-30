@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/current_user_avatar_controller.dart';
 import '../theme/app_colors.dart';
+import 'language_popup_menu.dart';
 
 class HomeHeader extends StatelessWidget {
   const HomeHeader({
@@ -81,7 +82,12 @@ class HomeHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          LanguagePopupMenuButton(
+            key: const ValueKey('home-header-language-button'),
+          ),
+          const SizedBox(width: 8),
           InkWell(
+            key: const ValueKey('home-header-settings-button'),
             onTap: onSettingsTap,
             borderRadius: BorderRadius.circular(20),
             child: const Padding(

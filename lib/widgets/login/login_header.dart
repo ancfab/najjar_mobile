@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
 
 class LoginHeader extends StatelessWidget {
@@ -7,9 +8,9 @@ class LoginHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      'Welcome back.',
-      style: TextStyle(
+    return Text(
+      context.t('login.welcomeBack'),
+      style: const TextStyle(
         fontSize: 30,
         fontWeight: FontWeight.bold,
         color: AppColors.textNavy,

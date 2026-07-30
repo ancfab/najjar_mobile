@@ -6,7 +6,11 @@ import '../theme/app_colors.dart';
 /// uppercase secondary eyebrow label (e.g. "BILLED TO", "DUE DATE",
 /// "PAYMENT METHOD") followed by its content.
 class InvoiceInfoSection extends StatelessWidget {
-  const InvoiceInfoSection({super.key, required this.label, required this.child});
+  const InvoiceInfoSection({
+    super.key,
+    required this.label,
+    required this.child,
+  });
 
   final String label;
   final Widget child;

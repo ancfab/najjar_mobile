@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 class _NavItemData {
-  const _NavItemData(this.icon, this.label);
+  const _NavItemData(this.icon, this.labelKey);
 
   final IconData icon;
-  final String label;
+  final String labelKey;
 }
 
 class CustomBottomNav extends StatelessWidget {
@@ -20,10 +21,10 @@ class CustomBottomNav extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   static const List<_NavItemData> _items = [
-    _NavItemData(Icons.home_rounded, 'Home'),
-    _NavItemData(Icons.receipt_long_rounded, 'Orders'),
-    _NavItemData(Icons.help_outline_rounded, 'Support'),
-    _NavItemData(Icons.person_outline_rounded, 'Profile'),
+    _NavItemData(Icons.home_rounded, 'nav.home'),
+    _NavItemData(Icons.receipt_long_rounded, 'nav.orders'),
+    _NavItemData(Icons.help_outline_rounded, 'nav.support'),
+    _NavItemData(Icons.person_outline_rounded, 'nav.profile'),
   ];
 
   @override
@@ -40,7 +41,7 @@ class CustomBottomNav extends StatelessWidget {
           return Expanded(
             child: CustomBottomNavItem(
               icon: item.icon,
-              label: item.label,
+              label: context.t(item.labelKey),
               selected: index == currentIndex,
               onTap: () => onTap(index),
             ),

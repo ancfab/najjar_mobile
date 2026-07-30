@@ -16,15 +16,39 @@ import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/contact_support_service.dart';
 
 import 'helpers/fake_contact_support_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   Future<void> pumpSupport(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SupportScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
   Future<void> pumpContactUs(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: ContactUsScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ContactUsScreen(),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -223,7 +247,16 @@ void main() {
     ) async {
       final service = FakeContactSupportService();
       await tester.pumpWidget(
-        MaterialApp(home: ContactUsScreen(contactService: service)),
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ContactUsScreen(contactService: service),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -268,7 +301,10 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('contact-subject-field')));
       await tester.pumpAndSettle();
 
-      final labels = [for (final s in ContactSubject.values) s.label];
+      final labelContext = tester.element(find.byType(ContactUsScreen));
+      final labels = [
+        for (final s in ContactSubject.values) s.localizedLabel(labelContext),
+      ];
       final positions = <double>[];
       for (final label in labels) {
         final finder = find.text(label);
@@ -290,16 +326,33 @@ void main() {
     // matching the "Responsive coverage" group's per-case pattern below.
     for (final subject in ContactSubject.values) {
       testWidgets(
-        'Selecting "${subject.label}" sends ContactSubject.${subject.name} '
-        'as the request subject',
+        'Selecting ContactSubject.${subject.name} sends it as the request '
+        'subject',
         (tester) async {
           final service = FakeContactSupportService();
           await tester.pumpWidget(
-            MaterialApp(home: ContactUsScreen(contactService: service)),
+            MaterialApp(
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ar'),
+                Locale('fr'),
+              ],
+              localizationsDelegates: const [
+                AppTranslationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ContactUsScreen(contactService: service),
+            ),
           );
           await tester.pumpAndSettle();
 
-          await fillValidForm(tester, subjectLabel: subject.label);
+          final subjectContext = tester.element(find.byType(ContactUsScreen));
+          await fillValidForm(
+            tester,
+            subjectLabel: subject.localizedLabel(subjectContext),
+          );
           await tester.ensureVisible(
             find.byKey(const ValueKey('contact-send-email-button')),
           );
@@ -346,6 +399,13 @@ void main() {
     }) async {
       await tester.pumpWidget(
         MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: ContactUsScreen(contactService: service, region: region),
         ),
       );
@@ -574,6 +634,13 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: ContactUsScreen(
             initialName: 'Jane Weaver',
             initialEmail: 'jane@textile.co',
@@ -594,7 +661,16 @@ void main() {
 
     testWidgets('Prefilled fields remain editable', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: ContactUsScreen(initialName: 'Jane Weaver')),
+        const MaterialApp(
+          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ContactUsScreen(initialName: 'Jane Weaver'),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -616,6 +692,13 @@ void main() {
         final rebuildTrigger = ValueNotifier<int>(0);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: AnimatedBuilder(
               animation: rebuildTrigger,
               builder: (context, _) =>
@@ -649,6 +732,13 @@ void main() {
         final initialName = ValueNotifier<String?>(null);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: ValueListenableBuilder<String?>(
               valueListenable: initialName,
               builder: (context, value, _) =>
@@ -682,6 +772,13 @@ void main() {
         final initialName = ValueNotifier<String?>(null);
         await tester.pumpWidget(
           MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: ValueListenableBuilder<String?>(
               valueListenable: initialName,
               builder: (context, value, _) =>
