@@ -19,7 +19,9 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/models/auth/login_request.dart';
+import 'package:anc_fabrics/models/business_central/business_central_inventory_entry.dart';
 import 'package:anc_fabrics/models/business_central/business_central_invoice_line.dart';
+import 'package:anc_fabrics/models/business_central/business_central_item.dart';
 import 'package:anc_fabrics/models/business_central/ledger_entry.dart';
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
@@ -1741,6 +1743,884 @@ void main() {
     });
   });
 
+  group('AncApiClient.fetchItems', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      int currentPage = 1,
+      int lastPage = 46,
+    }) {
+      final rows = data ?? [_validItemJson()];
+      return {
+        'current_page': currentPage,
+        'data': rows,
+        'first_page_url': '/?page=1',
+        'from': rows.isEmpty ? null : 1,
+        'last_page': lastPage,
+        'last_page_url': '/?page=$lastPage',
+        // Confirmed live defect: next_page_url drops the endpoint path.
+        'next_page_url': currentPage < lastPage
+            ? '/?page=${currentPage + 1}'
+            : null,
+        'path': '/',
+        'per_page': 25,
+        'prev_page_url': null,
+        'to': rows.isEmpty ? null : rows.length,
+        'total': 1130,
+        // Extra, undocumented top-level key the live envelope also
+        // returns — must be safely ignored, never cause a parse failure.
+        'links': [
+          {'url': null, 'label': '&laquo; Previous', 'active': false},
+          {'url': '/?page=1', 'label': '1', 'active': true},
+        ],
+      };
+    }
+
+    test('GETs the exact items URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchItems(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/items'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test('sends Accept: application/json and Authorization: Bearer <token>, '
+        'never a request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchItems(token: syntheticToken);
+
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('clamps page below 1 up to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchItems(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test(
+      'clamps per_page to the configured maximum (never sends above 100)',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchItems(token: syntheticToken, perPage: 9999);
+
+        expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+      },
+    );
+
+    test('clamps per_page below the configured minimum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchItems(token: syntheticToken, perPage: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '1');
+    });
+
+    test(
+      'parses a 200 body into PaginatedResponse<BusinessCentralItem>',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        final response = await client.fetchItems(token: syntheticToken);
+
+        expect(response, isA<PaginatedResponse<BusinessCentralItem>>());
+        expect(response.data, hasLength(1));
+        expect(response.data.single.itemNo, 'ITEM-001');
+        expect(response.data.single.id, 'd472efc4-9f2b-4a1a-9e7a-1234567890ab');
+        // The confirmed live envelope's extra top-level 'links' key must
+        // never cause a parse failure.
+        expect(response.currentPage, 1);
+        expect(response.lastPage, 46);
+      },
+    );
+
+    test('parses an integer inventory value correctly', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [_validItemJson(inventory: 993)]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchItems(token: syntheticToken);
+
+      expect(response.data.single.inventory, 993.0);
+    });
+
+    test('parses a decimal inventory value correctly', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [_validItemJson(inventory: 703.8)]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchItems(token: syntheticToken);
+
+      expect(response.data.single.inventory, 703.8);
+    });
+
+    test('parses an empty page (no rows)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: const []), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchItems(token: syntheticToken);
+
+      expect(response.data, isEmpty);
+    });
+
+    test(
+      'a malformed envelope (missing data) raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope.remove('data');
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchItems(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed item row (missing itemNo) raises AncProtocolException',
+      () async {
+        final badRow = _validItemJson()..remove('itemNo');
+        final fake = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchItems(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchItems(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchItems(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchItems(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchItems(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a network failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchItems(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test(
+      'a malformed (non-JSON) 200 body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchItems(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a 200 body with non-array data raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope['data'] = {'not': 'an array'};
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchItems(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+  });
+
+  group('AncApiClient.fetchInventory', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      int currentPage = 1,
+      int lastPage = 1,
+    }) {
+      final rows = data ?? [_validInventoryEntryJson()];
+      return {
+        'current_page': currentPage,
+        'data': rows,
+        'first_page_url': '/?page=1',
+        'from': rows.isEmpty ? null : 1,
+        'last_page': lastPage,
+        'last_page_url': '/?page=$lastPage',
+        'next_page_url': currentPage < lastPage
+            ? '/?page=${currentPage + 1}'
+            : null,
+        'path': '/',
+        'per_page': 25,
+        'prev_page_url': null,
+        'to': rows.isEmpty ? null : rows.length,
+        'total': rows.length,
+        // Extra, undocumented top-level key a live envelope might also
+        // return — must be safely ignored, never cause a parse failure.
+        'links': [
+          {'url': null, 'label': '&laquo; Previous', 'active': false},
+          {'url': '/?page=1', 'label': '1', 'active': true},
+        ],
+      };
+    }
+
+    test('GETs the exact inventory URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/inventory'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test('sends Accept: application/json and Authorization: Bearer <token>, '
+        'never a request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken);
+
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('sends page as the exact requested value', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(currentPage: 3, lastPage: 5),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken, page: 3);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '3');
+    });
+
+    test('clamps page below 1 up to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test(
+      'clamps per_page to the configured maximum (never sends above 100)',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchInventory(token: syntheticToken, perPage: 9999);
+
+        expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+      },
+    );
+
+    test('clamps per_page below the configured minimum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken, perPage: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '1');
+    });
+
+    test(
+      'parses a 200 body into PaginatedResponse<BusinessCentralInventoryEntry>, '
+      'ignoring the extra top-level links key',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        final response = await client.fetchInventory(token: syntheticToken);
+
+        expect(
+          response,
+          isA<PaginatedResponse<BusinessCentralInventoryEntry>>(),
+        );
+        expect(response.data, hasLength(1));
+        expect(response.data.single.itemNo, 'ITEM-001');
+        expect(response.data.single.id, 'd472efc4-9f2b-4a1a-9e7a-1234567890ab');
+      },
+    );
+
+    test('parses an integer quantity/remainingQuantity correctly', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(
+            data: [
+              _validInventoryEntryJson(quantity: 100, remainingQuantity: 40),
+            ],
+          ),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInventory(token: syntheticToken);
+
+      expect(response.data.single.quantity, 100.0);
+      expect(response.data.single.remainingQuantity, 40.0);
+    });
+
+    test('parses a decimal quantity/remainingQuantity correctly', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(
+            data: [
+              _validInventoryEntryJson(
+                quantity: 100.75,
+                remainingQuantity: 39.5,
+              ),
+            ],
+          ),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInventory(token: syntheticToken);
+
+      expect(response.data.single.quantity, 100.75);
+      expect(response.data.single.remainingQuantity, 39.5);
+    });
+
+    test('ignores unknown/vendor-reference row fields', () async {
+      final rowWithExtras = {
+        ..._validInventoryEntryJson(),
+        '@odata.etag': 'W/"JzQ0O1234567890abcdef;1234567\'"',
+        'Vendor_No': 'VEND-001',
+        'Unit_Cost_LCY': 612.5,
+      };
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(data: [rowWithExtras]),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInventory(token: syntheticToken);
+
+      expect(response.data, hasLength(1));
+      expect(response.data.single.itemNo, 'ITEM-001');
+    });
+
+    test('parses an empty page (no rows)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: const []), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchInventory(token: syntheticToken);
+
+      expect(response.data, isEmpty);
+    });
+
+    test(
+      'a malformed envelope (missing data) raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope.remove('data');
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInventory(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed inventory row (missing itemNo) raises AncProtocolException',
+      () async {
+        final badRow = _validInventoryEntryJson()..remove('itemNo');
+        final fake = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInventory(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInventory(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchInventory(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test(
+      'a per_page-only 422 also exposes it through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'per_page': ['The per page field must not be greater than 100.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchInventory(token: syntheticToken, perPage: 9999);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('per_page'), isTrue);
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInventory(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchInventory(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a network failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchInventory(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test(
+      'a malformed (non-JSON) 200 body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInventory(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a 200 body with non-array data raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope['data'] = {'not': 'an array'};
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchInventory(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+
+    test('item_no is omitted from the query when not supplied', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.url.queryParameters.containsKey('item_no'),
+        isFalse,
+      );
+      expect(
+        fake.lastRequest!.url.queryParameters.keys,
+        containsAll(['page', 'per_page']),
+      );
+    });
+
+    test(
+      'item_no is included alongside page and per_page when supplied',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchInventory(
+          token: syntheticToken,
+          page: 1,
+          perPage: 100,
+          itemNo: 'ITEM-001',
+        );
+
+        expect(fake.lastRequest!.url.queryParameters, {
+          'page': '1',
+          'per_page': '100',
+          'item_no': 'ITEM-001',
+        });
+      },
+    );
+
+    test('an internal space in item_no is percent-encoded as %20, and the '
+        'logical value reaching the backend is unchanged', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInventory(token: syntheticToken, itemNo: '1038 01');
+
+      expect(fake.lastRequest!.url.toString(), contains('item_no=1038%2001'));
+      // Uri.queryParameters decodes percent-encoding back to the exact
+      // logical value the backend's request parser will see.
+      expect(fake.lastRequest!.url.queryParameters['item_no'], '1038 01');
+    });
+
+    test(
+      'a hyphen/slash in item_no is preserved through the request',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchInventory(
+          token: syntheticToken,
+          itemNo: 'ITEM-42-A/B',
+        );
+
+        expect(fake.lastRequest!.url.queryParameters['item_no'], 'ITEM-42-A/B');
+      },
+    );
+  });
+
+  group('AncApiClient.getAuthenticatedJson query-string encoding', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Future<Uri> requestedUrl(Map<String, String> queryParameters) async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, const {'data': []}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+      await client.getAuthenticatedJson(
+        'api/business-central/inventory',
+        token: syntheticToken,
+        queryParameters: queryParameters,
+      );
+      return fake.lastRequest!.url;
+    }
+
+    test('a space is percent-encoded as %20, never as +', () async {
+      final url = await requestedUrl({'item_no': '1038 01'});
+
+      expect(url.toString(), contains('item_no=1038%2001'));
+      expect(url.toString(), isNot(contains('1038+01')));
+      expect(url.queryParameters['item_no'], '1038 01');
+    });
+
+    test('a hyphen is preserved unescaped', () async {
+      final url = await requestedUrl({'item_no': 'ITEM-42'});
+
+      expect(url.toString(), contains('item_no=ITEM-42'));
+      expect(url.queryParameters['item_no'], 'ITEM-42');
+    });
+
+    test('a slash is percent-encoded and round-trips exactly', () async {
+      final url = await requestedUrl({'item_no': 'ITEM/42'});
+
+      expect(url.toString(), contains('item_no=ITEM%2F42'));
+      expect(url.queryParameters['item_no'], 'ITEM/42');
+    });
+
+    test(
+      'a plus sign is percent-encoded, never interpreted as a space',
+      () async {
+        final url = await requestedUrl({'item_no': '1+1'});
+
+        expect(url.toString(), contains('item_no=1%2B1'));
+        expect(url.queryParameters['item_no'], '1+1');
+      },
+    );
+
+    test(
+      'a percent sign is percent-encoded and never double-encoded',
+      () async {
+        final url = await requestedUrl({'item_no': '50%OFF'});
+
+        expect(url.toString(), contains('item_no=50%25OFF'));
+        // Double-encoding would produce %2550OFF (a re-escaped %25); this
+        // confirms the literal single-escaped form reaches the wire.
+        expect(url.toString(), isNot(contains('%2550OFF')));
+        expect(url.queryParameters['item_no'], '50%OFF');
+      },
+    );
+
+    test(
+      'an ampersand inside a value cannot inject an extra query parameter',
+      () async {
+        final url = await requestedUrl({'item_no': 'A&page=99', 'page': '1'});
+
+        expect(url.toString(), contains('item_no=A%26page%3D99'));
+        expect(url.queryParameters['item_no'], 'A&page=99');
+        // Proves the embedded "&page=99" was never parsed as a second,
+        // overriding "page" parameter.
+        expect(url.queryParameters['page'], '1');
+      },
+    );
+
+    test(
+      'an equals sign inside a value cannot corrupt the query structure',
+      () async {
+        final url = await requestedUrl({'item_no': 'A=B'});
+
+        expect(url.toString(), contains('item_no=A%3DB'));
+        expect(url.queryParameters['item_no'], 'A=B');
+      },
+    );
+
+    test(
+      'a Unicode value is percent-encoded as UTF-8 and round-trips exactly',
+      () async {
+        final url = await requestedUrl({'item_no': 'قماش'});
+
+        expect(url.queryParameters['item_no'], 'قماش');
+      },
+    );
+
+    test('digit-only pagination values are unaffected — byte-identical to '
+        'plain concatenation', () async {
+      final url = await requestedUrl({'page': '3', 'per_page': '100'});
+
+      expect(url.toString(), endsWith('?page=3&per_page=100'));
+    });
+  });
+
   group('AncApiClient.logout', () {
     const syntheticToken = 'synthetic-id|synthetic-secret';
 
@@ -2052,4 +2932,50 @@ Map<String, dynamic> _validPaymentEntryJson() => {
   'remainingAmount': 0.00,
   'open': false,
   'dueDate': '2026-01-15',
+};
+
+Map<String, dynamic> _validInventoryEntryJson({
+  Object? quantity = 100,
+  Object? remainingQuantity = 40,
+}) => {
+  'id': 'd472efc4-9f2b-4a1a-9e7a-1234567890ab',
+  'entryNo': 1001,
+  'postingDate': '2026-01-05',
+  'documentType': 'Purchase',
+  'documentNo': 'PO-1001',
+  'itemNo': 'ITEM-001',
+  'description': 'Egyptian Cotton Sateen (600TC)',
+  'locationCode': 'MAIN',
+  'quantity': quantity,
+  'remainingQuantity': remainingQuantity,
+  'unitOfMeasureCode': 'YRD',
+  'open': true,
+};
+
+Map<String, dynamic> _validItemJson({
+  Object? inventory = 993,
+  Object? unitPrice = 12.5,
+}) => {
+  '@odata.etag': 'W/"JzQ0O1JSRE...ImageValue=="\'',
+  'id': 'd472efc4-9f2b-4a1a-9e7a-1234567890ab',
+  'itemNo': 'ITEM-001',
+  'commonItemNo': 'COMMON-001',
+  'description': 'Egyptian Cotton Sateen (600TC)',
+  'description2': '',
+  'baseUnitOfMeasure': 'YRD',
+  'itemCategoryCode': 'FABRIC',
+  'productGroupCode': 'COTTON',
+  'blocked': false,
+  'inventory': inventory,
+  'unitPrice': unitPrice,
+  'gtin': '',
+  'Global_Dimension_1_Filter': '',
+  'Global_Dimension_2_Filter': '',
+  'Location_Filter': '',
+  'Drop_Shipment_Filter': '',
+  'Variant_Filter': '',
+  'Lot_No_Filter': '',
+  'Serial_No_Filter': '',
+  'Unit_of_Measure_Filter': '',
+  'Package_No_Filter': '',
 };

@@ -9,7 +9,9 @@ import '../models/auth/api_validation_error.dart';
 import '../models/auth/authenticated_user.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
+import '../models/business_central/business_central_inventory_entry.dart';
 import '../models/business_central/business_central_invoice_line.dart';
+import '../models/business_central/business_central_item.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
@@ -207,6 +209,96 @@ class AncApiClient {
     return _decodeInvoicesResponse(response);
   }
 
+  /// Calls `GET /api/business-central/items` for the authenticated user,
+  /// requesting [page] at a fixed [perPage] size. This catalog is
+  /// company-scoped rather than user-specific — the ANC API returns the
+  /// same rows to every user in the company — but the request still
+  /// requires the same Bearer authentication as every other Business
+  /// Central endpoint.
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
+  /// before the request is sent, same as [fetchLedgerEntries]/
+  /// [fetchPayments]/[fetchInvoices].
+  ///
+  /// Deliberately has no `fetchItemsPage(nextPageUrl:)` counterpart, for
+  /// the same reason as [fetchPayments]/[fetchInvoices]: the confirmed live
+  /// envelope's `next_page_url`/`path` values are unsafe/incomplete
+  /// (observed as a bare `/?page=2` / `/`) and must never be used for
+  /// request construction. Items pagination is done only by requesting
+  /// `page: currentPage + 1` against this fixed endpoint with the original
+  /// `perPage` — see `ItemsService`.
+  Future<PaginatedResponse<BusinessCentralItem>> fetchItems({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.itemsPath,
+      token: token,
+      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+    );
+    return _decodeItemsResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/inventory` for the authenticated
+  /// user, requesting [page] at a fixed [perPage] size. Like [fetchItems],
+  /// this data is company-scoped rather than user-specific, but the request
+  /// still requires the same Bearer authentication as every other Business
+  /// Central endpoint. Never sends a customer identifier.
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
+  /// before the request is sent, same as [fetchLedgerEntries]/
+  /// [fetchPayments]/[fetchInvoices]/[fetchItems].
+  ///
+  /// [itemNo], when supplied, is sent as the `item_no` query parameter,
+  /// filtering the response to that exact Business Central item — see
+  /// `ApiStockLookupService`, the only caller that supplies it. Sent via
+  /// [getAuthenticatedJson]'s `queryParameters` (backed by [Uri.replace]),
+  /// never by manual string concatenation, so a value containing a space,
+  /// hyphen, or slash is percent-encoded safely. Omitted entirely (not sent
+  /// as an empty string) when `null`, so every other caller of this method
+  /// — e.g. `InventoryService`'s unfiltered paging — is unaffected.
+  ///
+  /// Deliberately has no `fetchInventoryPage(nextPageUrl:)` counterpart, for
+  /// the same reason as [fetchItems]: a live response for this endpoint is
+  /// not yet available, and every other Business Central list endpoint's
+  /// confirmed live `next_page_url`/`path` values have been unsafe/incomplete
+  /// (observed as a bare `/?page=2` / `/`). Inventory pagination is done
+  /// only by requesting `page: currentPage + 1` against this fixed endpoint
+  /// with the original `perPage` — see `InventoryService`/
+  /// `ApiStockLookupService`.
+  Future<PaginatedResponse<BusinessCentralInventoryEntry>> fetchInventory({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+    String? itemNo,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.inventoryPath,
+      token: token,
+      queryParameters: {
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+        'item_no': ?itemNo,
+      },
+    );
+    return _decodeInventoryResponse(response);
+  }
+
   /// Calls `POST /api/auth/logout` with the given [token] as a Bearer
   /// credential, revoking the current Sanctum personal access token
   /// server-side. Sends no request body and no customer identifier — only
@@ -276,9 +368,26 @@ class AncApiClient {
   /// `Accept: application/json` — the only place in this app those headers
   /// are constructed. Same [relativePath] safety rules as [postPublicJson].
   ///
-  /// [queryParameters], when supplied, is attached via [Uri.replace] after
-  /// [relativePath] has already passed every path-safety check — it can
-  /// never be used to change the request's scheme, host, or port.
+  /// [queryParameters], when supplied, is attached as a percent-encoded
+  /// query string after [relativePath] has already passed every path-safety
+  /// check — it can never be used to change the request's scheme, host, or
+  /// port, and every key/value is escaped with [Uri.encodeComponent] before
+  /// being joined, so a value containing `&`, `=`, `%`, `+`, a space, a
+  /// slash, or a non-ASCII character can never be manually concatenated
+  /// into — or corrupt the structure of — the query string.
+  ///
+  /// Deliberately built this way instead of `Uri.replace(queryParameters:)`,
+  /// which encodes a space as `+` (the `application/x-www-form-urlencoded`
+  /// convention): the confirmed ANC API contract for a value that may
+  /// contain a literal space (see `AncApiClient.fetchInventory`'s
+  /// `item_no`) is percent-encoding, e.g. `item_no=1038%2001`. Applying this
+  /// to every authenticated GET (not a filtered-inventory-only special
+  /// case) keeps exactly one query-building path for this client; every
+  /// other caller's values so far are plain digits (`page`/`per_page`),
+  /// which [Uri.encodeComponent] passes through unchanged, so this is not a
+  /// behavior change for them. [Uri.replace]'s `query:` parameter takes an
+  /// already-encoded string as-is — it does not re-encode it — so this can
+  /// never double-encode a value.
   Future<http.Response> getAuthenticatedJson(
     String relativePath, {
     required String token,
@@ -286,7 +395,14 @@ class AncApiClient {
   }) async {
     var uri = _resolve(relativePath);
     if (queryParameters != null && queryParameters.isNotEmpty) {
-      uri = uri.replace(queryParameters: queryParameters);
+      final query = queryParameters.entries
+          .map(
+            (entry) =>
+                '${Uri.encodeComponent(entry.key)}='
+                '${Uri.encodeComponent(entry.value)}',
+          )
+          .join('&');
+      uri = uri.replace(query: query);
     }
 
     return _sendWithTransportHandling(
@@ -545,6 +661,72 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API invoices request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes an items response. HTTP 200 is parsed as a [PaginatedResponse]
+  /// of [BusinessCentralItem]; every other status raises [AncHttpException]
+  /// with that [statusCode] — including a parsed [ApiValidationError] for
+  /// 422 — the same shape as [_decodeInvoicesResponse]/
+  /// [_decodePaymentsResponse]/[_decodeLedgerEntriesResponse]. The Business
+  /// Central taxonomy (pagination bug vs. some other 422 cause) is decided
+  /// one layer up (see `mapBusinessCentralError`), not here.
+  PaginatedResponse<BusinessCentralItem> _decodeItemsResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralItem>.fromJson(
+          json,
+          BusinessCentralItem.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed items response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API items request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes an inventory response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [BusinessCentralInventoryEntry]; every other
+  /// status raises [AncHttpException] with that [statusCode] — including a
+  /// parsed [ApiValidationError] for 422 — the same shape as
+  /// [_decodeItemsResponse]. The Business Central taxonomy (pagination bug
+  /// vs. some other 422 cause) is decided one layer up (see
+  /// `mapBusinessCentralError`), not here.
+  PaginatedResponse<BusinessCentralInventoryEntry> _decodeInventoryResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralInventoryEntry>.fromJson(
+          json,
+          BusinessCentralInventoryEntry.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed inventory response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API inventory request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
