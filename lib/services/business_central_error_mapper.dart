@@ -71,11 +71,27 @@ class BusinessCentralProtocolFailure extends BusinessCentralOutcome {
 /// Pure and side-effect free: callers decide what to do about
 /// [BusinessCentralUnauthorized] (invoke the session coordinator) — this
 /// function never touches session state or navigation itself.
-BusinessCentralOutcome mapBusinessCentralError(AncApiException error) {
+///
+/// [supportsAccountLinking] defaults to `true`, preserving this function's
+/// original behavior for the per-customer endpoints (ledger entries,
+/// payments, invoices): a non-pagination 422 maps to
+/// [BusinessCentralAccountNotLinked]. Pass `false` for an endpoint whose
+/// data is company-scoped rather than tied to a linked Business Central
+/// customer (e.g. items) — "no linked customer" cannot apply there, so
+/// every 422 maps to [BusinessCentralRequestDefect] instead, matching the
+/// documented contract that 422 on that endpoint only ever signals an
+/// invalid `page`/`per_page` request.
+BusinessCentralOutcome mapBusinessCentralError(
+  AncApiException error, {
+  bool supportsAccountLinking = true,
+}) {
   return switch (error) {
     AncNetworkException() => const BusinessCentralNetworkFailure(),
     AncProtocolException() => const BusinessCentralProtocolFailure(),
-    AncHttpException() => _mapHttpOutcome(error),
+    AncHttpException() => _mapHttpOutcome(
+      error,
+      supportsAccountLinking: supportsAccountLinking,
+    ),
   };
 }
 
@@ -84,7 +100,10 @@ BusinessCentralOutcome mapBusinessCentralError(AncApiException error) {
 // determine the exact server-side cause from these status codes alone —
 // preserve the authenticated session and allow retry in both cases. Only
 // HTTP 401 may ever invalidate the session; 502/503 must never do so.
-BusinessCentralOutcome _mapHttpOutcome(AncHttpException error) {
+BusinessCentralOutcome _mapHttpOutcome(
+  AncHttpException error, {
+  required bool supportsAccountLinking,
+}) {
   switch (error.statusCode) {
     case 401:
       return const BusinessCentralUnauthorized();
@@ -93,9 +112,10 @@ BusinessCentralOutcome _mapHttpOutcome(AncHttpException error) {
       final isPaginationDefect =
           errors.containsKey('page') || errors.containsKey('per_page');
       final backendMessage = error.validationError?.message;
-      return isPaginationDefect
-          ? BusinessCentralRequestDefect(backendMessage)
-          : BusinessCentralAccountNotLinked(backendMessage);
+      if (isPaginationDefect || !supportsAccountLinking) {
+        return BusinessCentralRequestDefect(backendMessage);
+      }
+      return BusinessCentralAccountNotLinked(backendMessage);
     case 503:
       return const BusinessCentralTemporarilyUnavailable();
     case 502:

@@ -263,9 +263,13 @@ void main() {
         (tester) async {
           await _setSize(tester, size);
           await tester.pumpWidget(
-            const MaterialApp(
-              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-              localizationsDelegates: [
+            MaterialApp(
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ar'),
+                Locale('fr'),
+              ],
+              localizationsDelegates: const [
                 AppTranslationsDelegate(),
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
@@ -274,7 +278,12 @@ void main() {
               home: ScanStockScreen(),
             ),
           );
-          await tester.pumpAndSettle();
+          // ScanStockScreen's QR-frame corners/scan-line run a perpetually
+          // repeating AnimationController, which pumpAndSettle would wait
+          // on forever — a couple of plain frames is enough to lay out and
+          // catch an overflow.
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
           expect(tester.takeException(), isNull);
         },
       );
@@ -285,9 +294,9 @@ void main() {
       (tester) async {
         await _setSize(tester, const Size(568, 320));
         await tester.pumpWidget(
-          const MaterialApp(
-            supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: [
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
               AppTranslationsDelegate(),
               GlobalMaterialLocalizations.delegate,
               GlobalWidgetsLocalizations.delegate,
@@ -296,7 +305,8 @@ void main() {
             home: ScanStockScreen(),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
         expect(tester.takeException(), isNull);
       },
     );
@@ -304,9 +314,9 @@ void main() {
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
       await tester.pumpWidget(
-        const MaterialApp(
-          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: [
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
             AppTranslationsDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -315,7 +325,8 @@ void main() {
           home: ScanStockScreen(),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
     });
   });

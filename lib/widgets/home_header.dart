@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/current_user_avatar_controller.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_typography.dart';
 import 'language_popup_menu.dart';
 
 class HomeHeader extends StatelessWidget {
@@ -35,7 +37,7 @@ class HomeHeader extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 68),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
@@ -68,9 +70,7 @@ class HomeHeader extends StatelessWidget {
                   Expanded(
                     child: Text(
                       userName,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                      style: AppTypography.pageTitle.copyWith(
                         color: AppColors.textNavy,
                       ),
                       maxLines: 1,
@@ -89,7 +89,7 @@ class HomeHeader extends StatelessWidget {
           InkWell(
             key: const ValueKey('home-header-settings-button'),
             onTap: onSettingsTap,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: AppRadius.circularAll,
             child: const Padding(
               padding: EdgeInsets.all(4),
               child: Icon(

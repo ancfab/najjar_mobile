@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_shadows.dart';
 
 class AvailabilitySearchCard extends StatelessWidget {
   const AvailabilitySearchCard({
@@ -37,16 +39,10 @@ class AvailabilitySearchCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
+        color: AppColors.surface,
+        borderRadius: AppRadius.smallAll,
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppShadows.standardCard,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,15 +91,15 @@ class AvailabilitySearchCard extends StatelessWidget {
                         horizontal: 14,
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: AppRadius.smallAll,
                         borderSide: const BorderSide(color: AppColors.border),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: AppRadius.smallAll,
                         borderSide: const BorderSide(color: AppColors.border),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: AppRadius.smallAll,
                         borderSide: const BorderSide(
                           color: AppColors.primaryNavy,
                         ),
@@ -115,9 +111,9 @@ class AvailabilitySearchCard extends StatelessWidget {
               const SizedBox(width: 10),
               Material(
                 color: AppColors.primaryNavy,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: AppRadius.smallAll,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: AppRadius.smallAll,
                   onTap: isLoading ? null : onSearch,
                   child: SizedBox(
                     width: 44,

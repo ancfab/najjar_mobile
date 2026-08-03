@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../localization/translations.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_shadows.dart';
 
 class LastPaymentCard extends StatelessWidget {
   const LastPaymentCard({super.key, required this.amount, required this.date});
@@ -16,16 +18,10 @@ class LastPaymentCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
+        color: AppColors.surface,
+        borderRadius: AppRadius.smallAll,
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppShadows.standardCard,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,

@@ -78,6 +78,54 @@ void main() {
       },
     );
 
+    test('422 with no page/per_page error and supportsAccountLinking: false '
+        'maps to BusinessCentralRequestDefect, never '
+        'BusinessCentralAccountNotLinked (company-scoped endpoints, e.g. '
+        'items, have no linked-customer concept)', () {
+      final outcome = mapBusinessCentralError(
+        AncHttpException(
+          'bad request',
+          statusCode: 422,
+          validationError: ApiValidationError.fromJson({
+            'message': 'The given data was invalid.',
+          }),
+        ),
+        supportsAccountLinking: false,
+      );
+      expect(outcome, isA<BusinessCentralRequestDefect>());
+    });
+
+    test('422 with errors.page and supportsAccountLinking: false still maps to '
+        'BusinessCentralRequestDefect (unchanged from the default)', () {
+      final outcome = mapBusinessCentralError(
+        AncHttpException(
+          'bad request',
+          statusCode: 422,
+          validationError: ApiValidationError.fromJson({
+            'errors': {
+              'page': ['The page field is invalid.'],
+            },
+          }),
+        ),
+        supportsAccountLinking: false,
+      );
+      expect(outcome, isA<BusinessCentralRequestDefect>());
+    });
+
+    test('omitting supportsAccountLinking preserves the original '
+        'BusinessCentralAccountNotLinked default for a non-pagination 422', () {
+      final outcome = mapBusinessCentralError(
+        AncHttpException(
+          'not linked',
+          statusCode: 422,
+          validationError: ApiValidationError.fromJson({
+            'message': 'No linked Business Central customer.',
+          }),
+        ),
+      );
+      expect(outcome, isA<BusinessCentralAccountNotLinked>());
+    });
+
     test('503 maps to BusinessCentralTemporarilyUnavailable', () {
       final outcome = mapBusinessCentralError(
         const AncHttpException('unavailable', statusCode: 503),

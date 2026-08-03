@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_radius.dart';
 
 /// Password field with a show/hide toggle. Masked by default.
 class PasswordField extends StatefulWidget {
@@ -57,15 +58,15 @@ class _PasswordFieldState extends State<PasswordField> {
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.primaryNavy),
               ),
             ),

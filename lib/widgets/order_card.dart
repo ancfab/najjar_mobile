@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/fabric_order.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_shadows.dart';
+import '../theme/app_typography.dart';
 import 'status_badge.dart';
 
 /// Card summarizing a single [FabricOrder] on the Fabric Orders list.
@@ -32,16 +34,10 @@ class OrderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppShadows.elevatedCard,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,9 +56,7 @@ class OrderCard extends StatelessWidget {
                         // Displayed without the stored "#" prefix (e.g.
                         // "#ORD-8829" -> "ORD-8829"); see [displayOrderId].
                         displayOrderId(order.orderId),
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
+                        style: AppTypography.sectionTitle.copyWith(
                           color: AppColors.textNavy,
                         ),
                         maxLines: 1,
@@ -109,9 +103,7 @@ class OrderCard extends StatelessWidget {
                         child: Text(
                           order.price,
                           maxLines: 1,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                          style: AppTypography.numericValue.copyWith(
                             color: AppColors.primaryNavy,
                           ),
                         ),

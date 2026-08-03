@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_radius.dart';
+import '../../theme/app_typography.dart';
 
 /// Full-width primary navy LOGIN button with a trailing icon and optional
 /// loading state.
@@ -19,9 +21,9 @@ class PrimaryLoginButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.primaryNavy,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppRadius.buttonAll,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.buttonAll,
         onTap: isLoading ? null : onPressed,
         child: SizedBox(
           width: double.infinity,
@@ -42,10 +44,8 @@ class PrimaryLoginButton extends StatelessWidget {
                       children: [
                         Text(
                           context.t('login.loginButton'),
-                          style: const TextStyle(
+                          style: AppTypography.buttonText.copyWith(
                             color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,
                           ),
                         ),

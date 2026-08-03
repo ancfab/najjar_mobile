@@ -32,7 +32,7 @@ class CustomBottomNav extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: Row(

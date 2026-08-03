@@ -7,6 +7,7 @@ import '../models/home_dashboard_data.dart';
 import '../services/catalogue_lookup_service.dart';
 import '../services/home_dashboard_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
 import '../utils/responsive.dart';
 import '../widgets/availability_search_card.dart';
 import '../widgets/balance_card.dart';
@@ -222,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openScanStockScreen() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const ScanStockScreen()));
+    ).push(MaterialPageRoute(builder: (_) => ScanStockScreen()));
   }
 
   // Pushes a bottom-tab destination screen, then restores the Home tab as
@@ -272,18 +273,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 onRefresh: refreshHomeDashboardData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
                   child: ResponsiveMaxWidth(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildDashboardSection(),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpacing.pageHorizontal),
                         ScanFabricButton(
                           label: context.t('home.scanFabricAvailability'),
                           onTap: _openScanStockScreen,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpacing.pageHorizontal),
                         AvailabilitySearchCard(
                           title: context.t('home.checkAvailability'),
                           hintText: context.t('home.enterCatalogueCode'),

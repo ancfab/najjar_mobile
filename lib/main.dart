@@ -12,6 +12,7 @@ import 'services/locale_controller.dart';
 import 'services/session_expiry_coordinator.dart';
 import 'services/session_messages.dart';
 import 'theme/app_colors.dart';
+import 'theme/app_typography.dart';
 
 /// App-startup auth-gate result: whether a previously-established secure
 /// session is both present and confirmed still valid, an optional safe
@@ -166,6 +167,24 @@ class MyApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(
               seedColor: AppColors.primaryNavy,
               surface: AppColors.background,
+              error: AppColors.dangerRed,
+            ),
+            // Mirrors the shared AppTypography scale onto Material's
+            // ambient TextTheme slots so any future widget that reads
+            // Theme.of(context).textTheme gets the same scale existing
+            // screens already use via AppTypography directly. No current
+            // widget reads textTheme, so this is purely additive and does
+            // not change any existing screen's appearance.
+            textTheme: const TextTheme(
+              displayLarge: AppTypography.displayValue,
+              titleLarge: AppTypography.pageTitle,
+              titleMedium: AppTypography.sectionTitle,
+              titleSmall: AppTypography.cardTitle,
+              bodyMedium: AppTypography.body,
+              bodySmall: AppTypography.bodySecondary,
+              labelLarge: AppTypography.buttonText,
+              labelMedium: AppTypography.label,
+              labelSmall: AppTypography.caption,
             ),
           ),
           home: isLoggedIn

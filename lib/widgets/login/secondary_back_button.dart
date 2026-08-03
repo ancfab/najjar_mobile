@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization/translations.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_radius.dart';
+import '../../theme/app_typography.dart';
 
 /// Full-width secondary red BACK button.
 class SecondaryBackButton extends StatelessWidget {
@@ -13,9 +15,9 @@ class SecondaryBackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.dangerRed,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppRadius.buttonAll,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.buttonAll,
         onTap: onPressed,
         child: SizedBox(
           width: double.infinity,
@@ -24,10 +26,8 @@ class SecondaryBackButton extends StatelessWidget {
             child: Center(
               child: Text(
                 context.t('login.backButton'),
-                style: const TextStyle(
+                style: AppTypography.buttonText.copyWith(
                   color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                 ),
               ),

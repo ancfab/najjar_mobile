@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_radius.dart';
 
 /// A labeled text field matching the login form's field style
 /// (light border, rounded corners, muted placeholder).
@@ -58,15 +59,15 @@ class LoginTextField extends StatelessWidget {
               suffixIcon: suffixIcon,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.border),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.border),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.inputAll,
                 borderSide: const BorderSide(color: AppColors.primaryNavy),
               ),
             ),

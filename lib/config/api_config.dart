@@ -91,6 +91,33 @@ class ApiConfig {
   /// identifier here either.
   static const String invoicesPath = 'api/business-central/invoices';
 
+  /// Relative path (no leading slash) for the Business Central items
+  /// (product catalog) endpoint, resolved against [baseUrl] by
+  /// [AncApiClient]. This catalog is company-scoped rather than
+  /// Relative path, without a leading slash, for the Business Central items
+  /// endpoint. The request requires Bearer authentication and uses the shared
+  /// Business Central pagination limits.
+  static const String itemsPath = 'api/business-central/items';
+
+  /// Relative path, without a leading slash, for the Business Central inventory
+  /// endpoint. The request requires Bearer authentication and uses the shared
+  /// Business Central pagination limits.
+  static const String inventoryPath = 'api/business-central/inventory';
+
+  /// authentication as every other Business Central endpoint. Shares
+  /// [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
+  /// [businessCentralMaxPerPage] with [ledgerEntriesPath]/[paymentsPath]/
+  /// [invoicesPath] rather than duplicating them.
+
+  /// Relative path (no leading slash) for the Business Central inventory
+  /// endpoint, resolved against [baseUrl] by [AncApiClient]. Like
+  /// [itemsPath], this data is company-scoped rather than user-specific, but
+  /// the request still requires the same Bearer authentication as every
+  /// other Business Central endpoint. Shares
+  /// [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
+  /// [businessCentralMaxPerPage] with [ledgerEntriesPath]/[paymentsPath]/
+  /// [invoicesPath]/[itemsPath] rather than duplicating them.
+
   /// Default per-request timeout applied by [AncApiClient]. A timeout is a
   /// transport failure (mapped to [AncNetworkException]), not a session
   /// event — it must never clear an authenticated session, only the ANC

@@ -4,6 +4,7 @@ import '../localization/app_locale.dart';
 import '../localization/translations.dart';
 import '../services/locale_controller.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_typography.dart';
 
 /// Globe-icon trigger that opens the language switcher as a compact popup
 /// menu anchored to itself (via [PopupMenuButton]), instead of a bottom
@@ -23,7 +24,7 @@ class LanguagePopupMenuButton extends StatelessWidget {
       builder: (context, _) {
         return PopupMenuButton<AppLocale>(
           tooltip: context.t('language.iconTooltip'),
-          color: Colors.white,
+          color: AppColors.surface,
           elevation: 6,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -47,11 +48,7 @@ class LanguagePopupMenuButton extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Text(
           context.t('language.selectorTitle'),
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: AppColors.primaryNavy,
-          ),
+          style: AppTypography.cardTitle.copyWith(color: AppColors.primaryNavy),
         ),
       ),
       const PopupMenuDivider(height: 1),
