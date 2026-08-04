@@ -7,7 +7,9 @@ import 'models/auth/session_validation_result.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
+import 'services/current_balance_data_source.dart';
 import 'services/current_user_avatar_controller.dart';
+import 'services/last_payment_data_source.dart';
 import 'services/locale_controller.dart';
 import 'services/session_expiry_coordinator.dart';
 import 'services/session_messages.dart';
@@ -123,6 +125,8 @@ class MyApp extends StatelessWidget {
     this.isLoggedIn = false,
     this.startupMessage,
     GlobalKey<NavigatorState>? navigatorKey,
+    this.lastPaymentSource,
+    this.currentBalanceSource,
   }) : navigatorKey = navigatorKey ?? appNavigatorKey;
 
   /// Whether a previously-established session is still active, as
@@ -143,6 +147,20 @@ class MyApp extends StatelessWidget {
   /// widget tests can supply a fresh key per test instead of reusing the
   /// app-wide singleton across independently torn-down widget trees.
   final GlobalKey<NavigatorState> navigatorKey;
+
+  /// Last Payment data seam for the Home screen reached when [isLoggedIn]
+  /// is true. Defaults (lazily, in [HomeScreen]) to the live Payments API
+  /// endpoint; overridable so widget tests that drive through this real app
+  /// root (rather than constructing `HomeScreen` directly) can inject a
+  /// fake instead of exercising real HTTP/secure storage.
+  final LastPaymentDataSource? lastPaymentSource;
+
+  /// Current Balance data seam for the Home screen reached when
+  /// [isLoggedIn] is true. Defaults (lazily, in [HomeScreen]) to the live
+  /// ledger-entries API endpoint; overridable so widget tests that drive
+  /// through this real app root can inject a fake instead of exercising
+  /// real HTTP/secure storage.
+  final CurrentBalanceDataSource? currentBalanceSource;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +206,10 @@ class MyApp extends StatelessWidget {
             ),
           ),
           home: isLoggedIn
-              ? const HomeScreen()
+              ? HomeScreen(
+                  lastPaymentSource: lastPaymentSource,
+                  currentBalanceSource: currentBalanceSource,
+                )
               : LoginScreen(startupMessage: startupMessage),
         );
       },

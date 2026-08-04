@@ -21,7 +21,18 @@
 /// USD-style digit grouping regardless of [currencyCode].
 String formatCurrency(num amount, {String? currencyCode}) {
   final isNegative = amount < 0;
-  final fixed = amount.abs().toStringAsFixed(2);
+  final grouped = _groupedTwoDecimals(amount.abs());
+
+  final prefix = currencyCode == null ? '\$' : '$currencyCode ';
+  return '${isNegative ? '-' : ''}$prefix$grouped';
+}
+
+/// Comma-grouped, two-decimal digits for a non-negative [amount] (e.g.
+/// `12250.0` -> `"12,250.00"`) — the shared grouping/rounding logic behind
+/// every currency-style formatter in this file. Never called with a
+/// negative value; sign handling is each caller's own responsibility.
+String _groupedTwoDecimals(num amount) {
+  final fixed = amount.toStringAsFixed(2);
   final dotIndex = fixed.indexOf('.');
   final wholePart = fixed.substring(0, dotIndex);
   final decimalPart = fixed.substring(dotIndex + 1);
@@ -33,9 +44,43 @@ String formatCurrency(num amount, {String? currencyCode}) {
     }
     buffer.write(wholePart[i]);
   }
+  return '$buffer.$decimalPart';
+}
 
-  final prefix = currencyCode == null ? '\$' : '$currencyCode ';
-  return '${isNegative ? '-' : ''}$prefix$buffer.$decimalPart';
+/// Formats [amount] the same two-decimal, thousands-grouped, signed-prefix
+/// way as [formatCurrency], but for callers whose confirmed contract
+/// forbids ever silently defaulting a missing currency to "$" — e.g.
+/// Current Balance, whose live ledger-entries source may legitimately
+/// return a blank `Currency_Code`.
+///
+/// [currencyCode] is displayed exactly as given, never converted or
+/// re-derived — same as [formatCurrency]. When it is `null`, empty, or
+/// whitespace-only, the prefix is `"?"` instead of a guessed symbol: a
+/// visible "unknown currency" indicator (e.g. `"? 42,850.00"`).
+String formatCurrencyOrUnknown(num amount, {required String? currencyCode}) {
+  final isNegative = amount < 0;
+  final grouped = _groupedTwoDecimals(amount.abs());
+
+  final trimmedCode = currencyCode?.trim();
+  final prefix = (trimmedCode == null || trimmedCode.isEmpty)
+      ? '?'
+      : trimmedCode;
+  return '${isNegative ? '-' : ''}$prefix $grouped';
+}
+
+/// Formats [amount] with comma thousands separators and exactly two decimal
+/// places, with no currency prefix at all (e.g. `180.0` -> `"180.00"`,
+/// `1250.5` -> `"1,250.50"`).
+///
+/// For fields the API contract documents as plain numbers with no
+/// associated currency (e.g. a sales-order line's `Quantity`/`Unit_Price`/
+/// `Amount`) — unlike [formatCurrency]/[formatCurrencyOrUnknown], this never
+/// prepends a guessed `"$"` or a `"?"` placeholder, since neither implies
+/// this value is even denominated in a currency at all.
+String formatPlainAmount(num amount) {
+  final isNegative = amount < 0;
+  final grouped = _groupedTwoDecimals(amount.abs());
+  return '${isNegative ? '-' : ''}$grouped';
 }
 
 /// Formats [amount] as a signed, whole-dollar currency string for compact

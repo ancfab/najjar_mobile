@@ -25,6 +25,7 @@ import 'package:anc_fabrics/models/business_central/business_central_item.dart';
 import 'package:anc_fabrics/models/business_central/ledger_entry.dart';
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
+import 'package:anc_fabrics/models/business_central/sales_order_line.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/anc_api_exceptions.dart';
 
@@ -1743,6 +1744,399 @@ void main() {
     });
   });
 
+  group('AncApiClient.fetchSalesOrders', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    Map<String, dynamic> validEnvelope({
+      List<Map<String, dynamic>>? data,
+      int currentPage = 1,
+      int lastPage = 1,
+    }) {
+      final rows = data ?? [_validSalesOrderLineJson()];
+      return {
+        'current_page': currentPage,
+        'data': rows,
+        'first_page_url': '/?page=1',
+        'from': rows.isEmpty ? null : 1,
+        'last_page': lastPage,
+        'last_page_url': '/?page=$lastPage',
+        'next_page_url': currentPage < lastPage
+            ? '/?page=${currentPage + 1}'
+            : null,
+        'path': '/',
+        'per_page': 25,
+        'prev_page_url': null,
+        'to': rows.isEmpty ? null : rows.length,
+        'total': rows.length,
+      };
+    }
+
+    test('GETs the exact sales-orders URI with page and per_page', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(fake.lastRequest!.method, 'GET');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse(
+          'https://api.ancfab.com/api/business-central/sales-orders'
+          '?page=1&per_page=25',
+        ),
+      );
+    });
+
+    test(
+      'never uses the Zebra sales-orders path, only the ANC API path',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchSalesOrders(token: syntheticToken);
+
+        expect(
+          fake.lastRequest!.url.path,
+          '/api/business-central/sales-orders',
+        );
+        expect(fake.lastRequest!.url.host, 'api.ancfab.com');
+      },
+    );
+
+    test('sends Accept: application/json and Authorization: Bearer <token>, '
+        'never a request body', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('never sends any Business Central customer identifier', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      final query = fake.lastRequest!.url.queryParameters;
+      for (final key in [
+        'Sell_to_Customer_No',
+        'Customer_No',
+        'customerNo',
+        'customer_id',
+        'bc_customer_no',
+      ]) {
+        expect(query.containsKey(key), isFalse);
+      }
+      expect(fake.lastRequest!.body, isEmpty);
+    });
+
+    test('page defaults to 1', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test('per_page defaults to 25', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '25');
+    });
+
+    test('requests page 2 when asked, never constructing the request from '
+        'next_page_url', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken, page: 2);
+
+      expect(fake.lastRequest!.url.path, '/api/business-central/sales-orders');
+      expect(fake.lastRequest!.url.queryParameters['page'], '2');
+    });
+
+    test('clamps page below 1 up to 1, never requesting page 0', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken, page: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['page'], '1');
+    });
+
+    test('per_page never exceeds the configured maximum of 100', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken, perPage: 9999);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '100');
+    });
+
+    test('clamps per_page below the configured minimum', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken, perPage: 0);
+
+      expect(fake.lastRequest!.url.queryParameters['per_page'], '1');
+    });
+
+    test(
+      'parses a 200 body into PaginatedResponse<BusinessCentralSalesOrderLine>',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        final response = await client.fetchSalesOrders(token: syntheticToken);
+
+        expect(
+          response,
+          isA<PaginatedResponse<BusinessCentralSalesOrderLine>>(),
+        );
+        expect(response.data, hasLength(1));
+        expect(response.data.single.documentNo, 'SO-24001');
+        expect(response.data.single.lineNo, 10000);
+        expect(response.data.single.itemNo, '880107');
+      },
+    );
+
+    test('preserves the Laravel pagination envelope fields', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(
+          200,
+          validEnvelope(currentPage: 2, lastPage: 10),
+          request: req,
+        ),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchSalesOrders(
+        token: syntheticToken,
+        page: 2,
+      );
+
+      expect(response.currentPage, 2);
+      expect(response.lastPage, 10);
+      expect(response.from, 1);
+      expect(response.to, 1);
+      expect(response.total, 1);
+    });
+
+    test('parses an empty page (no rows)', () async {
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: const []), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(response.data, isEmpty);
+      expect(response.total, 0);
+      expect(response.from, isNull);
+      expect(response.to, isNull);
+    });
+
+    test('two rows sharing one Document_No but different Line_No both '
+        'parse as separate rows, never grouped', () async {
+      final rows = [
+        _validSalesOrderLineJson(),
+        {..._validSalesOrderLineJson(), 'Line_No': 20000},
+      ];
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: rows), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final response = await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(response.data, hasLength(2));
+      expect(response.data[0].documentNo, 'SO-24001');
+      expect(response.data[0].lineNo, 10000);
+      expect(response.data[1].documentNo, 'SO-24001');
+      expect(response.data[1].lineNo, 20000);
+      expect(response.data[0].identity, isNot(response.data[1].identity));
+    });
+
+    test('a malformed sales-order-line row (missing Document_No) raises '
+        'AncProtocolException', () async {
+      final badRow = _validSalesOrderLineJson()..remove('Document_No');
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchSalesOrders(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test('a malformed sales-order-line row (missing Line_No) raises '
+        'AncProtocolException', () async {
+      final badRow = _validSalesOrderLineJson()..remove('Line_No');
+      final fake = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, validEnvelope(data: [badRow]), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchSalesOrders(token: syntheticToken),
+        throwsA(isA<AncProtocolException>()),
+      );
+    });
+
+    test(
+      'a malformed envelope (missing data) raises AncProtocolException',
+      () async {
+        final envelope = validEnvelope();
+        envelope.remove('data');
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, envelope, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchSalesOrders(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchSalesOrders(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'a pagination 422 exposes errors.page through validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The given data was invalid.',
+            'errors': {
+              'page': ['The page field must be at least 1.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.fetchSalesOrders(token: syntheticToken);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(error.validationError?.errors.containsKey('page'), isTrue);
+        }
+      },
+    );
+
+    test('HTTP 502 raises AncHttpException with statusCode 502', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchSalesOrders(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 502);
+      }
+    });
+
+    test('HTTP 503 raises AncHttpException with statusCode 503', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(503, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.fetchSalesOrders(token: syntheticToken);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 503);
+      }
+    });
+
+    test('a network failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.fetchSalesOrders(token: syntheticToken),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test(
+      'a malformed (non-JSON) 200 body raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.fetchSalesOrders(token: syntheticToken),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('only ever uses the synthetic test token, never a real one', () {
+      expect(syntheticToken, startsWith('synthetic-'));
+    });
+  });
+
   group('AncApiClient.fetchItems', () {
     const syntheticToken = 'synthetic-id|synthetic-secret';
 
@@ -2919,6 +3313,18 @@ Map<String, dynamic> _validInvoiceLineJson() => {
   'Amount': 10200.0,
   'Amount_Including_VAT': 10710.0,
   'Order_No': 'ORD-8829',
+};
+
+Map<String, dynamic> _validSalesOrderLineJson() => {
+  'Document_No': 'SO-24001',
+  'Line_No': 10000,
+  'Sell_to_Customer_No': 'CLNT-0001',
+  'Sell_to_Customer_Name': 'Test Customer One',
+  'No.': '880107',
+  'Description': 'Test Fabric Item',
+  'Quantity': 12,
+  'Unit_Price': 15,
+  'Amount': 180,
 };
 
 Map<String, dynamic> _validPaymentEntryJson() => {

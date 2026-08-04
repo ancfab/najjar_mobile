@@ -91,6 +91,18 @@ class ApiConfig {
   /// identifier here either.
   static const String invoicesPath = 'api/business-central/invoices';
 
+  /// Relative path (no leading slash) for the Business Central sales-orders
+  /// endpoint, resolved against [baseUrl] by [AncApiClient]. Each row is one
+  /// sales-order *line*, not one distinct order — see
+  /// `BusinessCentralSalesOrderLine`. This is the ANC API's own confirmed
+  /// endpoint, never the separate Zebra sales-orders integration. Shares
+  /// [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
+  /// [businessCentralMaxPerPage] with [ledgerEntriesPath]/[paymentsPath]/
+  /// [invoicesPath] rather than duplicating them. The ANC API scopes results
+  /// to the authenticated user's `bc_customer_no` server-side, so the app
+  /// never sends a customer identifier here either.
+  static const String salesOrdersPath = 'api/business-central/sales-orders';
+
   /// Relative path (no leading slash) for the Business Central items
   /// (product catalog) endpoint, resolved against [baseUrl] by
   /// [AncApiClient]. This catalog is company-scoped rather than

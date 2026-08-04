@@ -145,6 +145,25 @@ Future<void> _selectCountry(WidgetTester tester, String name) async {
   await tester.pumpAndSettle();
 }
 
+/// Pumps only far enough for the post-login `pushReplacement` to Home to
+/// finish and Home's own mock dashboard delay to resolve (matching
+/// `home_screen_test.dart`'s `_pumpHomeScreen` convention), without waiting
+/// for every animation to settle. HomeScreen's Last Payment row defaults to
+/// the live Payments API (real HTTP/secure storage), which never resolves
+/// in this widget-test sandbox — these tests only care that navigation to
+/// Home succeeded, not that Last Payment finished loading, so
+/// `pumpAndSettle` (which would wait on its spinner forever) is
+/// deliberately avoided here — mirrors `home_screen_test.dart`'s
+/// `_pumpRouteTransition`, written for the same class of problem with
+/// AccountBalanceScreen's Quick History.
+Future<void> _pumpAfterSuccessfulLogin(WidgetTester tester) async {
+  await tester.pump(); // start the pushReplacement transition
+  // Covers the route transition and Home's mock dashboard delay, so no
+  // dangling Timer trips AutomatedTestWidgetsFlutterBinding's post-test
+  // invariant check.
+  await tester.pump(const Duration(milliseconds: 700));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -187,7 +206,7 @@ void main() {
         password: '  synthetic-test-password  ',
       );
       await tester.tap(_loginButton);
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
 
       expect(http_.requestCount, 1);
       final sentBody =
@@ -210,7 +229,7 @@ void main() {
       await _enterCredentials(tester);
 
       await tester.tap(_loginButton);
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
 
       expect(find.byType(HomeScreen), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
@@ -225,11 +244,34 @@ void main() {
       await _enterCredentials(tester);
 
       await tester.tap(_loginButton);
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey(SessionStorageKeys.isLoggedIn), isFalse);
     });
+
+    testWidgets(
+      'navigates to Home even when must_change_password is true — there is '
+      'no password-change endpoint, so this flag must never gate '
+      'navigation or open a nonexistent forced password-change screen',
+      (tester) async {
+        final http_ = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, {
+            'token': 'synthetic-id|synthetic-secret',
+            'must_change_password': true,
+            'user': {..._validUserJson(), 'must_change_password': true},
+          }, request: req),
+        );
+        await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
+        await _enterCredentials(tester);
+
+        await tester.tap(_loginButton);
+        await _pumpAfterSuccessfulLogin(tester);
+
+        expect(find.byType(HomeScreen), findsOneWidget);
+        expect(find.byType(LoginScreen), findsNothing);
+      },
+    );
 
     testWidgets('saves the session exactly once', (tester) async {
       final http_ = _RecordingHttpClient(
@@ -244,7 +286,7 @@ void main() {
       await _enterCredentials(tester);
 
       await tester.tap(_loginButton);
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
 
       expect(sessionStore.saveCallCount, 1);
     });
@@ -421,7 +463,7 @@ void main() {
           request: http_.lastRequest!,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
     });
 
     testWidgets('a duplicate tap while loading calls AuthService only once', (
@@ -446,7 +488,7 @@ void main() {
           request: http_.lastRequest!,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpAfterSuccessfulLogin(tester);
     });
 
     testWidgets('a network failure resets the loading state', (tester) async {

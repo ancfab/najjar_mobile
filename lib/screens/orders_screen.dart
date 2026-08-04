@@ -1,238 +1,176 @@
 import 'package:flutter/material.dart';
 
 import '../localization/translations.dart';
-import '../models/fabric_order.dart';
-import '../models/fabric_order_filter.dart';
-import '../models/paginated_fabric_orders.dart';
-import '../services/mock_orders_service.dart';
+import '../models/business_central/paginated_response.dart';
+import '../models/business_central/sales_order_line.dart';
+import '../services/business_central_error_mapper.dart';
+import '../services/sales_order_lines_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
-import '../widgets/order_card.dart';
-import '../widgets/order_filter_sheet.dart';
-import 'order_detail_screen.dart';
+import '../widgets/sales_order_line_card.dart';
 
 /// Frontend-only status filter passed in from other screens (e.g. the Home
 /// dashboard's "Active Orders" metric card).
 ///
-/// TODO: "active" does not map onto a single confirmed [OrderStatus] yet
-/// (Delivered/Shipped/Processing are the only confirmed values). Until the
-/// backend/API team confirms what "active" means, opening the screen with
-/// this filter simply lands on the unfiltered "All" view below.
+/// TODO(api): The confirmed sales-orders contract has no status field at
+/// all, so this can never be honored against live data — accepted here only
+/// so callers (e.g. `HomeScreen`) don't need to change; the screen always
+/// shows the unfiltered live list regardless of this value.
 enum OrderStatusFilter { all, active }
 
-/// Fabric Orders list screen for the Indigo Loom client portal.
+/// Sales-order-line list screen for the Indigo Loom client portal.
 ///
-/// TODO: Replace mock orders/service with the real Orders API once the
-/// endpoint is confirmed. All fetching, filtering, and status handling on
-/// this screen is mock/frontend-only until then.
+/// Shows the live `GET /api/business-central/sales-orders` result: one row
+/// per sales-order line (never grouped by `Document_No`), paginated with
+/// explicit Previous/Next controls at a fixed page size.
+///
+/// TODO(api): The previous mock-backed status/date-range/fabric-type filter
+/// sheet and free-text search are not shown here — none of their criteria
+/// exist on the confirmed sales-orders contract (no status, date, or fabric
+/// type field; the endpoint accepts only `page`/`per_page`), so keeping that
+/// UI would mean either silently doing nothing or filtering only the
+/// current page's up-to-100 rows while claiming completeness across all
+/// unseen pages. Both are unacceptable; see `MockOrdersService`/
+/// `FabricOrder`/`OrderFilterSheet`, which remain in the codebase unused by
+/// this screen in case a future confirmed contract supports server-side
+/// filtering.
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({
     super.key,
     this.filter = OrderStatusFilter.all,
-    MockOrdersService? ordersService,
-  }) : ordersService = ordersService ?? const MockOrdersService();
+    this.salesOrderLinesSource,
+  });
 
   final OrderStatusFilter filter;
 
-  /// Orders query service/repository boundary. Defaults to the mock
-  /// implementation; overridable so tests can inject a fake (e.g. one that
-  /// throws) without touching real mock data or the screen's own logic.
-  final MockOrdersService ordersService;
+  /// Sales-order-lines data seam. Defaults (lazily, in State) to
+  /// [LiveSalesOrderLinesDataSource] — the live Business Central
+  /// sales-orders endpoint; overridable so tests can inject a fake.
+  final SalesOrderLinesDataSource? salesOrderLinesSource;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
+/// Fixed page size requested for every page of this screen's session —
+/// preserved across Previous/Next so the effective page size never drifts,
+/// per the confirmed pagination rules.
+const int _kOrdersPerPage = 25;
+
 class _OrdersScreenState extends State<OrdersScreen> {
-  late final MockOrdersService _ordersService = widget.ordersService;
+  late final SalesOrderLinesDataSource _salesOrderLinesSource =
+      widget.salesOrderLinesSource ?? LiveSalesOrderLinesDataSource();
 
-  PaginatedFabricOrders? _result;
-  bool _isLoading = true;
-  String? _error;
+  PaginatedResponse<BusinessCentralSalesOrderLine>? _result;
 
-  // Combined status/date-range/fabric-type/search/page/pageSize query. See
-  // [MockOrdersService.fetchOrders] for the matching + pagination logic
-  // that will later map to backend query parameters.
-  FabricOrderFilter _filter = const FabricOrderFilter();
+  /// Also doubles as the duplicate-request guard in [_loadPage] — starts
+  /// `false` so the very first [_loadPage] call from [initState] is never
+  /// blocked by its own not-yet-started loading state; [_loadPage] itself
+  /// flips this to `true` (synchronously, before its first `await`) so the
+  /// initial loading skeleton is still showing by the first build.
+  bool _isLoading = false;
+  BusinessCentralOutcome? _errorOutcome;
 
-  bool _isSearching = false;
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
+  /// `true` only when the most recent failure was not a
+  /// [BusinessCentralFailureException] (e.g. an unexpected exception) —
+  /// shown with the same neutral retry copy as every outcome other than
+  /// "temporarily unavailable", mirroring [_errorOutcome]'s sibling usage
+  /// on the Home screen's Current Balance/Last Payment cards.
+  bool _hasUnknownError = false;
+
+  /// The page this screen currently shows (or is loading/retrying) —
+  /// distinct from [_result]'s own `currentPage`, which only updates once a
+  /// request actually succeeds, so Previous/Next/retry always know the
+  /// *intended* page even while a request for it is still in flight or just
+  /// failed.
+  int _requestedPage = 1;
+
+  /// Bumped at the start of every [_loadPage] call, so a stale in-flight
+  /// request (e.g. a slow Next that resolves after a faster subsequent
+  /// Previous already started) can recognize itself as superseded and
+  /// discard its result instead of corrupting fresher state.
+  int _requestGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadOrders();
+    _loadPage(1);
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    super.dispose();
-  }
-
-  /// Fetches Fabric Orders for the current [_filter] through the
-  /// [MockOrdersService] repository boundary. Used for the initial load
-  /// and for every filter/search/pagination change and retry — the screen
-  /// never filters or paginates data itself.
-  Future<void> _loadOrders() async {
+  /// Fetches [page] of sales-order lines. Used for the initial load, every
+  /// Previous/Next tap, pull-to-refresh, and retry — the screen never pages
+  /// or filters data itself. Ignored while a request is already in flight
+  /// (duplicate-tap guard), and superseded by a newer call if one starts
+  /// before this one resolves (stale-response guard via
+  /// [_requestGeneration]).
+  Future<void> _loadPage(int page) async {
+    if (_isLoading) return;
+    final generation = ++_requestGeneration;
     setState(() {
       _isLoading = true;
-      _error = null;
+      _requestedPage = page;
+      _errorOutcome = null;
+      _hasUnknownError = false;
     });
     try {
-      final result = await _ordersService.fetchOrders(_filter);
-      if (!mounted) return;
+      final result = await _salesOrderLinesSource.fetchPage(
+        page: page,
+        perPage: _kOrdersPerPage,
+      );
+      if (!mounted || generation != _requestGeneration) return;
       setState(() {
         _result = result;
         _isLoading = false;
       });
-    } catch (_) {
-      if (!mounted) return;
+    } on SessionExpiredException {
+      // The centralized session coordinator has already cleared the
+      // session and is navigating to Login — show nothing here.
+    } on BusinessCentralFailureException catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
       setState(() {
-        _error = context.t('orders.unableToLoad');
+        _errorOutcome = error.outcome;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _hasUnknownError = true;
         _isLoading = false;
       });
     }
   }
 
-  /// Refreshes the current query (filters/search/page all preserved) on
-  /// pull-to-refresh, without swapping the list out for the loading
-  /// skeleton — the [RefreshIndicator] spinner is enough feedback on its
-  /// own, and this keeps the previously loaded page visible if the refresh
-  /// fails.
-  Future<void> refreshFabricOrders() async {
-    try {
-      final result = await _ordersService.fetchOrders(_filter);
-      if (!mounted) return;
-      setState(() {
-        _result = result;
-        _error = null;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _error = context.t('orders.unableToRefresh'));
-    }
+  /// Refreshes the currently displayed (or intended) page on pull-to-
+  /// refresh, without swapping the list out for the loading skeleton — the
+  /// [RefreshIndicator] spinner is enough feedback on its own, and this
+  /// keeps the previously loaded page visible if the refresh fails.
+  Future<void> refreshSalesOrderLines() => _loadPage(_requestedPage);
+
+  /// Retries the page that was actually intended (the one Previous/Next/the
+  /// initial load was trying to show), never silently resetting to page 1.
+  Future<void> retryLoadSalesOrderLines() => _loadPage(_requestedPage);
+
+  bool get _hasPreviousPage {
+    final result = _result;
+    return result != null && result.currentPage > 1;
   }
 
-  /// Retries the current query (filters, search text, and page are left
-  /// untouched — they are never cleared automatically after an error).
-  Future<void> retryLoadFabricOrders() async {
-    await _loadOrders();
-  }
-
-  /// Applies [transform] to the current filter and re-fetches. Any change
-  /// to filters or search text resets pagination back to page 1 (per
-  /// [resetPage], true by default); pure pagination changes (Previous/
-  /// Next) pass `resetPage: false` so the requested page is preserved.
-  void _updateFilter(
-    FabricOrderFilter Function(FabricOrderFilter current) transform, {
-    bool resetPage = true,
-  }) {
-    setState(() {
-      final updated = transform(_filter);
-      _filter = resetPage ? updated.copyWith(page: 1) : updated;
-    });
-    _loadOrders();
-  }
-
-  // Opens the filter bottom sheet, seeded with the current filter
-  // selections, and applies whatever the user confirms (Apply or Reset).
-  // Search text is preserved across filter changes since it has its own
-  // header entry point.
-  Future<void> _openFilterSheet() async {
-    final fabricTypes = _ordersService.fetchFabricTypes();
-    final result = await showModalBottomSheet<FabricOrderFilter>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => OrderFilterSheet(
-        initialFilter: _filter,
-        fabricTypeOptions: fabricTypes,
-      ),
-    );
-    if (result == null || !mounted) return;
-    _updateFilter((current) => result.copyWith(searchText: current.searchText));
-  }
-
-  void _clearStatusFilter() {
-    _updateFilter((f) => f.copyWith(clearStatus: true));
-  }
-
-  void _clearDateRangeFilter() {
-    _updateFilter(
-      (f) => f.copyWith(
-        dateRange: DateRangeFilter.all,
-        clearCustomStartDate: true,
-        clearCustomEndDate: true,
-      ),
-    );
-  }
-
-  void _clearFabricTypeFilter() {
-    _updateFilter((f) => f.copyWith(clearFabricType: true));
-  }
-
-  // Resets both the filter sheet selections and any active search text,
-  // returning the Orders list to the unfiltered mock data on page 1.
-  void _resetAllFiltersAndSearch() {
-    _searchController.clear();
-    _updateFilter((_) => const FabricOrderFilter());
-  }
-
-  void _openSearch() {
-    setState(() => _isSearching = true);
-  }
-
-  void _closeSearch() {
-    setState(() => _isSearching = false);
-    _searchController.clear();
-    _updateFilter((f) => f.copyWith(searchText: ''));
-  }
-
-  void _clearSearchText() {
-    _searchController.clear();
-    _updateFilter((f) => f.copyWith(searchText: ''));
-    _searchFocusNode.requestFocus();
-  }
-
-  // TODO: Debounce this once wired to the real Orders API so every
-  // keystroke doesn't trigger its own backend request — client-side mock
-  // filtering can afford to re-query on every change.
-  void _onSearchTextChanged(String value) {
-    _updateFilter((f) => f.copyWith(searchText: value));
+  bool get _hasNextPage {
+    final result = _result;
+    if (result == null) return false;
+    // Both confirmed disabling conditions: current_page == last_page, or
+    // next_page_url == null.
+    return result.currentPage < result.lastPage && result.nextPageUrl != null;
   }
 
   void _goToPreviousPage() {
-    final result = _result;
-    if (result == null || !result.hasPreviousPage) return;
-    _updateFilter((f) => f.copyWith(page: result.page - 1), resetPage: false);
+    if (_isLoading || !_hasPreviousPage) return;
+    _loadPage(_result!.currentPage - 1);
   }
 
   void _goToNextPage() {
-    final result = _result;
-    if (result == null || !result.hasNextPage) return;
-    _updateFilter((f) => f.copyWith(page: result.page + 1), resetPage: false);
-  }
-
-  // Opens the Order Detail screen for a tapped order card. Order Detail
-  // data (price breakdown, fabric specs) is loaded there via the same mock
-  // [MockOrdersService], keyed off [FabricOrder.orderId] — this is a
-  // temporary mock-only navigation/data-loading path until a real Order
-  // Detail API exists.
-  void _openOrderDetail(FabricOrder order) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OrderDetailScreen(
-          orderId: order.orderId,
-          ordersService: _ordersService,
-        ),
-      ),
-    );
+    if (_isLoading || !_hasNextPage) return;
+    _loadPage(_result!.currentPage + 1);
   }
 
   @override
@@ -245,35 +183,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         toolbarHeight: 68,
         titleSpacing: 0,
-        title: ClampedTextScale(
-          child: _isSearching ? _buildSearchField() : _buildHeaderTitle(),
-        ),
-        actions: [
-          if (_isSearching)
-            TextButton(
-              key: const ValueKey('orders-search-cancel'),
-              onPressed: _closeSearch,
-              child: Text(
-                context.t('orders.cancelSearch'),
-                style: const TextStyle(
-                  color: AppColors.textNavy,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          else
-            IconButton(
-              key: const ValueKey('orders-search-open'),
-              icon: const Icon(Icons.search_rounded),
-              tooltip: context.t('orders.searchOrdersTooltip'),
-              onPressed: _openSearch,
-            ),
-        ],
+        title: ClampedTextScale(child: _buildHeaderTitle()),
       ),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: refreshFabricOrders,
+          onRefresh: refreshSalesOrderLines,
           child: ResponsiveMaxWidth(
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -281,10 +196,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   sliver: SliverToBoxAdapter(child: _buildPageIntro()),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _buildFilterBar()),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -304,8 +215,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   // Client Portal header: small brand/logo mark, "Indigo Loom" eyebrow, and
-  // the large "Client Portal" title. Replaces the search field only while
-  // [_isSearching] is true.
+  // the large "Client Portal" title.
   Widget _buildHeaderTitle() {
     return Row(
       children: [
@@ -360,32 +270,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _buildSearchField() {
-    return TextField(
-      key: const ValueKey('orders-search-field'),
-      controller: _searchController,
-      focusNode: _searchFocusNode,
-      autofocus: true,
-      textInputAction: TextInputAction.search,
-      style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
-      decoration: InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-        hintText: context.t('orders.searchHint'),
-        hintStyle: const TextStyle(fontSize: 14, color: AppColors.grayText),
-        suffixIcon: _searchController.text.isEmpty
-            ? null
-            : IconButton(
-                key: const ValueKey('orders-search-clear'),
-                icon: const Icon(Icons.close_rounded, size: 18),
-                tooltip: context.t('orders.clearSearchTooltip'),
-                onPressed: _clearSearchText,
-              ),
-      ),
-      onChanged: _onSearchTextChanged,
-    );
-  }
-
   Widget _buildPageIntro() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,196 +296,44 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // Filter entry point (centered full-width outlined bar) + active-filter
-  // chips row underneath. Status/date range/fabric type are edited via the
-  // [OrderFilterSheet]; each active chip here can also be cleared
-  // individually without reopening the sheet.
-  Widget _buildFilterBar() {
-    final chips = _buildActiveFilterChips();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildOpenFilterButton(),
-        if (chips.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 36),
-            child: IntrinsicHeight(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final chip in chips) ...[
-                      chip,
-                      const SizedBox(width: 8),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildOpenFilterButton() {
-    final count = _filter.activeFilterCount;
-    final isActive = count > 0;
-    return Material(
-      key: const ValueKey('orders-open-filter-button'),
-      color: isActive ? AppColors.primaryNavy : Colors.white,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: _openFilterSheet,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isActive ? AppColors.primaryNavy : AppColors.border,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.tune_rounded,
-                size: 16,
-                color: isActive ? Colors.white : AppColors.textNavy,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isActive
-                    ? context.t(
-                        'orders.filterButtonWithCount',
-                        params: {'count': '$count'},
-                      )
-                    : context.t('orders.filterButton'),
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppColors.textNavy,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildActiveFilterChips() {
-    final chips = <Widget>[];
-    if (_filter.status != null) {
-      chips.add(
-        _activeFilterChip(
-          key: const ValueKey('active-filter-status'),
-          label: localizedOrderStatusLabel(context, _filter.status!),
-          onClear: _clearStatusFilter,
-        ),
-      );
-    }
-    if (_filter.dateRange != DateRangeFilter.all) {
-      chips.add(
-        _activeFilterChip(
-          key: const ValueKey('active-filter-date-range'),
-          label: dateRangeFilterLabel(context, _filter.dateRange),
-          onClear: _clearDateRangeFilter,
-        ),
-      );
-    }
-    if (_filter.fabricType != null) {
-      chips.add(
-        _activeFilterChip(
-          key: const ValueKey('active-filter-fabric-type'),
-          label: _filter.fabricType!,
-          onClear: _clearFabricTypeFilter,
-        ),
-      );
-    }
-    return chips;
-  }
-
-  Widget _activeFilterChip({
-    required Key key,
-    required String label,
-    required VoidCallback onClear,
-  }) {
-    return Container(
-      key: key,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.gradientNavyStart.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.gradientNavyStart.withValues(alpha: 0.3),
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.gradientNavyStart,
-            ),
-          ),
-          const SizedBox(width: 4),
-          InkWell(
-            onTap: onClear,
-            borderRadius: BorderRadius.circular(10),
-            child: const Icon(
-              Icons.close_rounded,
-              size: 14,
-              color: AppColors.gradientNavyStart,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Whether to show the "Showing X of Y orders" counter and Previous/Next
-  // pagination controls around the list: only once a query has actually
-  // resolved with matches, never while loading/erroring/empty.
+  // Whether to show the "Showing X-Y of Z order lines" counter and
+  // Previous/Next pagination controls around the list: only once a query
+  // has actually resolved with matches, never while loading/erroring/empty.
   bool _shouldShowResultsChrome() {
-    return !_isLoading && _error == null && (_result?.totalCount ?? 0) > 0;
+    return !_isLoading &&
+        _errorOutcome == null &&
+        !_hasUnknownError &&
+        (_result?.data.isNotEmpty ?? false);
   }
 
   // Switches between loading skeleton, error+retry, empty, and loaded list
-  // states for the orders section.
+  // states for the sales-order-lines section.
   Widget _buildOrdersSliver() {
     if (_isLoading) {
       return SliverToBoxAdapter(child: _buildLoadingSkeleton());
     }
-    if (_error != null) {
+    if (_errorOutcome != null || _hasUnknownError) {
       return SliverToBoxAdapter(child: _buildErrorState());
     }
 
-    final items = _result?.items ?? const [];
-    if (items.isEmpty) {
+    final lines = _result?.data ?? const [];
+    if (lines.isEmpty) {
       return SliverToBoxAdapter(child: _buildEmptyState());
     }
 
     return SliverList.separated(
-      itemCount: items.length,
+      itemCount: lines.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => OrderCard(
-        order: items[index],
-        onTap: () => _openOrderDetail(items[index]),
+      itemBuilder: (context, index) => SalesOrderLineCard(
+        key: ValueKey(lines[index].identity),
+        line: lines[index],
       ),
     );
   }
 
-  /// Skeleton placeholder mimicking [OrderCard]'s layout (thumbnail box
-  /// plus stacked text lines), shown while an orders query — initial load,
-  /// filter/search change, pagination, or retry — is in flight.
+  /// Skeleton placeholder mimicking [SalesOrderLineCard]'s layout, shown
+  /// while a sales-order-lines query — initial load, pagination, or retry —
+  /// is in flight. Never shows mock rows.
   Widget _buildLoadingSkeleton() {
     Widget skeletonLine({double width = double.infinity, double height = 10}) {
       return Container(
@@ -616,39 +348,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     Widget skeletonCard() {
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.border),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.border.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  skeletonLine(width: 100),
-                  const SizedBox(height: 8),
-                  skeletonLine(width: 70, height: 8),
-                  const SizedBox(height: 10),
-                  skeletonLine(width: 140),
-                  const SizedBox(height: 10),
-                  skeletonLine(width: 60, height: 8),
-                ],
-              ),
-            ),
+            skeletonLine(width: 120),
+            const SizedBox(height: 8),
+            skeletonLine(width: 200, height: 8),
+            const SizedBox(height: 8),
+            skeletonLine(width: 90, height: 8),
+            const SizedBox(height: 12),
+            skeletonLine(width: 140, height: 8),
           ],
         ),
       );
@@ -660,14 +376,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // Pagination footer: "Showing X of Y orders" on the left and compact
-  // Previous/Next icon buttons on the right, with a small "Page X of Y"
-  // indicator underneath. Reflects the current page's item count and the
-  // total matching count for [_filter], so it stays in sync whenever
-  // filters, search, or pagination change.
-  //
-  // TODO: Confirm final pagination UX with product/backend team:
-  // Previous/Next controls vs infinite scroll.
+  // Pagination footer: "Showing X-Y of Z order lines" on the left and
+  // compact Previous/Next icon buttons on the right, with a small
+  // "Page X of Y" indicator underneath.
   Widget _buildPaginationFooter() {
     final result = _result;
     if (result == null) return const SizedBox.shrink();
@@ -679,13 +390,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           children: [
             Expanded(
               child: Text(
-                context.t(
-                  'orders.showingCount',
-                  params: {
-                    'shown': '${result.items.length}',
-                    'total': '${result.totalCount}',
-                  },
-                ),
+                _lineCounterText(result),
                 key: const ValueKey('orders-results-counter'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -700,13 +405,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
             _paginationIconButton(
               key: const ValueKey('orders-page-previous'),
               icon: Icons.chevron_left_rounded,
-              onPressed: result.hasPreviousPage ? _goToPreviousPage : null,
+              onPressed: (!_isLoading && _hasPreviousPage)
+                  ? _goToPreviousPage
+                  : null,
             ),
             const SizedBox(width: 6),
             _paginationIconButton(
               key: const ValueKey('orders-page-next'),
               icon: Icons.chevron_right_rounded,
-              onPressed: result.hasNextPage ? _goToNextPage : null,
+              onPressed: (!_isLoading && _hasNextPage) ? _goToNextPage : null,
             ),
           ],
         ),
@@ -715,8 +422,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
           context.t(
             'orders.pageOf',
             params: {
-              'page': '${result.page}',
-              'totalPages': '${result.totalPages}',
+              'page': '${result.currentPage}',
+              'totalPages': '${result.lastPage}',
             },
           ),
           key: const ValueKey('orders-page-indicator'),
@@ -729,6 +436,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Builds the "Showing X-Y of Z order lines" counter directly from the
+  /// backend's own `from`/`to`/`total` fields — never derived by
+  /// multiplying `current_page * per_page`. `from`/`to` are only ever
+  /// `null` when `data` is empty, a case this screen shows the empty state
+  /// for instead (see [_shouldShowResultsChrome]); this still falls back to
+  /// a safe "0 of 0" rendering rather than ever interpolating a literal
+  /// `null` into the displayed text.
+  String _lineCounterText(
+    PaginatedResponse<BusinessCentralSalesOrderLine> result,
+  ) {
+    final from = result.from;
+    final to = result.to;
+    if (from == null || to == null) {
+      return context.t('orders.showingZeroLineCount');
+    }
+    return context.t(
+      'orders.showingLineCount',
+      params: {'from': '$from', 'to': '$to', 'total': '${result.total}'},
     );
   }
 
@@ -758,10 +486,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // Error state with a retry action, shown when the orders fail to load and
-  // no previously loaded data is available to fall back on.
+  /// Maps [_errorOutcome] to controlled, safe user-facing copy — the
+  /// backend's raw `message` is never shown directly (see
+  /// `BusinessCentralOutcome`'s doc comments). [_hasUnknownError] (a
+  /// non-Business-Central exception) gets the same generic copy as every
+  /// outcome other than "temporarily unavailable".
+  String _errorMessage() {
+    return switch (_errorOutcome) {
+      BusinessCentralTemporarilyUnavailable() => context.t(
+        'orders.temporarilyUnavailable',
+      ),
+      _ => context.t('orders.unableToLoad'),
+    };
+  }
+
+  // Error state with a retry action, shown when sales-order lines fail to
+  // load and no previously loaded page is available to fall back on.
   Widget _buildErrorState() {
     return Container(
+      key: const ValueKey('orders-error-state'),
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -778,13 +521,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _error ?? context.t('orders.unableToLoad'),
+            _errorMessage(),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.grayText),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
-            onPressed: retryLoadFabricOrders,
+            onPressed: retryLoadSalesOrderLines,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryNavy,
               foregroundColor: Colors.white,
@@ -796,11 +539,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // Shown when there are no orders to display, either because the mock
-  // dataset is empty or the current filter/search has no matches.
+  // Shown when the live sales-orders endpoint returns no rows.
   Widget _buildEmptyState() {
-    final hasActiveCriteria = !_filter.isEmpty;
     return Container(
+      key: const ValueKey('orders-empty-state'),
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -813,20 +555,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
           const Icon(Icons.inbox_outlined, color: AppColors.grayText, size: 28),
           const SizedBox(height: 8),
           Text(
-            hasActiveCriteria
-                ? context.t('orders.noOrdersFiltered')
-                : context.t('orders.noOrdersYet'),
+            context.t('orders.noOrderLinesYet'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.grayText),
           ),
-          if (hasActiveCriteria) ...[
-            const SizedBox(height: 12),
-            TextButton(
-              key: const ValueKey('orders-empty-reset-filters'),
-              onPressed: _resetAllFiltersAndSearch,
-              child: Text(context.t('orders.resetFilters')),
-            ),
-          ],
         ],
       ),
     );

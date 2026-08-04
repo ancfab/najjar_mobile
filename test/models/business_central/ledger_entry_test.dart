@@ -107,6 +107,32 @@ void main() {
       expect(() => LedgerEntry.fromJson(json), throwsFormatException);
     });
 
+    test('treats a missing Currency_Code as blank ("")', () {
+      final json = _validJson()..remove('Currency_Code');
+      final entry = LedgerEntry.fromJson(json);
+      expect(entry.currencyCode, '');
+    });
+
+    test('treats a null Currency_Code as blank ("")', () {
+      final json = _validJson();
+      json['Currency_Code'] = null;
+      final entry = LedgerEntry.fromJson(json);
+      expect(entry.currencyCode, '');
+    });
+
+    test('preserves a whitespace-only Currency_Code exactly as returned', () {
+      final json = _validJson();
+      json['Currency_Code'] = '   ';
+      final entry = LedgerEntry.fromJson(json);
+      expect(entry.currencyCode, '   ');
+    });
+
+    test('rejects a non-string Currency_Code value', () {
+      final json = _validJson();
+      json['Currency_Code'] = 123;
+      expect(() => LedgerEntry.fromJson(json), throwsFormatException);
+    });
+
     test('does not expose sensitive data in toString', () {
       final entry = LedgerEntry.fromJson(_validJson());
       final text = entry.toString();

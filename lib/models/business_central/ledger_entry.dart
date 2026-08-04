@@ -19,6 +19,14 @@
 /// - Expose [customerName], [amount], or [remainingAmount] through
 ///   [toString] — financial/customer-identifying fields are never logged
 ///   implicitly.
+///
+/// [currencyCode] is the one field on this contract confirmed to be
+/// legitimately blank: ANC guarantees one currency per customer, but a
+/// `Currency_Code` of `null`, a missing key, or `""` is a confirmed valid
+/// "unknown currency" response, not a malformed one — see Current Balance's
+/// confirmed currency rules. Parsing tolerates all three as `""` (never
+/// trimmed further here); a *present* value of the wrong JSON type is still
+/// a contract violation and throws, same as every other field.
 class LedgerEntry {
   const LedgerEntry({
     required this.entryNo,
@@ -56,7 +64,7 @@ class LedgerEntry {
       documentNo: _requireString(json, 'Document_No'),
       customerNo: _requireString(json, 'Customer_No'),
       customerName: _requireString(json, 'Customer_Name'),
-      currencyCode: _requireString(json, 'Currency_Code'),
+      currencyCode: _blankableCurrencyCode(json, 'Currency_Code'),
       amount: _requireNum(json, 'Amount'),
       remainingAmount: _requireNum(json, 'Remaining_Amount'),
       dueDate: _requireDateOnly(json, 'Due_Date'),
@@ -85,6 +93,20 @@ class LedgerEntry {
       throw FormatException(
         'LedgerEntry.$key missing or not a non-empty string',
       );
+    }
+    return value;
+  }
+
+  /// Returns `""` when [key] is absent or explicitly JSON `null` — the
+  /// confirmed "unknown currency" contract shape (see the class-level doc
+  /// comment). A *present* value must still be a [String] (never trimmed);
+  /// any other present value (wrong type) throws [FormatException] rather
+  /// than being silently treated as "also blank".
+  static String _blankableCurrencyCode(Map<String, dynamic> json, String key) {
+    if (!json.containsKey(key) || json[key] == null) return '';
+    final value = json[key];
+    if (value is! String) {
+      throw FormatException('LedgerEntry.$key present but not a string');
     }
     return value;
   }

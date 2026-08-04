@@ -59,4 +59,50 @@ void main() {
       expect(formatCurrency(100.5), '\$100.50');
     });
   });
+
+  group('formatCurrencyOrUnknown', () {
+    test('uses the given currency code, matching formatCurrency\'s style', () {
+      expect(
+        formatCurrencyOrUnknown(42850.0, currencyCode: 'USD'),
+        'USD 42,850.00',
+      );
+      expect(
+        formatCurrencyOrUnknown(1936.5, currencyCode: 'AED'),
+        'AED 1,936.50',
+      );
+    });
+
+    test('shows "?" instead of "\$" when currencyCode is null', () {
+      expect(formatCurrencyOrUnknown(100.5, currencyCode: null), '? 100.50');
+    });
+
+    test('shows "?" when currencyCode is empty', () {
+      expect(formatCurrencyOrUnknown(100.5, currencyCode: ''), '? 100.50');
+    });
+
+    test('shows "?" when currencyCode is whitespace-only', () {
+      expect(formatCurrencyOrUnknown(100.5, currencyCode: '   '), '? 100.50');
+    });
+
+    test('never silently defaults an unknown currency to "\$"', () {
+      expect(
+        formatCurrencyOrUnknown(100.5, currencyCode: null),
+        isNot(contains('\$')),
+      );
+    });
+
+    test('formats zero and preserves thousands grouping/decimals', () {
+      expect(formatCurrencyOrUnknown(0, currencyCode: 'USD'), 'USD 0.00');
+      expect(
+        formatCurrencyOrUnknown(12862.50, currencyCode: 'AED'),
+        'AED 12,862.50',
+      );
+    });
+
+    test('a negative amount shows a leading minus before the prefix, known or '
+        'unknown currency alike', () {
+      expect(formatCurrencyOrUnknown(-42.5, currencyCode: 'AED'), '-AED 42.50');
+      expect(formatCurrencyOrUnknown(-42.5, currencyCode: null), '-? 42.50');
+    });
+  });
 }

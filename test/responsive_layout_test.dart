@@ -24,6 +24,7 @@ import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/widgets/account_balance_hero_card.dart';
 import 'package:anc_fabrics/widgets/country_code_picker.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
@@ -34,7 +35,10 @@ import 'package:anc_fabrics/widgets/scan_fabric_button.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_current_balance_data_source.dart';
+import 'helpers/fake_last_payment_data_source.dart';
 import 'helpers/fake_quick_history_data_source.dart';
+import 'helpers/fake_sales_order_lines_data_source.dart';
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -108,15 +112,29 @@ void main() {
   group('Home screen', () {
     Future<void> pumpHome(WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: [
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
             AppTranslationsDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: HomeScreen(),
+          // Last Payment and Current Balance both default to live Business
+          // Central endpoints (real HTTP/secure storage), which never
+          // resolve in this widget-test sandbox — inject fakes so
+          // _settleFetch's pumpAndSettle doesn't wait forever on their
+          // loading spinners (these layout checks don't exercise either
+          // specifically).
+          home: HomeScreen(
+            lastPaymentSource: FakeLastPaymentDataSource(entry: null),
+            currentBalanceSource: FakeCurrentBalanceDataSource(
+              amount: const CurrentBalanceAmount(
+                amount: 15320.75,
+                currencyCode: 'AED',
+              ),
+            ),
+          ),
         ),
       );
       await _settleFetch(tester);
@@ -153,21 +171,32 @@ void main() {
   });
 
   group('Orders screen', () {
+    // OrdersScreen's sales-order-lines source defaults to the live
+    // Business Central endpoint (real HTTP/secure storage), which never
+    // resolves in this widget-test sandbox — inject a fake so
+    // _settleFetch's pumpAndSettle doesn't wait forever (these layout
+    // checks don't exercise sales-order-line data specifically).
     for (final size in _sizes) {
       testWidgets(
         'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
         (tester) async {
           await _setSize(tester, size);
           await tester.pumpWidget(
-            const MaterialApp(
-              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-              localizationsDelegates: [
+            MaterialApp(
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ar'),
+                Locale('fr'),
+              ],
+              localizationsDelegates: const [
                 AppTranslationsDelegate(),
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              home: OrdersScreen(),
+              home: OrdersScreen(
+                salesOrderLinesSource: FakeSalesOrderLinesDataSource(),
+              ),
             ),
           );
           await _settleFetch(tester);
@@ -179,15 +208,17 @@ void main() {
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
       await tester.pumpWidget(
-        const MaterialApp(
-          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: [
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
             AppTranslationsDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: OrdersScreen(),
+          home: OrdersScreen(
+            salesOrderLinesSource: FakeSalesOrderLinesDataSource(),
+          ),
         ),
       );
       await _settleFetch(tester);
@@ -197,15 +228,17 @@ void main() {
     testWidgets('No overflow in landscape', (tester) async {
       await _setSize(tester, const Size(844, 390));
       await tester.pumpWidget(
-        const MaterialApp(
-          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: [
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
             AppTranslationsDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: OrdersScreen(),
+          home: OrdersScreen(
+            salesOrderLinesSource: FakeSalesOrderLinesDataSource(),
+          ),
         ),
       );
       await _settleFetch(tester);

@@ -15,6 +15,7 @@ import '../models/business_central/business_central_item.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
+import '../models/business_central/sales_order_line.dart';
 import 'anc_api_exceptions.dart';
 
 /// Purpose: The single controlled HTTP transport boundary between this app
@@ -207,6 +208,46 @@ class AncApiClient {
       queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
     );
     return _decodeInvoicesResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/sales-orders` for the authenticated
+  /// user, requesting [page] at a fixed [perPage] size. Never sends a
+  /// customer identifier — the ANC API scopes the result to the
+  /// authenticated [token]'s `bc_customer_no` server-side. Each returned row
+  /// is one sales-order *line*, not one complete order — see
+  /// [BusinessCentralSalesOrderLine]. This is the ANC API's own confirmed
+  /// endpoint; never the separate Zebra sales-orders integration.
+  ///
+  /// [page] is clamped to `>= 1` and [perPage] to
+  /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
+  /// before the request is sent, same as [fetchLedgerEntries]/
+  /// [fetchPayments]/[fetchInvoices].
+  ///
+  /// Deliberately has no `fetchSalesOrdersPage(nextPageUrl:)` counterpart,
+  /// for the same reason as [fetchPayments]/[fetchInvoices]: this app never
+  /// constructs a request from a backend-provided `next_page_url`/
+  /// `prev_page_url` for any Business Central list endpoint, to avoid ever
+  /// trusting an unverified host from a response body. Sales-orders
+  /// pagination is done only by requesting `page: currentPage +/- 1` against
+  /// this fixed endpoint with the original `perPage` — see
+  /// `SalesOrderLinesService`.
+  Future<PaginatedResponse<BusinessCentralSalesOrderLine>> fetchSalesOrders({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.salesOrdersPath,
+      token: token,
+      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+    );
+    return _decodeSalesOrdersResponse(response);
   }
 
   /// Calls `GET /api/business-central/items` for the authenticated user,
@@ -661,6 +702,40 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API invoices request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a sales-orders response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [BusinessCentralSalesOrderLine]; every other
+  /// status raises [AncHttpException] with that [statusCode] — including a
+  /// parsed [ApiValidationError] for 422 — the same shape as
+  /// [_decodeInvoicesResponse]/[_decodePaymentsResponse]/
+  /// [_decodeLedgerEntriesResponse]. The Business Central taxonomy
+  /// (pagination bug vs. account-not-linked) is decided one layer up (see
+  /// `mapBusinessCentralError`), not here.
+  PaginatedResponse<BusinessCentralSalesOrderLine> _decodeSalesOrdersResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralSalesOrderLine>.fromJson(
+          json,
+          BusinessCentralSalesOrderLine.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed sales-orders response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API sales-orders request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))

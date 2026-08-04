@@ -36,9 +36,11 @@
     "unableToLoadDashboard": "تعذّر تحميل بيانات لوحة المعلومات.",
     "unableToRefreshDashboard": "تعذّر تحديث بيانات لوحة المعلومات.",
     "enterCatalogueCodeValidation": "يرجى إدخال رمز الكتالوج.",
-    "availableAtWarehouse": "يتوفر {quantity} ياردة في {warehouse}.",
+    "availableAtLocation": "يتوفر {quantity} {unit} في {location}.",
+    "unknownLocation": "موقع غير معروف",
     "noAvailabilityFound": "لم يتم العثور على توفر لـ \"{code}\".",
     "catalogueLookupError": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "checkAvailabilityUnavailable": "غير متاح مؤقتًا.",
     "settingsComingSoon": "شاشة الإعدادات قريبًا",
     "scanFabricAvailability": "مسح رمز توفر القماش",
     "checkAvailability": "التحقق من التوفر",
@@ -51,6 +53,10 @@
     "label": "الرصيد الحالي",
     "semanticsCurrent": "الرصيد الحالي {amount}",
     "semanticsHint": "يفتح تفاصيل رصيد الحساب"
+  },
+  "currentBalance": {
+    "errorGeneric": "تعذّر تحميل البيانات الآن.",
+    "errorTemporarilyUnavailable": "غير متاح مؤقتًا."
   },
   "accountBalance": {
     "unableToLoad": "تعذّر تحميل رصيد الحساب.",
@@ -109,10 +115,19 @@
     "filterButton": "تصفية",
     "filterButtonWithCount": "تصفية ({count})",
     "showingCount": "عرض {shown} من {total} طلب",
+    "showingLineCount": "عرض {from}-{to} من أصل {total} من بنود الطلبات",
+    "showingZeroLineCount": "عرض 0 من أصل 0 من بنود الطلبات",
     "pageOf": "صفحة {page} من {totalPages}",
     "noOrdersFiltered": "لا توجد طلبات مطابقة للتصفية المحددة.",
     "noOrdersYet": "لا توجد طلبات بعد.",
+    "noOrderLinesYet": "لا توجد بنود طلبات بعد.",
+    "temporarilyUnavailable": "غير متاح مؤقتًا.",
     "resetFilters": "إعادة تعيين التصفية"
+  },
+  "salesOrderLine": {
+    "lineNumber": "السطر {lineNo}",
+    "itemNo": "الصنف {itemNo}",
+    "quantityAtPrice": "{quantity} x {unitPrice}"
   },
   "orderDetail": {
     "unableToLoad": "تعذّر تحميل تفاصيل الطلب.",
@@ -380,7 +395,10 @@
     "composition": "التركيبة"
   },
   "lastPayment": {
-    "label": "آخر دفعة"
+    "label": "آخر دفعة",
+    "empty": "لا توجد مدفوعات بعد",
+    "errorGeneric": "تعذّر تحميل البيانات الآن.",
+    "errorTemporarilyUnavailable": "غير متاح مؤقتًا."
   },
   "paymentTimeline": {
     "heading": "الجدول الزمني للدفعات"

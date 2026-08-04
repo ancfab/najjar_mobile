@@ -36,9 +36,11 @@
     "unableToLoadDashboard": "Unable to load dashboard data.",
     "unableToRefreshDashboard": "Unable to refresh dashboard data.",
     "enterCatalogueCodeValidation": "Please enter a catalogue code.",
-    "availableAtWarehouse": "{quantity} yd available at {warehouse}.",
+    "availableAtLocation": "{quantity} {unit} available at {location}.",
+    "unknownLocation": "Unknown location",
     "noAvailabilityFound": "No availability found for \"{code}\".",
     "catalogueLookupError": "Something went wrong. Please try again.",
+    "checkAvailabilityUnavailable": "Temporarily unavailable.",
     "settingsComingSoon": "Settings screen coming soon",
     "scanFabricAvailability": "Scan Fabric Availability",
     "checkAvailability": "Check Availability",
@@ -51,6 +53,10 @@
     "label": "CURRENT BALANCE",
     "semanticsCurrent": "Current balance {amount}",
     "semanticsHint": "Opens account balance details"
+  },
+  "currentBalance": {
+    "errorGeneric": "Couldn't load data right now.",
+    "errorTemporarilyUnavailable": "Temporarily unavailable."
   },
   "accountBalance": {
     "unableToLoad": "Unable to load account balance.",
@@ -109,10 +115,19 @@
     "filterButton": "Filter",
     "filterButtonWithCount": "Filter ({count})",
     "showingCount": "Showing {shown} of {total} orders",
+    "showingLineCount": "Showing {from}-{to} of {total} order lines",
+    "showingZeroLineCount": "Showing 0 of 0 order lines",
     "pageOf": "Page {page} of {totalPages}",
     "noOrdersFiltered": "No orders match the selected filters.",
     "noOrdersYet": "No orders yet.",
+    "noOrderLinesYet": "No order lines yet.",
+    "temporarilyUnavailable": "Temporarily unavailable.",
     "resetFilters": "Reset filters"
+  },
+  "salesOrderLine": {
+    "lineNumber": "Line {lineNo}",
+    "itemNo": "Item {itemNo}",
+    "quantityAtPrice": "{quantity} x {unitPrice}"
   },
   "orderDetail": {
     "unableToLoad": "Unable to load order details.",
@@ -380,7 +395,10 @@
     "composition": "Composition"
   },
   "lastPayment": {
-    "label": "Last Payment"
+    "label": "Last Payment",
+    "empty": "No payments yet",
+    "errorGeneric": "Couldn't load data right now.",
+    "errorTemporarilyUnavailable": "Temporarily unavailable."
   },
   "paymentTimeline": {
     "heading": "Payment Timeline"

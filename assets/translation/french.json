@@ -36,9 +36,11 @@
     "unableToLoadDashboard": "Impossible de charger les données du tableau de bord.",
     "unableToRefreshDashboard": "Impossible d'actualiser les données du tableau de bord.",
     "enterCatalogueCodeValidation": "Veuillez saisir un code du catalogue.",
-    "availableAtWarehouse": "{quantity} yd disponibles à {warehouse}.",
+    "availableAtLocation": "{quantity} {unit} disponibles à {location}.",
+    "unknownLocation": "Emplacement inconnu",
     "noAvailabilityFound": "Aucune disponibilité trouvée pour « {code} ».",
     "catalogueLookupError": "Une erreur s'est produite. Veuillez réessayer.",
+    "checkAvailabilityUnavailable": "Temporairement indisponible.",
     "settingsComingSoon": "Écran des paramètres bientôt disponible",
     "scanFabricAvailability": "Scanner la disponibilité du tissu",
     "checkAvailability": "Vérifier la disponibilité",
@@ -51,6 +53,10 @@
     "label": "SOLDE ACTUEL",
     "semanticsCurrent": "Solde actuel {amount}",
     "semanticsHint": "Ouvre les détails du solde du compte"
+  },
+  "currentBalance": {
+    "errorGeneric": "Impossible de charger les données pour le moment.",
+    "errorTemporarilyUnavailable": "Temporairement indisponible."
   },
   "accountBalance": {
     "unableToLoad": "Impossible de charger le solde du compte.",
@@ -109,10 +115,19 @@
     "filterButton": "Filtrer",
     "filterButtonWithCount": "Filtrer ({count})",
     "showingCount": "Affichage de {shown} sur {total} commandes",
+    "showingLineCount": "Affichage de {from} à {to} sur {total} lignes de commande",
+    "showingZeroLineCount": "Affichage de 0 sur 0 lignes de commande",
     "pageOf": "Page {page} sur {totalPages}",
     "noOrdersFiltered": "Aucune commande ne correspond aux filtres sélectionnés.",
     "noOrdersYet": "Aucune commande pour le moment.",
+    "noOrderLinesYet": "Aucune ligne de commande pour le moment.",
+    "temporarilyUnavailable": "Temporairement indisponible.",
     "resetFilters": "Réinitialiser les filtres"
+  },
+  "salesOrderLine": {
+    "lineNumber": "Ligne {lineNo}",
+    "itemNo": "Article {itemNo}",
+    "quantityAtPrice": "{quantity} x {unitPrice}"
   },
   "orderDetail": {
     "unableToLoad": "Impossible de charger les détails de la commande.",
@@ -380,7 +395,10 @@
     "composition": "Composition"
   },
   "lastPayment": {
-    "label": "Dernier paiement"
+    "label": "Dernier paiement",
+    "empty": "Aucun paiement pour l'instant",
+    "errorGeneric": "Impossible de charger les données pour le moment.",
+    "errorTemporarilyUnavailable": "Temporairement indisponible."
   },
   "paymentTimeline": {
     "heading": "Historique des paiements"
