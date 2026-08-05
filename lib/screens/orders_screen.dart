@@ -8,6 +8,7 @@ import '../services/sales_order_lines_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../widgets/sales_order_line_card.dart';
+import 'order_detail_screen.dart';
 
 /// Frontend-only status filter passed in from other screens (e.g. the Home
 /// dashboard's "Active Orders" metric card).
@@ -91,10 +92,33 @@ class _OrdersScreenState extends State<OrdersScreen> {
   /// discard its result instead of corrupting fresher state.
   int _requestGeneration = 0;
 
+  /// Guards against opening more than one Order Detail screen from a rapid
+  /// double-tap on the same (or a different) row before the first push has
+  /// even started animating.
+  bool _isOpeningOrderDetail = false;
+
   @override
   void initState() {
     super.initState();
     _loadPage(1);
+  }
+
+  /// Opens Order Detail for [documentNo] — the sales order's confirmed
+  /// identifier, never [BusinessCentralSalesOrderLine.lineNo] alone. Rows
+  /// sharing the same `Document_No` all open the same Order Detail screen,
+  /// which is correct: they are lines of the same order.
+  void _openOrderDetail(String documentNo) {
+    if (_isOpeningOrderDetail) return;
+    _isOpeningOrderDetail = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => OrderDetailScreen(documentNo: documentNo),
+          ),
+        )
+        .then((_) {
+          if (mounted) setState(() => _isOpeningOrderDetail = false);
+        });
   }
 
   /// Fetches [page] of sales-order lines. Used for the initial load, every
@@ -327,6 +351,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       itemBuilder: (context, index) => SalesOrderLineCard(
         key: ValueKey(lines[index].identity),
         line: lines[index],
+        onTap: () => _openOrderDetail(lines[index].documentNo),
       ),
     );
   }

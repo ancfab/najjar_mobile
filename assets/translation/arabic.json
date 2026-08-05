@@ -131,6 +131,11 @@
   },
   "orderDetail": {
     "unableToLoad": "تعذّر تحميل تفاصيل الطلب.",
+    "temporarilyUnavailable": "غير متاح مؤقتًا.",
+    "orderNotFoundTitle": "الطلب غير موجود",
+    "orderNotFoundMessage": "لم نتمكن من العثور على طلب بهذا الرقم.",
+    "noInvoiceAvailable": "لا توجد فاتورة متاحة لهذا الطلب.",
+    "invoiceLookupFailed": "تعذّر تحميل الفاتورة. يرجى المحاولة مرة أخرى.",
     "historyComingSoon": "سجل الطلب قريبًا",
     "title": "تفاصيل الطلب",
     "breadcrumbOrders": "الطلبات",
@@ -138,7 +143,10 @@
     "itemsHeader": "عناصر الطلب",
     "fabricSpecsAction": "مواصفات القماش",
     "historyHeader": "سجل الطلب",
-    "viewTimelineAction": "عرض الجدول الزمني للطلب"
+    "viewTimelineAction": "عرض الجدول الزمني للطلب",
+    "invoiceHeader": "الفاتورة",
+    "viewInvoiceAction": "عرض الفاتورة",
+    "customerLabel": "العميل"
   },
   "orderStatus": {
     "delivered": "تم التسليم",
@@ -173,7 +181,8 @@
     "printFailed": "تعذّرت طباعة الفاتورة. يرجى المحاولة مرة أخرى.",
     "downloadCancelled": "تم إلغاء التنزيل.",
     "downloadFailed": "تعذّر تجهيز ملف PDF للفاتورة. يرجى المحاولة مرة أخرى.",
-    "emailNotAvailable": "إرسال البريد الإلكتروني لجهة الفوترة غير متاح بعد."
+    "emailNotAvailable": "إرسال البريد الإلكتروني لجهة الفوترة غير متاح بعد.",
+    "liveCustomerLabel": "العميل"
   },
   "invoiceStatus": {
     "paid": "مدفوعة"
@@ -209,7 +218,6 @@
   },
   "scanStock": {
     "title": "مسح المخزون",
-    "scanHistoryComingSoon": "سجل المسح قريبًا",
     "flashToggleComingSoon": "تبديل الفلاش قريبًا",
     "toggleFlashTooltip": "تبديل الفلاش",
     "centerQrInstruction": "ضع رمز الاستجابة السريعة في وسط الإطار",
@@ -249,6 +257,11 @@
     "availabilityByLocationLabel": "التوفر حسب الموقع",
     "unknownLocationLabel": "موقع غير معروف",
     "availableQuantityLabel": "{quantity} {unit} متوفر"
+  },
+  "scanHistory": {
+    "title": "سجل المسح",
+    "emptyMessage": "لا يوجد سجل مسح حتى الآن",
+    "scannedAtLabel": "تم المسح"
   },
   "support": {
     "title": "الدعم",

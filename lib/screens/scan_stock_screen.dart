@@ -8,12 +8,15 @@ import '../services/api_stock_lookup_service.dart';
 import '../services/barcode_scanner_controller.dart';
 import '../services/last_scan_store.dart';
 import '../services/scan_camera_permission_service.dart';
+import '../services/scan_history_store.dart';
 import '../services/stock_lookup_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../utils/date_time_format.dart';
 import '../utils/responsive.dart';
+import 'scan_history_screen.dart';
 
 /// The Scan Stock screen's current stage, driving which content
 /// [_ScanPreviewArea] shows in place of (or alongside) the live preview.
@@ -92,10 +95,13 @@ class ScanStockScreen extends StatefulWidget {
     this.scannerController,
     this.stockLookupService,
     LastScanStore? lastScanStore,
+    ScanHistoryStore? scanHistoryStore,
   }) : permissionService =
            permissionService ??
            const PermissionHandlerScanCameraPermissionService(),
-       lastScanStore = lastScanStore ?? const SharedPreferencesLastScanStore();
+       lastScanStore = lastScanStore ?? const SharedPreferencesLastScanStore(),
+       scanHistoryStore =
+           scanHistoryStore ?? const SharedPreferencesScanHistoryStore();
 
   /// Camera permission seam. Overridable so tests can inject a fake
   /// instead of invoking the real platform permission channel.
@@ -120,6 +126,11 @@ class ScanStockScreen extends StatefulWidget {
 
   /// Last-successful-scan persistence seam, backing the Recent Scan card.
   final LastScanStore lastScanStore;
+
+  /// Scan-history persistence seam, backing the Scan History screen. Every
+  /// [StockLookupSuccess] appends to this store in addition to updating
+  /// [lastScanStore] — see [_ScanStockScreenState._startLookup].
+  final ScanHistoryStore scanHistoryStore;
 
   @override
   State<ScanStockScreen> createState() => _ScanStockScreenState();
@@ -362,6 +373,7 @@ class _ScanStockScreenState extends State<ScanStockScreen>
         batchReference: result.batchReference,
       );
       unawaited(widget.lastScanStore.save(record));
+      unawaited(widget.scanHistoryStore.append(record));
       setState(() {
         _lookupResult = result;
         _lookupStage = _LookupStage.success;
@@ -441,11 +453,16 @@ class _ScanStockScreenState extends State<ScanStockScreen>
     }
   }
 
-  // Opens the full scan history list.
-  // TODO: Navigate to a real Scan History screen once it exists.
+  // Opens the full Scan History screen, backed by the same
+  // scanHistoryStore every successful lookup appends to.
   void _openScanHistory(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.t('scanStock.scanHistoryComingSoon'))),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ScanHistoryScreen(
+          historyStore: widget.scanHistoryStore,
+          lastScanStore: widget.lastScanStore,
+        ),
+      ),
     );
   }
 
@@ -1577,7 +1594,7 @@ class _RecentScanCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     '${context.t('scanStock.lastSuccessfulScanLabel')}: '
-                    '${_formatTimestamp(record.scannedAt)}',
+                    '${formatCompactLocalTimestamp(record.scannedAt)}',
                     key: const ValueKey('scan-stock-recent-scan-timestamp'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1619,12 +1636,5 @@ class _RecentScanCard extends StatelessWidget {
       parts.add(batchReference);
     }
     return parts.join(' • ');
-  }
-
-  static String _formatTimestamp(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
-        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
   }
 }

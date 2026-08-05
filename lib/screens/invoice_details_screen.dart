@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../localization/translations.dart';
+import '../models/business_central/business_central_invoice_line.dart';
 import '../models/invoice.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/invoice_document_actions.dart';
@@ -16,6 +17,7 @@ import '../widgets/invoice_breadcrumb.dart';
 import '../widgets/invoice_info_card.dart';
 import '../widgets/invoice_logistics_status_card.dart';
 import '../widgets/invoice_notes_section.dart';
+import '../widgets/live_invoice_lines_card.dart';
 import '../widgets/payment_timeline.dart';
 import 'edit_profile_screen.dart';
 import 'invoices_screen.dart';
@@ -36,17 +38,15 @@ class InvoiceDetailsScreen extends StatefulWidget {
   const InvoiceDetailsScreen({
     super.key,
     required this.invoiceNumber,
-    // TODO(api): This screen is still mock-backed via MockInvoiceService.
-    // It must eventually be switched to the real invoice repository/service
-    // (InvoicesService + a grouping/details-mapping layer) once that
-    // contract is approved — real invoice lines may span multiple API
-    // pages, so a single `Invoice` cannot be assumed to come from one
-    // request the way MockInvoiceService currently returns it. After that
-    // connection, none of the current mock-only fields (status, due date,
-    // payment method, Payment Timeline, Logistics, Internal Notes, billed
-    // address/email, currency, tax, or totals) may remain populated with
-    // fake values — each must either be backed by a real field or hidden/
-    // shown as unavailable.
+    this.liveInvoiceLines,
+    // TODO(api): Absent `liveInvoiceLines`, this screen is still mock-backed
+    // via MockInvoiceService. `liveInvoiceLines` is the smallest live-data
+    // injection built so far (see `OrderDetailScreen`'s Invoice button) —
+    // it renders only confirmed invoice-line fields via
+    // `LiveInvoiceLinesCard` and hides every mock-only section (status, due
+    // date, payment method, Payment Timeline, Logistics, Internal Notes,
+    // billed address/email, Print/Download PDF). A full replacement of the
+    // mock-backed path below is a separate, not-yet-approved task.
     MockInvoiceService? invoiceService,
     InvoicePdfService? pdfService,
     InvoiceDocumentActions? documentActions,
@@ -56,11 +56,23 @@ class InvoiceDetailsScreen extends StatefulWidget {
        documentActions =
            documentActions ?? const PrintingInvoiceDocumentActions();
 
-  /// [Invoice.invoiceNumber] of the invoice to load (e.g. "#INV-8821").
+  /// [Invoice.invoiceNumber] of the invoice to load (e.g. "#INV-8821") when
+  /// [liveInvoiceLines] is `null`; the live invoice's `Document_No` when it
+  /// is not.
   final String invoiceNumber;
 
+  /// When non-null, every line of one already-selected, already-grouped
+  /// live invoice (see `selectLatestInvoiceLines`) — all sharing the same
+  /// `Document_No`. Supplying this switches the screen entirely to the live
+  /// rendering path (see [_isLive]) instead of fetching from
+  /// [invoiceService]; the mock invoice service is never consulted in that
+  /// case. `null` (the default) preserves every existing mock-backed call
+  /// site and test unchanged.
+  final List<BusinessCentralInvoiceLine>? liveInvoiceLines;
+
   /// Invoice query service/repository boundary. Defaults to the mock
-  /// implementation; overridable so tests can inject a fake.
+  /// implementation; overridable so tests can inject a fake. Unused when
+  /// [liveInvoiceLines] is supplied.
   final MockInvoiceService invoiceService;
 
   /// Prepares the PDF bytes shared by Print and Download PDF. Defaults to
@@ -102,10 +114,20 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   /// reject a second tap until this resolves.
   _InvoicePdfAction? _activePdfAction;
 
+  /// Whether this instance is showing [widget.liveInvoiceLines] rather than
+  /// fetching from [_invoiceService] — see the constructor doc comment.
+  bool get _isLive => widget.liveInvoiceLines != null;
+
   @override
   void initState() {
     super.initState();
-    _loadInvoice();
+    if (_isLive) {
+      // Data is already available synchronously — no fetch, no loading
+      // state, and [_invoiceService]/[MockInvoiceService] is never touched.
+      _isLoading = false;
+    } else {
+      _loadInvoice();
+    }
   }
 
   Future<void> _loadInvoice() async {
@@ -323,6 +345,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   }
 
   Widget _buildBody() {
+    if (_isLive) return _buildLiveBody();
+
     if (_isLoading) {
       return const Center(
         key: ValueKey('invoice-details-loading'),
@@ -382,6 +406,42 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               const SizedBox(height: 16),
               InvoiceNotesSection(note: invoice.clientVisibleNote),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Live rendering path: only the sections a confirmed live invoice-line
+  // group can back (breadcrumb/title + LiveInvoiceLinesCard). Print/
+  // Download PDF, Payment Timeline, Logistics, Internal Notes, and the
+  // Billed To/status/due-date/payment-method fields all depend on the mock
+  // [Invoice] model's fields, which have no live equivalent — see the
+  // constructor doc comment for why they're hidden entirely here rather
+  // than shown with mock values.
+  Widget _buildLiveBody() {
+    final lines = widget.liveInvoiceLines!;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: ResponsiveMaxWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InvoiceBreadcrumb(
+              invoiceNumber: widget.invoiceNumber,
+              onInvoicesTap: _openInvoices,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.t('invoiceDetails.title'),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textNavy,
+              ),
+            ),
+            const SizedBox(height: 16),
+            LiveInvoiceLinesCard(lines: lines),
           ],
         ),
       ),

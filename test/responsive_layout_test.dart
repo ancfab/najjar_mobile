@@ -36,7 +36,9 @@ import 'package:anc_fabrics/widgets/scan_fabric_button.dart';
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_current_balance_data_source.dart';
+import 'helpers/fake_invoice_lookup_data_source.dart';
 import 'helpers/fake_last_payment_data_source.dart';
+import 'helpers/fake_order_detail_data_source.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/fake_sales_order_lines_data_source.dart';
 import 'helpers/fake_invoice_document_actions.dart';
@@ -253,15 +255,23 @@ void main() {
         (tester) async {
           await _setSize(tester, size);
           await tester.pumpWidget(
-            const MaterialApp(
-              supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-              localizationsDelegates: [
+            MaterialApp(
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ar'),
+                Locale('fr'),
+              ],
+              localizationsDelegates: const [
                 AppTranslationsDelegate(),
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              home: OrderDetailScreen(orderId: '#ORD-8829'),
+              home: OrderDetailScreen(
+                documentNo: 'SO-24001',
+                orderDetailSource: FakeOrderDetailDataSource(),
+                invoiceLookupSource: FakeInvoiceLookupDataSource(),
+              ),
             ),
           );
           await _settleFetch(tester);
@@ -273,15 +283,19 @@ void main() {
     testWidgets('No overflow at 1.5x system text scale', (tester) async {
       await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
       await tester.pumpWidget(
-        const MaterialApp(
-          supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: [
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
             AppTranslationsDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: OrderDetailScreen(orderId: '#ORD-8829'),
+          home: OrderDetailScreen(
+            documentNo: 'SO-24001',
+            orderDetailSource: FakeOrderDetailDataSource(),
+            invoiceLookupSource: FakeInvoiceLookupDataSource(),
+          ),
         ),
       );
       await _settleFetch(tester);

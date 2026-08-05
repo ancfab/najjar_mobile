@@ -191,10 +191,19 @@ class AncApiClient {
   /// Invoices pagination is done only by requesting `page: currentPage + 1`
   /// against this fixed endpoint with the original `perPage` — see
   /// `InvoicesService`.
+  ///
+  /// [orderNo], when supplied, is sent as the `order_no` query parameter,
+  /// filtering the response to invoice lines whose confirmed `Order_No`
+  /// field matches that sales-order `Document_No` — see `OrderDetailScreen`'s
+  /// Invoice lookup, the only caller that supplies it. Omitted entirely
+  /// (not sent as an empty string) when `null`, so every other caller of
+  /// this method — e.g. `InvoicesService`'s unfiltered paging — is
+  /// unaffected. Same `item_no`-style pattern as [fetchInventory].
   Future<PaginatedResponse<BusinessCentralInvoiceLine>> fetchInvoices({
     required String token,
     int page = 1,
     int perPage = ApiConfig.businessCentralDefaultPerPage,
+    String? orderNo,
   }) async {
     final safePage = page < 1 ? 1 : page;
     final safePerPage = perPage.clamp(
@@ -205,7 +214,11 @@ class AncApiClient {
     final response = await getAuthenticatedJson(
       ApiConfig.invoicesPath,
       token: token,
-      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+      queryParameters: {
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+        'order_no': ?orderNo,
+      },
     );
     return _decodeInvoicesResponse(response);
   }
@@ -231,10 +244,19 @@ class AncApiClient {
   /// pagination is done only by requesting `page: currentPage +/- 1` against
   /// this fixed endpoint with the original `perPage` — see
   /// `SalesOrderLinesService`.
+  ///
+  /// [documentNo], when supplied, is sent as the `document_no` query
+  /// parameter, filtering the response to lines whose `Document_No` matches
+  /// that value — see `OrderDetailScreen`'s Order Detail fetch, the only
+  /// caller that supplies it. Omitted entirely (not sent as an empty
+  /// string) when `null`, so every other caller of this method — e.g.
+  /// `SalesOrderLinesService`'s unfiltered paging for the Orders list — is
+  /// unaffected. Same `item_no`-style pattern as [fetchInventory].
   Future<PaginatedResponse<BusinessCentralSalesOrderLine>> fetchSalesOrders({
     required String token,
     int page = 1,
     int perPage = ApiConfig.businessCentralDefaultPerPage,
+    String? documentNo,
   }) async {
     final safePage = page < 1 ? 1 : page;
     final safePerPage = perPage.clamp(
@@ -245,7 +267,11 @@ class AncApiClient {
     final response = await getAuthenticatedJson(
       ApiConfig.salesOrdersPath,
       token: token,
-      queryParameters: {'page': '$safePage', 'per_page': '$safePerPage'},
+      queryParameters: {
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+        'document_no': ?documentNo,
+      },
     );
     return _decodeSalesOrdersResponse(response);
   }

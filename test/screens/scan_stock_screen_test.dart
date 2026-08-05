@@ -23,10 +23,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/screens/scan_history_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/services/barcode_scanner_controller.dart';
 import 'package:anc_fabrics/services/last_scan_store.dart';
 import 'package:anc_fabrics/services/scan_camera_permission_service.dart';
+import 'package:anc_fabrics/services/scan_history_store.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
@@ -34,6 +36,7 @@ import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 import '../helpers/fake_barcode_scanner_controller.dart';
 import '../helpers/fake_last_scan_store.dart';
 import '../helpers/fake_scan_camera_permission_service.dart';
+import '../helpers/fake_scan_history_store.dart';
 import '../helpers/fake_stock_lookup_service.dart';
 
 const _titleByLocale = {
@@ -119,6 +122,7 @@ Future<void> _pumpScanStockScreen(
   BarcodeScannerController? scannerController,
   StockLookupService? stockLookupService,
   LastScanStore? lastScanStore,
+  ScanHistoryStore? scanHistoryStore,
 }) async {
   tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1.0;
@@ -149,6 +153,7 @@ Future<void> _pumpScanStockScreen(
         scannerController: scannerController ?? FakeBarcodeScannerController(),
         stockLookupService: stockLookupService ?? FakeStockLookupService(),
         lastScanStore: lastScanStore ?? FakeLastScanStore(),
+        scanHistoryStore: scanHistoryStore ?? FakeScanHistoryStore(),
       ),
     ),
   );
@@ -936,6 +941,183 @@ void main() {
       expect(saved.batchReference, isNull);
     });
 
+    testWidgets(
+      'A successful camera lookup appends one history record and still '
+      'updates the Recent Scan card — both represent the same event',
+      (tester) async {
+        final scanner = FakeBarcodeScannerController();
+        final lastScanStore = FakeLastScanStore();
+        final historyStore = FakeScanHistoryStore();
+        final lookup = FakeStockLookupService()
+          ..defaultResultBuilder = _fullSuccess;
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+          lastScanStore: lastScanStore,
+          scanHistoryStore: historyStore,
+        );
+
+        scanner.emit('ITEM-0042');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(historyStore.appendCallCount, 1);
+        final history = await historyStore.read();
+        expect(history, hasLength(1));
+        expect(history.single.rawCode, 'ITEM-0042');
+        expect(history.single.itemNo, 'ITEM-0042');
+        expect(history.single.description, 'Egyptian Cotton Sateen (600TC)');
+
+        // Recent Scan and the latest history record represent the same
+        // successful event.
+        final recent = await lastScanStore.read();
+        expect(recent!.rawCode, history.single.rawCode);
+        expect(recent.scannedAt, history.single.scannedAt);
+        expect(find.byKey(_recentScanSummaryKey), findsOneWidget);
+      },
+    );
+
+    testWidgets('A failed history write does not hide the successful result or '
+        'break the Recent Scan card', (tester) async {
+      final scanner = FakeBarcodeScannerController();
+      final historyStore = FakeScanHistoryStore()..simulateAppendFailure = true;
+      final lookup = FakeStockLookupService()
+        ..defaultResultBuilder = _fullSuccess;
+      await _pumpScanStockScreen(
+        tester,
+        scannerController: scanner,
+        stockLookupService: lookup,
+        scanHistoryStore: historyStore,
+      );
+
+      scanner.emit('ITEM-0042');
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(_resultCardKey), findsOneWidget);
+      expect(find.byKey(_recentScanSummaryKey), findsOneWidget);
+      expect(historyStore.failedAppendCount, 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('A not-found result does not append to history', (
+      tester,
+    ) async {
+      final scanner = FakeBarcodeScannerController();
+      final historyStore = FakeScanHistoryStore();
+      final lookup = FakeStockLookupService()
+        ..queuedResults.add(const StockLookupNotFound('MISSING'));
+      await _pumpScanStockScreen(
+        tester,
+        scannerController: scanner,
+        stockLookupService: lookup,
+        scanHistoryStore: historyStore,
+      );
+
+      scanner.emit('MISSING');
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(historyStore.appendCallCount, 0);
+    });
+
+    testWidgets('An invalid-code result does not append to history', (
+      tester,
+    ) async {
+      final scanner = FakeBarcodeScannerController();
+      final historyStore = FakeScanHistoryStore();
+      final lookup = FakeStockLookupService()
+        ..queuedResults.add(const StockLookupInvalidCode('###'));
+      await _pumpScanStockScreen(
+        tester,
+        scannerController: scanner,
+        stockLookupService: lookup,
+        scanHistoryStore: historyStore,
+      );
+
+      scanner.emit('###');
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(historyStore.appendCallCount, 0);
+    });
+
+    testWidgets(
+      'A retryable failure (e.g. HTTP 502) does not append to history',
+      (tester) async {
+        final scanner = FakeBarcodeScannerController();
+        final historyStore = FakeScanHistoryStore();
+        final lookup = FakeStockLookupService()
+          ..queuedResults.add(const StockLookupRetryableFailure('ITEM-502'));
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+          scanHistoryStore: historyStore,
+        );
+
+        scanner.emit('ITEM-502');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(historyStore.appendCallCount, 0);
+      },
+    );
+
+    testWidgets(
+      'A temporarily-unavailable failure (e.g. HTTP 503) does not append '
+      'to history',
+      (tester) async {
+        final scanner = FakeBarcodeScannerController();
+        final historyStore = FakeScanHistoryStore();
+        final lookup = FakeStockLookupService()
+          ..queuedResults.add(
+            const StockLookupTemporarilyUnavailable('ITEM-503'),
+          );
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+          scanHistoryStore: historyStore,
+        );
+
+        scanner.emit('ITEM-503');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(historyStore.appendCallCount, 0);
+      },
+    );
+
+    testWidgets('A malformed/unexpected failure does not append to history', (
+      tester,
+    ) async {
+      final scanner = FakeBarcodeScannerController();
+      final historyStore = FakeScanHistoryStore();
+      final lookup = FakeStockLookupService()
+        ..queuedResults.add(const StockLookupUnexpectedFailure('ITEM-BAD'));
+      await _pumpScanStockScreen(
+        tester,
+        scannerController: scanner,
+        stockLookupService: lookup,
+        scanHistoryStore: historyStore,
+      );
+
+      scanner.emit('ITEM-BAD');
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(historyStore.appendCallCount, 0);
+    });
+
     testWidgets('A not-found result is never persisted', (tester) async {
       final scanner = FakeBarcodeScannerController();
       final store = FakeLastScanStore();
@@ -1064,6 +1246,30 @@ void main() {
         expect(store.saveCallCount, 0);
       },
     );
+
+    testWidgets(
+      'Does not append to history — a dead session is never treated as a '
+      'successful lookup',
+      (tester) async {
+        final scanner = FakeBarcodeScannerController();
+        final historyStore = FakeScanHistoryStore();
+        final lookup = FakeStockLookupService()
+          ..queuedResults.add(const StockLookupSessionExpired('ITEM-EXPIRED'));
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+          scanHistoryStore: historyStore,
+        );
+
+        scanner.emit('ITEM-EXPIRED');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(historyStore.appendCallCount, 0);
+      },
+    );
   });
 
   group('Torch', () {
@@ -1189,6 +1395,33 @@ void main() {
     testWidgets('View History control exists', (tester) async {
       await _pumpScanStockScreen(tester);
       expect(find.text('View History'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Tapping View History opens the full-screen Scan History page',
+      (tester) async {
+        await _pumpScanStockScreen(tester);
+
+        await tester.tap(find.text('View History'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.byType(ScanHistoryScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('The old "coming soon" SnackBar is no longer shown', (
+      tester,
+    ) async {
+      await _pumpScanStockScreen(tester);
+
+      await tester.tap(find.text('View History'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Scan history coming soon'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
     });
 
     testWidgets(
@@ -1367,6 +1600,32 @@ void main() {
         expect(lookup.calls, ['FROM-SCAN', 'FROM-MANUAL']);
       },
     );
+
+    testWidgets('A successful manual lookup appends one history record', (
+      tester,
+    ) async {
+      final historyStore = FakeScanHistoryStore();
+      final lookup = FakeStockLookupService()
+        ..defaultResultBuilder = _fullSuccess;
+      await _pumpScanStockScreen(
+        tester,
+        stockLookupService: lookup,
+        scanHistoryStore: historyStore,
+      );
+
+      await tester.tap(find.byKey(_manualEntryButtonKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(find.byKey(_manualEntryFieldKey), 'MANUAL-ITEM');
+      await tester.tap(find.byKey(_manualEntrySubmitKey));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(historyStore.appendCallCount, 1);
+      final history = await historyStore.read();
+      expect(history.single.rawCode, 'MANUAL-ITEM');
+    });
 
     testWidgets(
       'The modal closes after a valid submission, then loading/result '

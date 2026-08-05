@@ -58,3 +58,15 @@ String formatEventTimestamp(DateTime dateTime) {
 
   return '${formatDateOnly(dateTime)} - $hour:$minute $period';
 }
+
+/// Formats [dateTime] (converted to local time) as `"yyyy-MM-dd HH:mm"`
+/// (e.g. `"2026-07-31 12:30"`) — a locale-neutral, always-LTR numeric
+/// timestamp used for technical scan records (Scan Stock's Recent Scan card
+/// and Scan History list) where a month name would need translation but a
+/// numeric date does not.
+String formatCompactLocalTimestamp(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
+      '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+}

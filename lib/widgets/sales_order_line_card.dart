@@ -21,9 +21,9 @@ class SalesOrderLineCard extends StatelessWidget {
 
   final BusinessCentralSalesOrderLine line;
 
-  /// Called when the card is tapped. Left `null` (the default, non-
-  /// interactive) since no live Order Detail view exists yet for a
-  /// sales-order line — see `OrdersScreen`.
+  /// Called when the card is tapped — `OrdersScreen` opens Order Detail for
+  /// this line's `Document_No`. Left `null` only where a caller wants a
+  /// non-interactive card (e.g. a future read-only context).
   final VoidCallback? onTap;
 
   @override

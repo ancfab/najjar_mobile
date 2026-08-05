@@ -1742,6 +1742,43 @@ void main() {
     test('only ever uses the synthetic test token, never a real one', () {
       expect(syntheticToken, startsWith('synthetic-'));
     });
+
+    test('order_no is omitted from the query when not supplied', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchInvoices(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.url.queryParameters.containsKey('order_no'),
+        isFalse,
+      );
+    });
+
+    test(
+      'order_no is included alongside page and per_page when supplied',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchInvoices(
+          token: syntheticToken,
+          page: 1,
+          perPage: 100,
+          orderNo: 'SO-24001',
+        );
+
+        expect(fake.lastRequest!.url.queryParameters, {
+          'page': '1',
+          'per_page': '100',
+          'order_no': 'SO-24001',
+        });
+      },
+    );
   });
 
   group('AncApiClient.fetchSalesOrders', () {
@@ -2135,6 +2172,43 @@ void main() {
     test('only ever uses the synthetic test token, never a real one', () {
       expect(syntheticToken, startsWith('synthetic-'));
     });
+
+    test('document_no is omitted from the query when not supplied', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(token: syntheticToken);
+
+      expect(
+        fake.lastRequest!.url.queryParameters.containsKey('document_no'),
+        isFalse,
+      );
+    });
+
+    test(
+      'document_no is included alongside page and per_page when supplied',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, validEnvelope(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await client.fetchSalesOrders(
+          token: syntheticToken,
+          page: 1,
+          perPage: 100,
+          documentNo: 'SO-24001',
+        );
+
+        expect(fake.lastRequest!.url.queryParameters, {
+          'page': '1',
+          'per_page': '100',
+          'document_no': 'SO-24001',
+        });
+      },
+    );
   });
 
   group('AncApiClient.fetchItems', () {

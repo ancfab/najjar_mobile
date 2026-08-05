@@ -131,6 +131,11 @@
   },
   "orderDetail": {
     "unableToLoad": "Impossible de charger les détails de la commande.",
+    "temporarilyUnavailable": "Temporairement indisponible.",
+    "orderNotFoundTitle": "Commande introuvable",
+    "orderNotFoundMessage": "Nous n'avons pas trouvé de commande avec ce numéro.",
+    "noInvoiceAvailable": "Aucune facture n'est disponible pour cette commande.",
+    "invoiceLookupFailed": "Impossible de charger la facture. Veuillez réessayer.",
     "historyComingSoon": "Historique de la commande bientôt disponible",
     "title": "Détail de la commande",
     "breadcrumbOrders": "Commandes",
@@ -138,7 +143,10 @@
     "itemsHeader": "ARTICLES DE LA COMMANDE",
     "fabricSpecsAction": "SPÉCIFICATIONS DU TISSU",
     "historyHeader": "HISTORIQUE DE LA COMMANDE",
-    "viewTimelineAction": "VOIR LE SUIVI DE LA COMMANDE"
+    "viewTimelineAction": "VOIR LE SUIVI DE LA COMMANDE",
+    "invoiceHeader": "FACTURE",
+    "viewInvoiceAction": "VOIR LA FACTURE",
+    "customerLabel": "Client"
   },
   "orderStatus": {
     "delivered": "Livrée",
@@ -173,7 +181,8 @@
     "printFailed": "Impossible d'imprimer la facture. Veuillez réessayer.",
     "downloadCancelled": "Le téléchargement a été annulé.",
     "downloadFailed": "Impossible de préparer le PDF de la facture. Veuillez réessayer.",
-    "emailNotAvailable": "L'envoi d'e-mail au contact de facturation n'est pas encore disponible."
+    "emailNotAvailable": "L'envoi d'e-mail au contact de facturation n'est pas encore disponible.",
+    "liveCustomerLabel": "Client"
   },
   "invoiceStatus": {
     "paid": "Payée"
@@ -209,7 +218,6 @@
   },
   "scanStock": {
     "title": "Scanner le stock",
-    "scanHistoryComingSoon": "Historique des scans bientôt disponible",
     "flashToggleComingSoon": "Activation du flash bientôt disponible",
     "toggleFlashTooltip": "Activer/désactiver le flash",
     "centerQrInstruction": "Centrez le code QR dans le cadre",
@@ -249,6 +257,11 @@
     "availabilityByLocationLabel": "Disponibilité par emplacement",
     "unknownLocationLabel": "Emplacement inconnu",
     "availableQuantityLabel": "{quantity} {unit} disponible"
+  },
+  "scanHistory": {
+    "title": "Historique des scans",
+    "emptyMessage": "Aucun historique de scan pour l'instant",
+    "scannedAtLabel": "Scanné"
   },
   "support": {
     "title": "Assistance",

@@ -10,12 +10,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:anc_fabrics/models/business_central/business_central_invoice_line.dart';
 import 'package:anc_fabrics/screens/invoice_details_screen.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/invoice_document_actions.dart';
 import 'package:anc_fabrics/services/invoice_pdf_service.dart';
+import 'package:anc_fabrics/widgets/live_invoice_lines_card.dart';
+import 'package:anc_fabrics/widgets/payment_timeline.dart';
 
 import 'helpers/fake_invoice_document_actions.dart';
+import 'helpers/fake_invoice_lookup_data_source.dart' show sampleInvoiceLine;
 import 'helpers/fake_invoice_pdf_service.dart';
 import 'helpers/valid_avatar_image.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -732,5 +736,137 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+
+  group('Live invoice lines path (liveInvoiceLines supplied)', () {
+    Future<void> pumpLive(
+      WidgetTester tester, {
+      required List<BusinessCentralInvoiceLine> lines,
+      double width = 390,
+    }) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: InvoiceDetailsScreen(
+            invoiceNumber: lines.first.documentNo,
+            liveInvoiceLines: lines,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('renders immediately with no loading state (data is already '
+        'available)', (tester) async {
+      await pumpLive(
+        tester,
+        lines: [sampleInvoiceLine(documentNo: 'INV-24001')],
+      );
+
+      expect(
+        find.byKey(const ValueKey('invoice-details-loading')),
+        findsNothing,
+      );
+      expect(find.byType(LiveInvoiceLinesCard), findsOneWidget);
+    });
+
+    testWidgets('shows the breadcrumb/title and the live line-items card, '
+        'never the mock Invoice fields', (tester) async {
+      await pumpLive(
+        tester,
+        lines: [
+          sampleInvoiceLine(
+            documentNo: 'INV-24001',
+            description: 'Live Fabric Item',
+            itemNo: '880107',
+          ),
+        ],
+      );
+
+      expect(find.text('INV-24001'), findsOneWidget);
+      expect(find.text('Invoice Details'), findsOneWidget);
+      expect(find.text('Live Fabric Item'), findsOneWidget);
+      expect(find.text('Item 880107'), findsOneWidget);
+      // Never the mock invoice's own sample fields.
+      expect(find.text('Paid'), findsNothing);
+      expect(find.text('Bank Transfer'), findsNothing);
+    });
+
+    testWidgets('hides Print/Download PDF, Payment Timeline, Logistics, and '
+        'Internal Notes — none exist on the confirmed invoice-line contract', (
+      tester,
+    ) async {
+      await pumpLive(
+        tester,
+        lines: [sampleInvoiceLine(documentNo: 'INV-24001')],
+      );
+
+      expect(find.text('Print'), findsNothing);
+      expect(find.text('Download PDF'), findsNothing);
+      expect(find.byType(PaymentTimeline), findsNothing);
+      expect(find.text('Logistics'), findsNothing);
+      expect(find.text('Internal Notes'), findsNothing);
+    });
+
+    testWidgets('shows Subtotal/Total computed from the lines\' own Amount/'
+        'Amount_Including_VAT — never an invented tax rule', (tester) async {
+      await pumpLive(
+        tester,
+        lines: [
+          sampleInvoiceLine(
+            documentNo: 'INV-24001',
+            lineNo: 10000,
+            amount: 180,
+            amountIncludingVat: 189,
+          ),
+          sampleInvoiceLine(
+            documentNo: 'INV-24001',
+            lineNo: 20000,
+            amount: 100,
+            amountIncludingVat: 105,
+          ),
+        ],
+      );
+
+      expect(find.text('280.00'), findsOneWidget); // subtotal 180 + 100
+      expect(find.text('294.00'), findsOneWidget); // total 189 + 105
+    });
+
+    testWidgets('never shows lines belonging to a different invoice '
+        'Document_No', (tester) async {
+      await pumpLive(
+        tester,
+        lines: [
+          sampleInvoiceLine(
+            documentNo: 'INV-24010',
+            description: 'Only this invoice\'s line',
+          ),
+        ],
+      );
+
+      expect(find.text('Only this invoice\'s line'), findsOneWidget);
+      expect(find.text('INV-24001'), findsNothing);
+    });
+
+    testWidgets('no overflow at a narrow width', (tester) async {
+      await pumpLive(
+        tester,
+        width: 320,
+        lines: [sampleInvoiceLine(documentNo: 'INV-24001')],
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

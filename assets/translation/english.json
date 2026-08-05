@@ -131,6 +131,11 @@
   },
   "orderDetail": {
     "unableToLoad": "Unable to load order details.",
+    "temporarilyUnavailable": "Temporarily unavailable.",
+    "orderNotFoundTitle": "Order Not Found",
+    "orderNotFoundMessage": "We couldn't find an order with this number.",
+    "noInvoiceAvailable": "No invoice is available for this order.",
+    "invoiceLookupFailed": "Unable to load invoice. Please try again.",
     "historyComingSoon": "Order history coming soon",
     "title": "Order Detail",
     "breadcrumbOrders": "Orders",
@@ -138,7 +143,10 @@
     "itemsHeader": "ORDER ITEMS",
     "fabricSpecsAction": "FABRIC SPECS",
     "historyHeader": "ORDER HISTORY",
-    "viewTimelineAction": "VIEW ORDER TIMELINE"
+    "viewTimelineAction": "VIEW ORDER TIMELINE",
+    "invoiceHeader": "INVOICE",
+    "viewInvoiceAction": "VIEW INVOICE",
+    "customerLabel": "Customer"
   },
   "orderStatus": {
     "delivered": "Delivered",
@@ -173,7 +181,8 @@
     "printFailed": "Unable to print the invoice. Please try again.",
     "downloadCancelled": "Download was cancelled.",
     "downloadFailed": "Unable to prepare the invoice PDF. Please try again.",
-    "emailNotAvailable": "Emailing the billing contact is not available yet."
+    "emailNotAvailable": "Emailing the billing contact is not available yet.",
+    "liveCustomerLabel": "Customer"
   },
   "invoiceStatus": {
     "paid": "Paid"
@@ -209,7 +218,6 @@
   },
   "scanStock": {
     "title": "Scan Stock",
-    "scanHistoryComingSoon": "Scan history coming soon",
     "flashToggleComingSoon": "Flash toggle coming soon",
     "toggleFlashTooltip": "Toggle flash",
     "centerQrInstruction": "Center the QR code within the frame",
@@ -249,6 +257,11 @@
     "availabilityByLocationLabel": "Availability by location",
     "unknownLocationLabel": "Unknown location",
     "availableQuantityLabel": "{quantity} {unit} available"
+  },
+  "scanHistory": {
+    "title": "Scan History",
+    "emptyMessage": "No scan history yet",
+    "scannedAtLabel": "Scanned"
   },
   "support": {
     "title": "Support",

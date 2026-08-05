@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/models/business_central/sales_order_line.dart';
+import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/sales_order_lines_data_source.dart';
@@ -221,6 +222,83 @@ void main() {
         expect(find.text('180.00'), findsOneWidget);
       },
     );
+  });
+
+  group('Navigation to Order Detail', () {
+    testWidgets('tapping a row opens Order Detail for that row\'s '
+        'Document_No, never Line_No', (tester) async {
+      await _pumpOrdersScreen(
+        tester,
+        salesOrderLinesSource: FakeSalesOrderLinesDataSource(
+          page: samplePage(
+            rows: [sampleSalesOrderLine(documentNo: 'SO-24001', lineNo: 20000)],
+            total: 1,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(SalesOrderLineCard));
+      // Navigator.push needs two pumps: one to register the new route on
+      // the Overlay, one more to actually build its page content — a single
+      // pump leaves OrderDetailScreen not yet present in the tree.
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(OrderDetailScreen), findsOneWidget);
+      final screen = tester.widget<OrderDetailScreen>(
+        find.byType(OrderDetailScreen),
+      );
+      expect(screen.documentNo, 'SO-24001');
+    });
+
+    testWidgets('rows sharing the same Document_No open the same Order '
+        'Detail screen', (tester) async {
+      final rows = [
+        sampleSalesOrderLine(documentNo: 'SO-24001', lineNo: 10000),
+        sampleSalesOrderLine(documentNo: 'SO-24001', lineNo: 20000),
+      ];
+      await _pumpOrdersScreen(
+        tester,
+        salesOrderLinesSource: FakeSalesOrderLinesDataSource(
+          page: samplePage(rows: rows, total: 2),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('SO-24001 20000')));
+      await tester.pump();
+      await tester.pump();
+
+      final screen = tester.widget<OrderDetailScreen>(
+        find.byType(OrderDetailScreen),
+      );
+      expect(screen.documentNo, 'SO-24001');
+    });
+
+    testWidgets('a rapid double-tap opens only one Order Detail screen', (
+      tester,
+    ) async {
+      await _pumpOrdersScreen(
+        tester,
+        salesOrderLinesSource: FakeSalesOrderLinesDataSource(
+          page: samplePage(
+            rows: [sampleSalesOrderLine(documentNo: 'SO-24001')],
+            total: 1,
+          ),
+        ),
+      );
+
+      final card = find.byType(SalesOrderLineCard);
+      await tester.tap(card);
+      // The first tap's push may already have started animating a new route
+      // over this position, so the second tap is allowed to miss — the
+      // assertion below is what actually proves the duplicate-tap guard
+      // worked, not whether this second tap landed.
+      await tester.tap(card, warnIfMissed: false);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(OrderDetailScreen), findsOneWidget);
+    });
   });
 
   group('Order-lines counter', () {
