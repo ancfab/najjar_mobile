@@ -18,6 +18,7 @@ class AuthenticatedUser {
     required this.clientId,
     required this.bcCustomerNo,
     required this.mustChangePassword,
+    this.avatarUrl,
   });
 
   final int id;
@@ -31,6 +32,14 @@ class AuthenticatedUser {
   final String? bcCustomerNo;
 
   final bool mustChangePassword;
+
+  /// The user's avatar image URL, if one has been uploaded (see
+  /// `POST /auth/me/avatar`). Absent or null when no avatar has been set —
+  /// there is no separate remove-avatar endpoint, so this can only change
+  /// from null to a URL, or from one URL to a replacement URL, never back
+  /// to null. Opaque: never parsed, rewritten, or have query parameters
+  /// appended — the ANC API owns its exact form.
+  final String? avatarUrl;
 
   /// Parses the `user` object of a login response.
   ///
@@ -80,6 +89,13 @@ class AuthenticatedUser {
       );
     }
 
+    final avatarUrl = json['avatar_url'];
+    if (avatarUrl != null && avatarUrl is! String) {
+      throw const FormatException(
+        'AuthenticatedUser.avatar_url was not a string',
+      );
+    }
+
     return AuthenticatedUser(
       id: id,
       username: username,
@@ -88,6 +104,7 @@ class AuthenticatedUser {
       clientId: clientId,
       bcCustomerNo: bcCustomerNo as String?,
       mustChangePassword: mustChangePassword,
+      avatarUrl: avatarUrl as String?,
     );
   }
 }

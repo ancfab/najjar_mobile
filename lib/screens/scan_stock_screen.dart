@@ -294,6 +294,18 @@ class _ScanStockScreenState extends State<ScanStockScreen>
   Future<void> _startScanner() async {
     if (!mounted) return;
     setState(() => _stage = _ScanStage.initializingScanner);
+
+    // mobile_scanner requires its MobileScanner widget to already be
+    // mounted (and to have attached this controller from its own
+    // initState) before start() is called — otherwise start() waits for
+    // that attachment and eventually times out with
+    // MobileScannerErrorCode.controllerNotAttached. The _stage change above
+    // puts the preview widget into the tree (see _ScanPreviewArea), but it
+    // isn't actually built until the next frame; wait for that frame to
+    // finish before starting.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
     final result = await _scannerController.start();
     if (!mounted) return;
     setState(() {
@@ -561,7 +573,12 @@ class _ScanPreviewArea extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (stage == _ScanStage.ready)
+        // Mounted from initializingScanner onward (not just once ready):
+        // the underlying mobile_scanner widget must already be built and
+        // have attached its controller before ScanStockScreen calls
+        // start() — see _ScanStockScreenState._startScanner.
+        if (stage == _ScanStage.initializingScanner ||
+            stage == _ScanStage.ready)
           KeyedSubtree(
             key: const ValueKey('scan-stock-camera-preview'),
             child: scannerController.buildPreview(),

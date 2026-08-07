@@ -17,10 +17,12 @@ import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
+import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
 import 'package:anc_fabrics/widgets/availability_search_card.dart';
 import 'package:anc_fabrics/widgets/balance_card.dart';
+import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 import 'package:anc_fabrics/widgets/last_payment_card.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
@@ -278,6 +280,35 @@ void main() {
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     expect(find.byType(EditProfileScreen), findsOneWidget);
+  });
+
+  group('Bottom navigation', () {
+    testWidgets('Shows the bottom navigation with Home selected', (
+      tester,
+    ) async {
+      await _pumpHomeScreen(tester, 390);
+
+      expect(find.byType(CustomBottomNav), findsOneWidget);
+      expect(find.byType(CustomBottomNavItem), findsNWidgets(4));
+
+      final bottomNav = tester.widget<CustomBottomNav>(
+        find.byType(CustomBottomNav),
+      );
+      expect(bottomNav.currentIndex, 0);
+    });
+
+    testWidgets(
+      'Tapping the already-selected Home tab does not push a new route',
+      (tester) async {
+        await _pumpHomeScreen(tester, 390);
+
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(HomeScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   testWidgets(
@@ -1076,6 +1107,71 @@ void main() {
         }
 
         expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
+  group('Current Balance demo mode', () {
+    // TEMPORARY CLIENT DEMO MODE: covers resolveDefaultCurrentBalanceDataSource
+    // (the pure resolver HomeScreen falls back to when no currentBalanceSource
+    // is injected) for both DemoConfig.useDemoCurrentBalance branches,
+    // regardless of the flag's current compiled-in value, plus the actual
+    // default-injection behavior at the flag's current value.
+    test('useDemo: true resolves to DemoCurrentBalanceDataSource, never the '
+        'live ledger-entries integration', () {
+      final source = resolveDefaultCurrentBalanceDataSource(useDemo: true);
+      expect(source, isA<DemoCurrentBalanceDataSource>());
+    });
+
+    test('useDemo: false resolves to LiveCurrentBalanceDataSource, leaving the '
+        'live Current Balance integration fully reachable', () {
+      final source = resolveDefaultCurrentBalanceDataSource(useDemo: false);
+      expect(source, isA<LiveCurrentBalanceDataSource>());
+    });
+
+    testWidgets(
+      'With no currentBalanceSource injected, the demo flag shows the mock '
+      'balance without reaching the live ledger-entries endpoint',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: HomeScreen(
+              lastPaymentSource: FakeLastPaymentDataSource(
+                entry: _samplePaymentEntry(),
+              ),
+              checkAvailabilityService: FakeStockLookupService(),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 700));
+        // With DemoConfig.useDemoCurrentBalance false, this would instead
+        // fall back to LiveCurrentBalanceDataSource (real HTTP/secure
+        // storage), which never resolves in this widget-test sandbox and
+        // would leave the loading spinner animating forever — pumpAndSettle
+        // completing at all is itself evidence the demo path, not the live
+        // one, was taken.
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: find.byType(BalanceCard),
+            matching: find.text('AED 18,450.75'),
+          ),
+          findsOneWidget,
+        );
       },
     );
   });

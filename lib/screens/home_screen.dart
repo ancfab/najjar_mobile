@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/demo_config.dart';
 import '../data/mock_user.dart';
 import '../localization/translations.dart';
 import '../models/business_central/payment_entry.dart';
@@ -8,6 +9,7 @@ import '../services/api_stock_lookup_service.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/current_balance_data_source.dart';
 import '../services/current_balance_service.dart';
+import '../services/demo_current_balance_data_source.dart';
 import '../services/home_dashboard_service.dart';
 import '../services/last_payment_data_source.dart';
 import '../services/stock_lookup_service.dart';
@@ -68,6 +70,26 @@ enum _LastPaymentUiState { loading, loaded, empty, error }
 /// rendered the same way as any other loaded amount — never an empty card.
 enum _CurrentBalanceUiState { loading, loaded, error }
 
+/// Resolves the [CurrentBalanceDataSource] `HomeScreen` falls back to when no
+/// source is injected by a caller (every existing test already injects one,
+/// so this only ever runs in the real app). Defaults [useDemo] to
+/// [DemoConfig.useDemoCurrentBalance] but accepts it as a parameter so both
+/// branches stay unit-testable regardless of the flag's current compiled-in
+/// value.
+///
+/// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
+/// returns [DemoCurrentBalanceDataSource] instead of
+/// [LiveCurrentBalanceDataSource] — the live service, data source, and
+/// calculation are untouched and fully restored once the flag is set back to
+/// `false`.
+CurrentBalanceDataSource resolveDefaultCurrentBalanceDataSource({
+  bool useDemo = DemoConfig.useDemoCurrentBalance,
+}) {
+  return useDemo
+      ? const DemoCurrentBalanceDataSource()
+      : LiveCurrentBalanceDataSource();
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -81,11 +103,14 @@ class HomeScreen extends StatefulWidget {
   /// endpoint; overridable so tests can inject a fake.
   final LastPaymentDataSource? lastPaymentSource;
 
-  /// Current Balance data seam. Defaults (lazily, in State) to
-  /// [LiveCurrentBalanceDataSource] — the live Business Central
-  /// ledger-entries endpoint, paged in full and reduced per the confirmed
-  /// Current Balance rules; overridable so tests can inject a fake instead
-  /// of exercising real HTTP/secure storage.
+  /// Current Balance data seam. Defaults (lazily, in State) via
+  /// [resolveDefaultCurrentBalanceDataSource] to [LiveCurrentBalanceDataSource]
+  /// — the live Business Central ledger-entries endpoint, paged in full and
+  /// reduced per the confirmed Current Balance rules — unless
+  /// [DemoConfig.useDemoCurrentBalance] (TEMPORARY CLIENT DEMO MODE) is
+  /// `true`, in which case [DemoCurrentBalanceDataSource] is used instead;
+  /// overridable so tests (and the demo flag) can inject a fake instead of
+  /// exercising real HTTP/secure storage.
   final CurrentBalanceDataSource? currentBalanceSource;
 
   /// Check Availability card's stock-lookup seam — the same shared
@@ -111,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final LastPaymentDataSource _lastPaymentSource =
       widget.lastPaymentSource ?? LiveLastPaymentDataSource();
   late final CurrentBalanceDataSource _currentBalanceSource =
-      widget.currentBalanceSource ?? LiveCurrentBalanceDataSource();
+      widget.currentBalanceSource ?? resolveDefaultCurrentBalanceDataSource();
 
   /// Check Availability's stock-lookup seam actually used by
   /// [searchFabricAvailabilityByCatalogueCode] — resolved in [initState],

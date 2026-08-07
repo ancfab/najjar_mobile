@@ -6,7 +6,6 @@
 // narrow-width overflow safety.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +26,6 @@ import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_quick_history_data_source.dart';
-import 'helpers/valid_avatar_image.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
@@ -103,11 +101,6 @@ Future<void> _pumpAccountBalanceScreen(
 
 void main() {
   setUp(() {
-    // CurrentUserAvatarController.setAvatarPath persists the path via
-    // SharedPreferences; without a mock in place, the real plugin's
-    // getInstance() call never resolves in a widget test (no platform to
-    // answer it), hanging avatar-setting tests until they time out instead
-    // of failing fast.
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -143,20 +136,15 @@ void main() {
       );
       expect(badge.image, isNull);
 
-      late File tempFile;
-      await tester.runAsync(() async {
-        tempFile = await writeAndPrecacheAvatarFile(
-          path: '${Directory.systemTemp.path}/account_balance_avatar_test.png',
-          bytes: validAvatarPngBytes,
-          context: tester.element(find.byType(MaterialApp)),
-        );
-      });
-      addTearDown(() async {
-        if (await tempFile.exists()) await tempFile.delete();
-      });
-
-      await avatarController.setAvatarPath(tempFile.path);
-      await tester.pumpAndSettle();
+      // A single pump (never pumpAndSettle) — the controller now holds a
+      // network URL, and this only asserts the ImageProvider reference was
+      // wired through the widget tree, not that a real fetch completed.
+      // Loopback with nothing listening refuses the connection almost
+      // instantly (no DNS lookup, no real round trip), unlike a real
+      // internet host, which can resolve its async failure late enough to
+      // be misattributed to whichever test runs next.
+      avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
+      await tester.pump();
 
       badge = tester.widget<AvatarInitialsBadge>(
         find.byKey(const ValueKey('account-balance-avatar')),

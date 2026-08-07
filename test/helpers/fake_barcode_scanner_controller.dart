@@ -18,6 +18,13 @@ class FakeBarcodeScannerController implements BarcodeScannerController {
   /// What [start] reports next time it's called.
   ScanStartResult startResult;
 
+  /// Test seam: when set, [start] suspends on this completer instead of
+  /// returning immediately, so a test can pump a frame while start() is
+  /// still pending and assert on what's in the widget tree at that moment
+  /// (e.g. that the preview widget is already mounted, matching what real
+  /// mobile_scanner requires before start() is allowed to succeed).
+  Completer<void>? startGate;
+
   final ValueNotifier<ScanTorchState> _torchState;
   final StreamController<ScanResult> _detectionsController =
       StreamController<ScanResult>.broadcast();
@@ -46,6 +53,10 @@ class FakeBarcodeScannerController implements BarcodeScannerController {
   @override
   Future<ScanStartResult> start() async {
     startCallCount++;
+    final gate = startGate;
+    if (gate != null) {
+      await gate.future;
+    }
     return startResult;
   }
 

@@ -2,8 +2,6 @@
 // no shared avatar is set, and reflecting a shared CurrentUserAvatarController
 // image once one is set — the same shared state EditProfileScreen writes to.
 
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,17 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/widgets/home_header.dart';
 
-import '../helpers/valid_avatar_image.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 void main() {
   setUp(() {
-    // CurrentUserAvatarController.setAvatarPath persists the path via
-    // SharedPreferences; without a mock in place, the real plugin's
-    // getInstance() call never resolves in a widget test (no platform to
-    // answer it), hanging avatar-setting tests until they time out instead
-    // of failing fast.
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -77,20 +69,15 @@ void main() {
       );
       await tester.pump();
 
-      late File tempFile;
-      await tester.runAsync(() async {
-        tempFile = await writeAndPrecacheAvatarFile(
-          path: '${Directory.systemTemp.path}/home_header_avatar_test.png',
-          bytes: validAvatarPngBytes,
-          context: tester.element(find.byType(MaterialApp)),
-        );
-      });
-      addTearDown(() async {
-        if (await tempFile.exists()) await tempFile.delete();
-      });
-
-      await avatarController.setAvatarPath(tempFile.path);
-      await tester.pumpAndSettle();
+      // A single pump (never pumpAndSettle) — the controller now holds a
+      // network URL, and this only asserts the ImageProvider reference was
+      // wired through the widget tree, not that a real fetch completed.
+      // Loopback with nothing listening refuses the connection almost
+      // instantly (no DNS lookup, no real round trip), unlike a real
+      // internet host, which can resolve its async failure late enough to
+      // be misattributed to whichever test runs next.
+      avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
+      await tester.pump();
 
       final circleAvatar = tester.widget<CircleAvatar>(
         find.byType(CircleAvatar),

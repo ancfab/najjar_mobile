@@ -34,6 +34,7 @@ Map<String, dynamic> _validEnvelope() => {
   'client_id': 'ANCNAJJAR',
   'bc_customer_no': 'SAMPLE-0001',
   'must_change_password': false,
+  'avatar_url': null,
 };
 
 LoginResponse _validLoginResponse({bool mustChangePassword = false}) =>
@@ -78,6 +79,25 @@ void main() {
       );
 
       expect(session.bcCustomerNo, isNull);
+    });
+
+    test('avatarUrl defaults to null when not supplied', () {
+      expect(_validSession().avatarUrl, isNull);
+    });
+
+    test('accepts a non-null avatarUrl', () {
+      final session = AuthSession(
+        token: _syntheticToken,
+        userId: 7,
+        username: 'sample.user',
+        phone: '+96890000000',
+        country: 'OM',
+        clientId: 'ANCNAJJAR',
+        mustChangePassword: false,
+        avatarUrl: 'https://cdn.example.com/avatars/7.jpg',
+      );
+
+      expect(session.avatarUrl, 'https://cdn.example.com/avatars/7.jpg');
     });
 
     test('does not reveal the token in toString', () {
@@ -131,6 +151,35 @@ void main() {
         isTrue,
       );
     });
+
+    test('maps a non-null avatarUrl from the nested user', () {
+      final response = LoginResponse(
+        token: _syntheticToken,
+        mustChangePassword: false,
+        user: const AuthenticatedUser(
+          id: 7,
+          username: 'sample.user',
+          phone: '+96890000000',
+          country: 'OM',
+          clientId: 'ANCNAJJAR',
+          bcCustomerNo: 'SAMPLE-0001',
+          mustChangePassword: false,
+          avatarUrl: 'https://cdn.example.com/avatars/7.jpg',
+        ),
+      );
+
+      expect(
+        AuthSession.fromLoginResponse(response).avatarUrl,
+        'https://cdn.example.com/avatars/7.jpg',
+      );
+    });
+
+    test('maps a null avatarUrl when the nested user has none', () {
+      expect(
+        AuthSession.fromLoginResponse(_validLoginResponse()).avatarUrl,
+        isNull,
+      );
+    });
   });
 
   group('AuthSession JSON round trip', () {
@@ -179,6 +228,29 @@ void main() {
       expect(restored.bcCustomerNo, isNull);
     });
 
+    test('round trips a non-null avatarUrl', () {
+      final original = AuthSession(
+        token: _syntheticToken,
+        userId: 7,
+        username: 'sample.user',
+        phone: '+96890000000',
+        country: 'OM',
+        clientId: 'ANCNAJJAR',
+        mustChangePassword: false,
+        avatarUrl: 'https://cdn.example.com/avatars/7.jpg',
+      );
+
+      final restored = AuthSession.fromJson(original.toJson());
+
+      expect(restored.avatarUrl, 'https://cdn.example.com/avatars/7.jpg');
+    });
+
+    test('fromJson treats a missing avatar_url key as null', () {
+      final json = _validEnvelope()..remove('avatar_url');
+
+      expect(AuthSession.fromJson(json).avatarUrl, isNull);
+    });
+
     test('serialized JSON never contains a password key', () {
       final json = _validSession().toJson();
 
@@ -225,6 +297,12 @@ void main() {
 
     test('rejects a non-string bc_customer_no', () {
       final json = _validEnvelope()..['bc_customer_no'] = 42;
+
+      expect(() => AuthSession.fromJson(json), throwsFormatException);
+    });
+
+    test('rejects a non-string avatar_url', () {
+      final json = _validEnvelope()..['avatar_url'] = 42;
 
       expect(() => AuthSession.fromJson(json), throwsFormatException);
     });

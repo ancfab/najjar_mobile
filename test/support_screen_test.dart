@@ -10,12 +10,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:anc_fabrics/data/support_regions_data.dart';
 import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
+import 'package:anc_fabrics/screens/edit_profile_screen.dart';
+import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/phone_launcher.dart';
 import 'package:anc_fabrics/services/support_region_service.dart';
 import 'package:anc_fabrics/services/url_launcher_client.dart';
 import 'package:anc_fabrics/services/whatsapp_launcher.dart';
 import 'package:anc_fabrics/utils/phone_number.dart';
+import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 import 'package:anc_fabrics/widgets/support_action_card.dart';
 import 'package:anc_fabrics/widgets/support_hours_card.dart';
 import 'package:anc_fabrics/widgets/support_info_card.dart';
@@ -731,6 +734,12 @@ void main() {
   ) async {
     await pumpSupport(tester);
 
+    // The bottom navigation footer now occupies part of the default test
+    // viewport's height, so the email button — well below the fold on a
+    // short screen — needs an explicit scroll into view before tapping.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('support-email-button')),
+    );
     await tester.tap(find.byKey(const ValueKey('support-email-button')));
     await tester.pumpAndSettle();
     expect(find.byType(ContactUsScreen), findsOneWidget);
@@ -856,6 +865,122 @@ void main() {
         expect(find.text('OverrideLand'), findsOneWidget);
       },
     );
+  });
+
+  group('Bottom navigation', () {
+    // SupportScreen's own app bar title is also the literal text "Support"
+    // (see 'support.title'), so a plain `find.text('Support')` is ambiguous
+    // here — this scopes the match to the footer's own tab label.
+    Finder supportNavTab() => find.descendant(
+      of: find.byType(CustomBottomNav),
+      matching: find.text('Support'),
+    );
+
+    testWidgets('Shows the Home, Orders, Support, and Profile tabs', (
+      tester,
+    ) async {
+      await pumpSupport(tester);
+
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Orders'), findsOneWidget);
+      expect(supportNavTab(), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+    });
+
+    testWidgets('Reuses CustomBottomNav with Support selected', (tester) async {
+      await pumpSupport(tester);
+
+      expect(find.byType(CustomBottomNav), findsOneWidget);
+      expect(find.byType(CustomBottomNavItem), findsNWidgets(4));
+
+      final bottomNav = tester.widget<CustomBottomNav>(
+        find.byType(CustomBottomNav),
+      );
+      expect(bottomNav.currentIndex, 2);
+    });
+
+    testWidgets(
+      'Selecting the already-selected Support tab does not push a new '
+      'route',
+      (tester) async {
+        await pumpSupport(tester);
+
+        await tester.tap(supportNavTab());
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SupportScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Selecting Home is safe when there is no screen to pop back to',
+      (tester) async {
+        await pumpSupport(tester);
+
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SupportScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Selecting Orders and Profile pushes each screen', (
+      tester,
+    ) async {
+      await pumpSupport(tester);
+
+      await tester.tap(find.text('Orders'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OrdersScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      expect(find.byType(EditProfileScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'Hopping between tabs repeatedly never leaves duplicate screens on '
+      'the stack',
+      (tester) async {
+        await pumpSupport(tester);
+
+        await tester.tap(find.text('Orders'));
+        await tester.pumpAndSettle();
+        await tester.tap(supportNavTab());
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Orders'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrdersScreen), findsOneWidget);
+        expect(find.byType(SupportScreen), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Contact Us (a nested screen) does not show the footer', (
+      tester,
+    ) async {
+      await pumpSupport(tester);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('support-email-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('support-email-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ContactUsScreen), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ContactUsScreen),
+          matching: find.byType(CustomBottomNav),
+        ),
+        findsNothing,
+      );
+    });
   });
 }
 

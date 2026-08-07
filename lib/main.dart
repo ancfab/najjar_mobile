@@ -27,6 +27,7 @@ typedef StartupSession = ({
   bool isLoggedIn,
   LoginStartupMessage? startupMessage,
   bool sessionInvalidated,
+  String? avatarUrl,
 });
 
 /// Resolves the app-startup authentication state via
@@ -41,31 +42,37 @@ Future<StartupSession> resolveStartupSession(AuthService authService) async {
       isLoggedIn: false,
       startupMessage: null,
       sessionInvalidated: false,
+      avatarUrl: null,
     ),
-    SessionValidationValid() => (
+    SessionValidationValid(:final session) => (
       isLoggedIn: true,
       startupMessage: null,
       sessionInvalidated: false,
+      avatarUrl: session.avatarUrl,
     ),
     SessionValidationRevoked() => (
       isLoggedIn: false,
       startupMessage: LoginStartupMessage.sessionExpired,
       sessionInvalidated: true,
+      avatarUrl: null,
     ),
     SessionValidationUnusable() => (
       isLoggedIn: false,
       startupMessage: LoginStartupMessage.sessionExpired,
       sessionInvalidated: true,
+      avatarUrl: null,
     ),
     SessionValidationUnavailable() => (
       isLoggedIn: false,
       startupMessage: LoginStartupMessage.validationUnavailable,
       sessionInvalidated: false,
+      avatarUrl: null,
     ),
     SessionValidationStorageFailure() => (
       isLoggedIn: false,
       startupMessage: LoginStartupMessage.restoreFailed,
       sessionInvalidated: false,
+      avatarUrl: null,
     ),
   };
 }
@@ -86,16 +93,16 @@ Future<void> main() async {
   await localeController.restorePersisted();
 
   if (startup.isLoggedIn) {
-    // Restores the temporary local/mock avatar (see
-    // CurrentUserAvatarController) so it's already in place on the first
+    // Sets the confirmed session's avatar URL (from the just-completed
+    // /auth/me confirmation) so it's already in place on the first
     // authenticated frame instead of popping in after a rebuild.
-    await currentUserAvatarController.restorePersisted();
+    currentUserAvatarController.setAvatarUrl(startup.avatarUrl);
   } else if (startup.sessionInvalidated) {
     // The centralized invalid-session path: a session that was confirmed
     // revoked/unusable during this check must not leave stale in-memory
-    // authenticated-user state (here, a locally cached avatar) around for
-    // whichever account signs in next on this device.
-    await currentUserAvatarController.clear();
+    // authenticated-user state (here, a cached avatar) around for whichever
+    // account signs in next on this device.
+    currentUserAvatarController.clear();
   }
 
   runApp(

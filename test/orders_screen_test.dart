@@ -12,10 +12,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/business_central/paginated_response.dart';
 import 'package:anc_fabrics/models/business_central/sales_order_line.dart';
+import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
+import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
+import 'package:anc_fabrics/services/demo_sales_order_lines_data_source.dart';
 import 'package:anc_fabrics/services/sales_order_lines_data_source.dart';
+import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 import 'package:anc_fabrics/widgets/sales_order_line_card.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
@@ -809,5 +813,172 @@ void main() {
       await _pumpOrdersScreen(tester, width: 320, locale: const Locale('ar'));
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('Bottom navigation', () {
+    testWidgets('Shows the Home, Orders, Support, and Profile tabs', (
+      tester,
+    ) async {
+      await _pumpOrdersScreen(tester);
+
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Orders'), findsOneWidget);
+      expect(find.text('Support'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+    });
+
+    testWidgets('Reuses CustomBottomNav with Orders selected', (tester) async {
+      await _pumpOrdersScreen(tester);
+
+      expect(find.byType(CustomBottomNav), findsOneWidget);
+      expect(find.byType(CustomBottomNavItem), findsNWidgets(4));
+
+      final bottomNav = tester.widget<CustomBottomNav>(
+        find.byType(CustomBottomNav),
+      );
+      expect(bottomNav.currentIndex, 1);
+    });
+
+    testWidgets(
+      'Selecting the already-selected Orders tab does not push a new route',
+      (tester) async {
+        await _pumpOrdersScreen(tester);
+
+        await tester.tap(find.text('Orders'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrdersScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Selecting Home is safe when there is no screen to pop back to',
+      (tester) async {
+        await _pumpOrdersScreen(tester);
+
+        await tester.tap(find.text('Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrdersScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Selecting Support and Profile pushes each screen', (
+      tester,
+    ) async {
+      await _pumpOrdersScreen(tester);
+
+      await tester.tap(find.text('Support'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SupportScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      expect(find.byType(EditProfileScreen), findsOneWidget);
+    });
+
+    testWidgets(
+      'Hopping between tabs repeatedly never leaves duplicate screens on '
+      'the stack',
+      (tester) async {
+        await _pumpOrdersScreen(tester);
+
+        await tester.tap(find.text('Support'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Orders'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Support'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SupportScreen), findsOneWidget);
+        expect(find.byType(OrdersScreen), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('Order Detail (a nested screen) does not show the footer', (
+      tester,
+    ) async {
+      await _pumpOrdersScreen(
+        tester,
+        salesOrderLinesSource: FakeSalesOrderLinesDataSource(
+          page: samplePage(
+            rows: [sampleSalesOrderLine(documentNo: 'SO-24001')],
+            total: 1,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(SalesOrderLineCard));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(OrderDetailScreen), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(OrderDetailScreen),
+          matching: find.byType(CustomBottomNav),
+        ),
+        findsNothing,
+      );
+    });
+  });
+
+  group('Orders demo mode', () {
+    // TEMPORARY CLIENT DEMO MODE: covers
+    // resolveDefaultSalesOrderLinesDataSource (the pure resolver
+    // OrdersScreen falls back to when no salesOrderLinesSource is injected)
+    // for both DemoConfig.useDemoOrders branches, regardless of the flag's
+    // current compiled-in value, plus the actual default-injection behavior
+    // at the flag's current value.
+    test('useDemo: true resolves to DemoSalesOrderLinesDataSource, never the '
+        'live sales-orders integration', () {
+      final source = resolveDefaultSalesOrderLinesDataSource(useDemo: true);
+      expect(source, isA<DemoSalesOrderLinesDataSource>());
+    });
+
+    test('useDemo: false resolves to LiveSalesOrderLinesDataSource, leaving '
+        'the live Orders integration fully reachable', () {
+      final source = resolveDefaultSalesOrderLinesDataSource(useDemo: false);
+      expect(source, isA<LiveSalesOrderLinesDataSource>());
+    });
+
+    testWidgets(
+      'With no salesOrderLinesSource injected, the demo flag shows the mock '
+      'order lines without reaching the live sales-orders endpoint',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const OrdersScreen(),
+          ),
+        );
+        await tester.pump();
+        // With DemoConfig.useDemoOrders false, this would instead fall back
+        // to LiveSalesOrderLinesDataSource (real HTTP/secure storage), which
+        // never resolves in this widget-test sandbox and would leave the
+        // loading skeleton showing forever — pumpAndSettle completing at all
+        // is itself evidence the demo path, not the live one, was taken.
+        await tester.pumpAndSettle();
+
+        expect(find.text('Premium Cotton Twill - Ivory White'), findsOneWidget);
+        expect(find.byType(SalesOrderLineCard), findsWidgets);
+      },
+    );
   });
 }

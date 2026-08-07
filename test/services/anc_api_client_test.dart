@@ -29,6 +29,9 @@ import 'package:anc_fabrics/models/business_central/sales_order_line.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/anc_api_exceptions.dart';
 
+import '../helpers/recording_multipart_http_client.dart';
+import '../helpers/valid_avatar_image.dart';
+
 /// Records the single request it receives and replies with a canned
 /// response (or throws, to simulate a transport failure), so tests can
 /// assert on exactly what AncApiClient sent without making a real network
@@ -3350,6 +3353,625 @@ void main() {
         final client = AncApiClient(httpClient: fake);
         try {
           await client.logout(token: syntheticToken);
+          fail('Expected an exception');
+        } catch (error) {
+          expect(error.toString(), isNot(contains(syntheticToken)));
+        }
+      }
+    });
+  });
+
+  group('AncApiClient.updateMe request construction', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    _RecordingHttpClient updatedHttpClient() => _RecordingHttpClient(
+      (req) async =>
+          _jsonResponse(200, {'data': _validUserJson()}, request: req),
+    );
+
+    test('PATCHes to the exact /auth/me URI', () async {
+      final fake = updatedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.updateMe(token: syntheticToken, username: 'new.username');
+
+      expect(fake.lastRequest!.method, 'PATCH');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/me'),
+      );
+    });
+
+    test(
+      'sends Authorization: Bearer <token>, Accept, and Content-Type headers',
+      () async {
+        final fake = updatedHttpClient();
+        final client = AncApiClient(httpClient: fake);
+
+        await client.updateMe(token: syntheticToken, username: 'new.username');
+
+        expect(
+          fake.lastRequest!.headers['Authorization'],
+          'Bearer $syntheticToken',
+        );
+        expect(fake.lastRequest!.headers['Accept'], 'application/json');
+        expect(fake.lastRequest!.headers['Content-Type'], 'application/json');
+      },
+    );
+
+    test('sends only username when phone is omitted', () async {
+      final fake = updatedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.updateMe(token: syntheticToken, username: 'new.username');
+
+      final sentBody =
+          jsonDecode(fake.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'username': 'new.username'});
+    });
+
+    test('sends only phone when username is omitted', () async {
+      final fake = updatedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.updateMe(token: syntheticToken, phone: '+96890000001');
+
+      final sentBody =
+          jsonDecode(fake.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'phone': '+96890000001'});
+    });
+
+    test('sends both fields when both are supplied', () async {
+      final fake = updatedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await client.updateMe(
+        token: syntheticToken,
+        username: 'new.username',
+        phone: '+96890000001',
+      );
+
+      final sentBody =
+          jsonDecode(fake.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'username': 'new.username', 'phone': '+96890000001'});
+    });
+  });
+
+  group('AncApiClient.updateMe response handling', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    test('parses a 200 body through the required data wrapper', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, {
+          'data': {..._validUserJson(), 'username': 'new.username'},
+        }, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      final user = await client.updateMe(
+        token: syntheticToken,
+        username: 'new.username',
+      );
+
+      expect(user.username, 'new.username');
+    });
+
+    test(
+      'a 200 body missing the data wrapper raises AncProtocolException',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, _validUserJson(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.updateMe(token: syntheticToken, username: 'new.username'),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed 200 body raises AncProtocolException, not a crash',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _rawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        await expectLater(
+          client.updateMe(token: syntheticToken, username: 'new.username'),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await client.updateMe(token: syntheticToken, username: 'new.username');
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'HTTP 422 raises AncHttpException with a parsed validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The username has already been taken.',
+            'errors': {
+              'username': ['The username has already been taken.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await client.updateMe(
+            token: syntheticToken,
+            username: 'taken.username',
+          );
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.firstErrorFor('username'),
+            'The username has already been taken.',
+          );
+        }
+      },
+    );
+
+    test('a transport failure raises AncNetworkException, not a 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        client.updateMe(token: syntheticToken, username: 'new.username'),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+  });
+
+  group('AncApiClient.changePassword', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    _RecordingHttpClient passwordChangedHttpClient() => _RecordingHttpClient(
+      (req) async => _rawResponse(200, '', request: req),
+    );
+
+    Future<void> callChangePassword(AncApiClient client) =>
+        client.changePassword(
+          token: syntheticToken,
+          currentPassword: 'Password123!',
+          password: 'NewPassword456!',
+          passwordConfirmation: 'NewPassword456!',
+        );
+
+    test('PUTs to the exact /auth/me/password URI', () async {
+      final fake = passwordChangedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await callChangePassword(client);
+
+      expect(fake.lastRequest!.method, 'PUT');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/me/password'),
+      );
+    });
+
+    test(
+      'sends Authorization: Bearer <token>, Accept, and Content-Type headers',
+      () async {
+        final fake = passwordChangedHttpClient();
+        final client = AncApiClient(httpClient: fake);
+
+        await callChangePassword(client);
+
+        expect(
+          fake.lastRequest!.headers['Authorization'],
+          'Bearer $syntheticToken',
+        );
+        expect(fake.lastRequest!.headers['Accept'], 'application/json');
+        expect(fake.lastRequest!.headers['Content-Type'], 'application/json');
+      },
+    );
+
+    test('sends exactly the three documented fields', () async {
+      final fake = passwordChangedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await callChangePassword(client);
+
+      final sentBody =
+          jsonDecode(fake.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {
+        'current_password': 'Password123!',
+        'password': 'NewPassword456!',
+        'password_confirmation': 'NewPassword456!',
+      });
+    });
+
+    test('HTTP 200 completes normally regardless of body shape', () async {
+      final fake = passwordChangedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(callChangePassword(client), completes);
+    });
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await callChangePassword(client);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'HTTP 422 raises AncHttpException with a parsed validationError',
+      () async {
+        final fake = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'message': 'The current password is incorrect.',
+            'errors': {
+              'current_password': ['The current password is incorrect.'],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+
+        try {
+          await callChangePassword(client);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.firstErrorFor('current_password'),
+            'The current password is incorrect.',
+          );
+        }
+      },
+    );
+
+    test('HTTP 500 raises AncHttpException with statusCode 500', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      try {
+        await callChangePassword(client);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 500);
+      }
+    });
+
+    test('a transport failure raises AncNetworkException', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await expectLater(
+        callChangePassword(client),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test(
+      'no thrown exception ever exposes the password or token in its message',
+      () async {
+        final scenarios = <_RecordingHttpClient>[
+          _RecordingHttpClient(
+            (req) async => _jsonResponse(401, const {}, request: req),
+          ),
+          _RecordingHttpClient(
+            (req) async => throw const SocketException('No route to host'),
+          ),
+        ];
+
+        for (final fake in scenarios) {
+          final client = AncApiClient(httpClient: fake);
+          try {
+            await callChangePassword(client);
+            fail('Expected an exception');
+          } catch (error) {
+            expect(error.toString(), isNot(contains(syntheticToken)));
+            expect(error.toString(), isNot(contains('Password123!')));
+            expect(error.toString(), isNot(contains('NewPassword456!')));
+          }
+        }
+      },
+    );
+  });
+
+  group('AncApiClient.uploadAvatar', () {
+    const syntheticToken = 'synthetic-id|synthetic-secret';
+
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp(
+        'anc_api_client_avatar_test',
+      );
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    });
+
+    Future<String> writeAvatarFile() async {
+      final file = File('${tempDir.path}/avatar.jpg');
+      await file.writeAsBytes(validAvatarPngBytes);
+      return file.path;
+    }
+
+    Map<String, dynamic> validUploadedUserJson() => {
+      'id': 1,
+      'username': 'sample.user',
+      'phone': '+96890000000',
+      'country': 'OM',
+      'client_id': 'ANCNAJJAR',
+      'bc_customer_no': 'SAMPLE-0001',
+      'must_change_password': false,
+      'avatar_url': 'https://cdn.example.com/avatars/1.jpg',
+    };
+
+    RecordingMultipartHttpClient uploadedHttpClient() =>
+        RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(200, {
+            'data': validUploadedUserJson(),
+          }, request: req),
+        );
+
+    test('POSTs to the exact /auth/me/avatar URI', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      expect(fake.lastRequest!.method, 'POST');
+      expect(
+        fake.lastRequest!.url,
+        Uri.parse('https://api.ancfab.com/api/auth/me/avatar'),
+      );
+    });
+
+    test('sends Authorization: Bearer <token> and Accept headers, never '
+        'Content-Type: application/json', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      expect(
+        fake.lastRequest!.headers['Authorization'],
+        'Bearer $syntheticToken',
+      );
+      expect(fake.lastRequest!.headers['Accept'], 'application/json');
+      expect(
+        fake.lastRequest!.headers['Content-Type'],
+        isNot('application/json'),
+      );
+    });
+
+    test('sends the multipart request as multipart/form-data', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      expect(
+        fake.lastRequest!.headers['Content-Type'],
+        startsWith('multipart/form-data'),
+      );
+    });
+
+    test('sends the file under the "avatar" field name', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      expect(fake.lastRequest!.files.single.field, 'avatar');
+    });
+
+    test('sends the file with content type image/jpeg', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      expect(
+        fake.lastRequest!.files.single.contentType.toString(),
+        'image/jpeg',
+      );
+    });
+
+    test('sends the file at its exact byte length', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await client.uploadAvatar(token: syntheticToken, filePath: path);
+
+      // The attached MultipartFile is already finalized (consumed) by the
+      // fake client's send() by this point — asserting on its declared
+      // .length (captured from the source file before finalize) rather
+      // than re-finalizing it, which would throw a second time.
+      expect(fake.lastRequest!.files.single.length, validAvatarPngBytes.length);
+    });
+
+    test('parses a 200 body through the required data wrapper', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      final user = await client.uploadAvatar(
+        token: syntheticToken,
+        filePath: path,
+      );
+
+      expect(user.avatarUrl, 'https://cdn.example.com/avatars/1.jpg');
+    });
+
+    test(
+      'a 200 body missing the data wrapper raises AncProtocolException',
+      () async {
+        final fake = RecordingMultipartHttpClient(
+          (req) async =>
+              multipartJsonResponse(200, validUploadedUserJson(), request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+        final path = await writeAvatarFile();
+
+        await expectLater(
+          client.uploadAvatar(token: syntheticToken, filePath: path),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test(
+      'a malformed 200 body raises AncProtocolException, not a crash',
+      () async {
+        final fake = RecordingMultipartHttpClient(
+          (req) async =>
+              multipartRawResponse(200, 'not json at all', request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+        final path = await writeAvatarFile();
+
+        await expectLater(
+          client.uploadAvatar(token: syntheticToken, filePath: path),
+          throwsA(isA<AncProtocolException>()),
+        );
+      },
+    );
+
+    test('HTTP 401 raises AncHttpException with statusCode 401', () async {
+      final fake = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(401, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      try {
+        await client.uploadAvatar(token: syntheticToken, filePath: path);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 401);
+      }
+    });
+
+    test(
+      'HTTP 422 raises AncHttpException with a parsed validationError',
+      () async {
+        final fake = RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(422, {
+            'message':
+                'The avatar must be a file of type: jpg, jpeg, png, '
+                'webp.',
+            'errors': {
+              'avatar': [
+                'The avatar must be a file of type: jpg, jpeg, png, webp.',
+              ],
+            },
+          }, request: req),
+        );
+        final client = AncApiClient(httpClient: fake);
+        final path = await writeAvatarFile();
+
+        try {
+          await client.uploadAvatar(token: syntheticToken, filePath: path);
+          fail('Expected an AncHttpException');
+        } on AncHttpException catch (error) {
+          expect(error.statusCode, 422);
+          expect(
+            error.validationError?.firstErrorFor('avatar'),
+            'The avatar must be a file of type: jpg, jpeg, png, webp.',
+          );
+        }
+      },
+    );
+
+    test('HTTP 500 raises AncHttpException with statusCode 500', () async {
+      final fake = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(500, const {}, request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      try {
+        await client.uploadAvatar(token: syntheticToken, filePath: path);
+        fail('Expected an AncHttpException');
+      } on AncHttpException catch (error) {
+        expect(error.statusCode, 500);
+      }
+    });
+
+    test('a transport failure raises AncNetworkException', () async {
+      final fake = RecordingMultipartHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final client = AncApiClient(httpClient: fake);
+      final path = await writeAvatarFile();
+
+      await expectLater(
+        client.uploadAvatar(token: syntheticToken, filePath: path),
+        throwsA(isA<AncNetworkException>()),
+      );
+    });
+
+    test('a missing source file raises before a request is sent', () async {
+      final fake = uploadedHttpClient();
+      final client = AncApiClient(httpClient: fake);
+      final missingPath = '${tempDir.path}/does-not-exist.jpg';
+
+      await expectLater(
+        client.uploadAvatar(token: syntheticToken, filePath: missingPath),
+        throwsA(anything),
+      );
+      expect(fake.lastRequest, isNull);
+    });
+
+    test('no thrown exception ever exposes the token in its message', () async {
+      final scenarios = <RecordingMultipartHttpClient>[
+        RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(401, const {}, request: req),
+        ),
+        RecordingMultipartHttpClient(
+          (req) async => throw const SocketException('No route to host'),
+        ),
+      ];
+
+      for (final fake in scenarios) {
+        final client = AncApiClient(httpClient: fake);
+        final path = await writeAvatarFile();
+        try {
+          await client.uploadAvatar(token: syntheticToken, filePath: path);
           fail('Expected an exception');
         } catch (error) {
           expect(error.toString(), isNot(contains(syntheticToken)));

@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import '../utils/image_format_sniffer.dart';
+
 /// Why a picked file was rejected by [AvatarImageProcessor.validate] —
 /// mapped to a localized, user-safe message by the caller (see
 /// `EditProfileScreen`) rather than carrying a fixed-language message here.
@@ -84,7 +86,7 @@ class DefaultAvatarImageProcessor implements AvatarImageProcessor {
       );
     }
 
-    if (!_hasSupportedImageSignature(bytes)) {
+    if (!hasSupportedAvatarSourceSignature(bytes)) {
       throw const AvatarImageValidationException(
         AvatarImageValidationReason.unsupportedFormat,
       );
@@ -98,46 +100,5 @@ class DefaultAvatarImageProcessor implements AvatarImageProcessor {
         AvatarImageValidationReason.corruptImage,
       );
     }
-  }
-
-  // Sniffs the file's leading bytes for known image format signatures,
-  // rejecting anything else (e.g. a document or renamed non-image file)
-  // before it's decoded.
-  bool _hasSupportedImageSignature(Uint8List bytes) {
-    if (bytes.length < 12) return false;
-
-    // JPEG: FF D8 FF
-    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true;
-
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (bytes[0] == 0x89 &&
-        bytes[1] == 0x50 &&
-        bytes[2] == 0x4E &&
-        bytes[3] == 0x47) {
-      return true;
-    }
-
-    // WEBP: "RIFF"...."WEBP"
-    if (bytes[0] == 0x52 &&
-        bytes[1] == 0x49 &&
-        bytes[2] == 0x46 &&
-        bytes[3] == 0x46 &&
-        bytes[8] == 0x57 &&
-        bytes[9] == 0x45 &&
-        bytes[10] == 0x42 &&
-        bytes[11] == 0x50) {
-      return true;
-    }
-
-    // HEIC/HEIF: box size (4 bytes) + "ftyp" + brand (e.g. "heic", "heix",
-    // "mif1").
-    if (bytes[4] == 0x66 &&
-        bytes[5] == 0x74 &&
-        bytes[6] == 0x79 &&
-        bytes[7] == 0x70) {
-      return true;
-    }
-
-    return false;
   }
 }

@@ -2,10 +2,9 @@
 /// app writes for session-adjacent local state.
 ///
 /// Responsibilities:
-/// - Keep the legacy pre-authentication login-flag key and the locally
-///   persisted avatar-path key each defined in exactly one place, so
-///   `SecureAuthSessionStore` and `CurrentUserAvatarController` can never
-///   duplicate or diverge on the literal strings.
+/// - Keep the legacy pre-authentication login-flag key defined in exactly
+///   one place, so `SecureAuthSessionStore` can never duplicate or diverge
+///   on the literal string.
 ///
 /// Must not:
 /// - Be treated as an authentication source — [isLoggedIn] is a retired
@@ -19,10 +18,6 @@ class SessionStorageKeys {
   /// `SecureAuthSessionStore.clear()` can remove it from a device that
   /// still has it set from before the secure-session migration.
   static const String isLoggedIn = 'session_is_logged_in';
-
-  /// Path to the locally persisted mock avatar file (see
-  /// `CurrentUserAvatarController`).
-  static const String localAvatarPath = 'session_local_avatar_path';
 
   /// The user's selected app language code (e.g. `'en'`, `'ar'`, `'fr'`) —
   /// see `LocaleController`. Not sensitive, so plain SharedPreferences (not

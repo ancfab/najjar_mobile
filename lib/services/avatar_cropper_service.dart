@@ -27,8 +27,8 @@ abstract class AvatarCropperService {
 /// be displayed in) and compresses the output so an unnecessarily large
 /// file is never produced. Per the plugin's own documentation, the result
 /// file is written to a temporary/cache directory — it is the caller's
-/// responsibility to copy it somewhere stable if it needs to survive
-/// beyond the current flow (see `AvatarUploadService`).
+/// responsibility to use it (e.g. upload it) before that temporary file is
+/// cleaned up by the OS.
 class ImageCropperAvatarCropperService implements AvatarCropperService {
   const ImageCropperAvatarCropperService();
 

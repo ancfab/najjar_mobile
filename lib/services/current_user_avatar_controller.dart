@@ -1,9 +1,4 @@
-import 'dart:io';
-
 import 'package:flutter/widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'session_storage_keys.dart';
 
 /// Single shared source of truth for the signed-in user's avatar image,
 /// listened to by every screen that shows the current-user avatar (Home
@@ -11,85 +6,50 @@ import 'session_storage_keys.dart';
 /// a confirmed avatar change is reflected everywhere immediately without
 /// each screen tracking its own copy of the image state.
 ///
-/// Holds only a local file reference: see the TODO(api) on
-/// [LocalAvatarUploadService] and on [restorePersisted] below for what
-/// changes once a real backend avatar URL exists.
+/// Backed by a plain network URL — the authenticated user's `avatarUrl`
+/// (see `AuthenticatedUser`/`AuthSession`), which the ANC API already
+/// persists server-side and `SecureAuthSessionStore` already persists
+/// locally across restarts. This controller holds no independent
+/// persistence of its own: it is refreshed from the confirmed session on
+/// cold start (`main.dart`, after `AuthService.confirmSession`) and after
+/// any successful `AuthService.updateProfile`/`uploadAvatar` call, and
+/// cleared on logout/session-invalidation the same way it always has been.
 class CurrentUserAvatarController extends ChangeNotifier {
   CurrentUserAvatarController();
 
-  File? _avatarFile;
+  String? _avatarUrl;
 
-  /// The current avatar file, or `null` when no avatar has been set (or it
+  /// The current avatar URL, or `null` when no avatar has been set (or it
   /// was cleared at logout) — screens fall back to their existing
   /// initials/icon placeholder in that case.
-  File? get avatarFile => _avatarFile;
+  String? get avatarUrl => _avatarUrl;
 
   /// Convenience [ImageProvider] for the current avatar, or `null` when
   /// none is set.
   ImageProvider? get imageProvider =>
-      _avatarFile == null ? null : FileImage(_avatarFile!);
+      _avatarUrl == null ? null : NetworkImage(_avatarUrl!);
 
-  /// Sets the active avatar to the file at [path] (expected to already be
-  /// in stable, app-owned storage — see `LocalAvatarUploadService`) and
-  /// persists the reference so [restorePersisted] can restore it on the
-  /// next app launch.
-  Future<void> setAvatarPath(String path) async {
-    _avatarFile = File(path);
-    notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(SessionStorageKeys.localAvatarPath, path);
-    } catch (error) {
-      // Technical detail only — the in-memory avatar is already updated
-      // and visible; only the cross-restart persistence step failed.
-      debugPrint('Failed to persist local avatar path: $error');
-    }
-  }
-
-  /// Clears the current avatar, both in memory and from stable storage.
-  /// Called on logout so one user never sees another user's locally
-  /// cached avatar after a subsequent login. Best-effort: a failure to
-  /// delete the underlying file does not prevent it from disappearing from
-  /// the UI.
-  Future<void> clear() async {
-    final previousFile = _avatarFile;
-    _avatarFile = null;
-    notifyListeners();
-
-    if (previousFile != null) {
-      try {
-        if (await previousFile.exists()) await previousFile.delete();
-      } catch (error) {
-        debugPrint('Failed to delete local avatar file: $error');
-      }
-    }
-  }
-
-  /// Restores a previously persisted local avatar reference (if any) so it
-  /// reappears without the user having to re-select it after an app
-  /// restart. Safe to call multiple times; does nothing if no path was
-  /// persisted or the file no longer exists.
+  /// Sets the active avatar to [url] (or clears it, when `null`) and
+  /// notifies listeners.
   ///
-  /// TODO(api): This restores only the temporary local/mock avatar
-  /// reference (see `LocalAvatarUploadService`). Once the backend returns a
-  /// real avatar URL as part of the authenticated user's profile, replace
-  /// this with loading that URL after login/profile-fetch instead of
-  /// reading local device storage.
-  Future<void> restorePersisted() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final path = prefs.getString(SessionStorageKeys.localAvatarPath);
-      if (path == null) return;
-
-      final file = File(path);
-      if (await file.exists()) {
-        _avatarFile = file;
-        notifyListeners();
-      }
-    } catch (error) {
-      debugPrint('Failed to restore local avatar: $error');
+  /// Evicts any previously cached image for the *old* URL from
+  /// [PaintingBinding.imageCache] first — so a replacement avatar is shown
+  /// immediately even if the backend happens to return the same URL string
+  /// for the new image (this app never assumes a cache-busting query
+  /// parameter or filename change on the backend's part; eviction is a
+  /// purely client-side guarantee that doesn't depend on that).
+  void setAvatarUrl(String? url) {
+    final previousUrl = _avatarUrl;
+    if (previousUrl != null) {
+      PaintingBinding.instance.imageCache.evict(NetworkImage(previousUrl));
     }
+    _avatarUrl = url;
+    notifyListeners();
   }
+
+  /// Clears the current avatar. Called on logout/session-invalidation so
+  /// one user never sees another user's avatar after a subsequent login.
+  void clear() => setAvatarUrl(null);
 }
 
 /// App-wide singleton, used as the default [CurrentUserAvatarController] by

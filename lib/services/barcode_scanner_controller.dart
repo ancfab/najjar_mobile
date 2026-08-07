@@ -116,10 +116,15 @@ class MobileScannerBarcodeScannerController
     try {
       await _controller.start();
     } catch (error) {
-      // MobileScannerController.start() only catches its own
-      // MobileScannerException internally; a lower-level platform-channel
-      // failure (e.g. no plugin implementation registered) must still not
-      // crash the screen.
+      // MobileScannerController.start() only catches platform-channel
+      // failures internally (wrapping them into `_controller.value.error`
+      // below); some of its own MobileScannerExceptions — notably
+      // controllerNotAttached, thrown when start() is called before the
+      // MobileScanner widget has attached this controller — and any
+      // lower-level platform-channel failure (e.g. no plugin implementation
+      // registered) still propagate out of start() and must not crash the
+      // screen, but are worth surfacing here rather than discarding.
+      debugPrint('MobileScannerController.start() threw: $error');
       return ScanStartResult.failure;
     }
     final error = _controller.value.error;

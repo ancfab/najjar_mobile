@@ -2,24 +2,29 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../data/country_codes.dart';
 import '../data/mock_profile_data.dart';
 import '../localization/translations.dart';
+import '../models/auth/update_profile_result.dart';
+import '../models/auth/upload_avatar_result.dart';
+import '../models/country_code.dart';
 import '../models/user_profile.dart';
 import '../services/avatar_cropper_service.dart';
 import '../services/avatar_image_processor.dart';
 import '../services/avatar_permission_service.dart';
 import '../services/avatar_picker_service.dart';
-import '../services/avatar_upload_service.dart';
 import '../services/auth_service.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/logout_service.dart';
 import '../services/profile_service.dart';
 import '../services/session_storage_exception.dart';
 import '../theme/app_colors.dart';
+import '../utils/auth_result_navigation.dart';
 import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
 import '../widgets/contact_form_field.dart';
 import '../widgets/custom_bottom_nav.dart';
+import 'change_password_screen.dart';
 import 'login_screen.dart';
 import 'orders_screen.dart';
 import 'support_screen.dart';
@@ -36,9 +41,8 @@ const int _navIndexSupport = 2;
 const int _navIndexProfile = 3;
 
 /// Edit Profile screen: avatar with a camera/edit overlay, client info
-/// (ANC ID + last-updated label), a prefilled editable form, and a
-/// full-width "Save Changes" action. A "Logout" action also exists but is
-/// currently hidden — see [showLogoutAction].
+/// (ANC ID + last-updated label), a prefilled editable form, a full-width
+/// "Save Changes" action, and a "Logout" action.
 ///
 /// TODO(api): Replace mock profile display/prefill data (see
 /// [kMockUserProfile]) once the profile API/backend contract is confirmed.
@@ -48,13 +52,12 @@ class EditProfileScreen extends StatefulWidget {
     this.profile = kMockUserProfile,
     ProfileService? service,
     this.logoutService,
+    this.authService,
     AvatarPickerService? avatarPickerService,
     AvatarPermissionService? avatarPermissionService,
     AvatarCropperService? avatarCropperService,
     AvatarImageProcessor? avatarImageProcessor,
-    AvatarUploadService? avatarUploadService,
     this.avatarController,
-    @visibleForTesting this.showLogoutAction = false,
   }) : service = service ?? const UnavailableProfileService(),
        avatarPickerService =
            avatarPickerService ?? const ImagePickerAvatarPickerService(),
@@ -64,26 +67,38 @@ class EditProfileScreen extends StatefulWidget {
        avatarCropperService =
            avatarCropperService ?? const ImageCropperAvatarCropperService(),
        avatarImageProcessor =
-           avatarImageProcessor ?? const DefaultAvatarImageProcessor(),
-       avatarUploadService =
-           avatarUploadService ?? const LocalAvatarUploadService();
+           avatarImageProcessor ?? const DefaultAvatarImageProcessor();
 
-  /// Display/prefill data for the avatar section and form fields. Defaults
-  /// to the isolated mock profile; overridable so tests can inject fixed
-  /// values.
+  /// Display/prefill data for the mock-backed form fields (full name,
+  /// email, company, business address). Defaults to the isolated mock
+  /// profile; overridable so tests can inject fixed values. Does not carry
+  /// username/phone — those are real, authenticated-identity fields
+  /// prefilled from [AuthService.currentSession] instead (see
+  /// [_EditProfileScreenState._loadIdentity]).
   final UserProfile profile;
 
-  /// Save-changes seam. Defaults to the explicitly non-production
-  /// [UnavailableProfileService]; overridable so tests can inject a fake.
+  /// Save-changes seam for the mock-backed fields (full name, email,
+  /// company, business address) only. Defaults to the explicitly
+  /// non-production [UnavailableProfileService]; overridable so tests can
+  /// inject a fake.
   final ProfileService service;
 
   /// Explicit-logout seam: attempts best-effort remote revocation, then
   /// unconditionally clears the local secure session — see
   /// [LogoutService]/[AuthService.logout]. Defaults (lazily, in State — see
-  /// [_EditProfileScreenState]) to a real, owned [AuthService.production];
+  /// [_EditProfileScreenState]) to the same instance as [authService];
   /// overridable so tests can inject a fake without making a real network
   /// call or touching real secure storage.
   final LogoutService? logoutService;
+
+  /// Real-backend seam for username/phone updates
+  /// ([AuthService.updateProfile]) and avatar uploads
+  /// ([AuthService.uploadAvatar]). Defaults (lazily, in State — see
+  /// [_EditProfileScreenState]) to a real, owned [AuthService.production];
+  /// overridable so tests can inject an [AuthService] wired to fakes
+  /// instead of making a real network call or touching real secure
+  /// storage.
+  final AuthService? authService;
 
   /// Camera/gallery selection seam. Overridable so tests can inject a fake
   /// instead of invoking the real platform picker.
@@ -101,26 +116,11 @@ class EditProfileScreen extends StatefulWidget {
   /// invalid/unreadable file without needing one on disk.
   final AvatarImageProcessor avatarImageProcessor;
 
-  /// Confirmed-avatar storage seam. Defaults to the explicitly local/mock
-  /// [LocalAvatarUploadService]; overridable so tests can inject a fake.
-  final AvatarUploadService avatarUploadService;
-
   /// Shared current-user avatar state. Defaults (lazily, in State — see
   /// [_EditProfileScreenState]) to the app-wide [currentUserAvatarController]
   /// singleton; overridable so tests can inject a fresh instance instead of
   /// sharing that mutable singleton across test cases.
   final CurrentUserAvatarController? avatarController;
-
-  /// Whether the Logout action renders at all. Always `false` in
-  /// production — Logout is intentionally hidden to match the approved
-  /// Edit Profile Figma; set it to `true` when the product team requests
-  /// that Logout be restored. This exists only so widget tests can
-  /// exercise the already-implemented local logout behavior
-  /// ([_EditProfileScreenState._handleLogout]) while production keeps the
-  /// action hidden — it is not an environment/debug-mode toggle, and no
-  /// production call site should ever pass `true`.
-  @visibleForTesting
-  final bool showLogoutAction;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -129,14 +129,19 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  // Real, authenticated-identity fields — prefilled asynchronously from
+  // AuthService.currentSession() (see _loadIdentity), not from
+  // widget.profile. Start empty; _loadIdentity populates both the
+  // controllers and the _initial*/​_selectedCountry baselines together, so
+  // _isDirty never reports a false "changed" before that load completes.
+  final _usernameController = TextEditingController();
+  final _phoneController = TextEditingController();
+
   late final _fullNameController = TextEditingController(
     text: widget.profile.fullName,
   );
   late final _emailController = TextEditingController(
     text: widget.profile.email,
-  );
-  late final _phoneController = TextEditingController(
-    text: widget.profile.phone,
   );
   late final _companyController = TextEditingController(
     text: widget.profile.company,
@@ -145,8 +150,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     text: widget.profile.businessAddress,
   );
 
-  final _emailFocusNode = FocusNode();
+  final _usernameFocusNode = FocusNode();
   final _phoneFocusNode = FocusNode();
+  final _fullNameFocusNode = FocusNode();
+  final _emailFocusNode = FocusNode();
   final _companyFocusNode = FocusNode();
   final _businessAddressFocusNode = FocusNode();
 
@@ -158,9 +165,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // afterwards instead of permanently reporting unsaved changes.
   late String _initialFullName;
   late String _initialEmail;
-  late String _initialPhone;
   late String _initialCompany;
   late String _initialBusinessAddress;
+
+  // Identity baselines, populated once by _loadIdentity(). Empty strings
+  // until then, matching the also-empty controllers above, so dirty
+  // tracking never falsely trips during the brief load.
+  String _initialUsername = '';
+  String _initialPhoneDigits = '';
+
+  // The authenticated user's country, resolved from AuthSession.country —
+  // fixed/read-only on this screen (see the class doc comment); only used
+  // to render/compose the phone field's dial-code prefix. Defaults to
+  // kDefaultCountryCode until _loadIdentity resolves the real one.
+  CountryCode _selectedCountry = kDefaultCountryCode;
+
+  // Backend-vetted field-level errors from the most recent identity save
+  // attempt (HTTP 422 errors.username/errors.phone) — cleared as soon as
+  // the user edits the corresponding field again, the same way a
+  // TextFormField's own validator error clears on next input.
+  String? _usernameServerError;
+  String? _phoneServerError;
 
   bool _isSaving = false;
   bool _isLoggingOut = false;
@@ -173,15 +198,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final CurrentUserAvatarController _avatarController =
       widget.avatarController ?? currentUserAvatarController;
 
-  // Explicit-logout seam, resolved in initState (not the widget's
-  // constructor) since the production default owns a real AncApiClient
-  // that must be closed — mirrors LoginScreen's AuthService.production
-  // ownership pattern rather than instantiating one per build().
+  // Real-backend seam for username/phone updates and avatar uploads,
+  // resolved in initState (not the widget's constructor) since the
+  // production default owns a real AncApiClient that must be closed —
+  // mirrors LoginScreen's AuthService.production ownership pattern rather
+  // than instantiating one per build().
+  late final AuthService _authService;
+
+  // Explicit-logout seam. Defaults to _authService itself (AuthService
+  // implements LogoutService) unless a narrower fake is injected via
+  // widget.logoutService.
   late final LogoutService _logoutService;
 
   // Only set when this State created its own AuthService.production() (no
-  // widget.logoutService was injected) — that instance is the only thing
-  // this screen ever closes; a caller-injected LogoutService is left alone.
+  // widget.authService was injected) — that instance is the only thing
+  // this screen ever closes; a caller-injected AuthService is left alone.
   AuthService? _ownedAuthService;
 
   // Guards the whole camera-icon-to-confirmation flow (source selection,
@@ -201,45 +232,95 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isAvatarBusy = false;
 
   List<TextEditingController> get _formControllers => [
+    _usernameController,
+    _phoneController,
     _fullNameController,
     _emailController,
-    _phoneController,
     _companyController,
     _businessAddressController,
   ];
 
-  // Trimmed current values compared against the initial snapshot, so Save
-  // Changes stays disabled until the form actually differs from the
-  // loaded profile (whitespace-only edits don't count as a change).
-  bool get _isDirty {
+  // Whether the mock-backed fields (full name, email, company, business
+  // address) differ from their loaded baseline — gates whether Save
+  // Changes attempts the existing ProfileService call.
+  bool get _isMockProfileDirty {
     return _fullNameController.text.trim() != _initialFullName ||
         _emailController.text.trim() != _initialEmail ||
-        _phoneController.text.trim() != _initialPhone ||
         _companyController.text.trim() != _initialCompany ||
         _businessAddressController.text.trim() != _initialBusinessAddress;
   }
+
+  // Whether the real identity fields (username, phone) differ from their
+  // loaded baseline — gates whether Save Changes attempts
+  // AuthService.updateProfile, and ensures an empty PATCH is never sent.
+  bool get _isIdentityDirty {
+    return _usernameController.text.trim() != _initialUsername ||
+        _phoneController.text.trim() != _initialPhoneDigits;
+  }
+
+  // Trimmed current values compared against the initial snapshot, so Save
+  // Changes stays disabled until the form actually differs from the
+  // loaded profile (whitespace-only edits don't count as a change).
+  bool get _isDirty => _isMockProfileDirty || _isIdentityDirty;
 
   @override
   void initState() {
     super.initState();
     _initialFullName = widget.profile.fullName.trim();
     _initialEmail = widget.profile.email.trim();
-    _initialPhone = widget.profile.phone.trim();
     _initialCompany = widget.profile.company.trim();
     _initialBusinessAddress = widget.profile.businessAddress.trim();
     for (final controller in _formControllers) {
       controller.addListener(_handleFormChanged);
     }
 
-    final injectedLogoutService = widget.logoutService;
-    if (injectedLogoutService != null) {
-      _logoutService = injectedLogoutService;
+    final injectedAuthService = widget.authService;
+    if (injectedAuthService != null) {
+      _authService = injectedAuthService;
     } else {
       final owned = AuthService.production();
       _ownedAuthService = owned;
-      _logoutService = owned;
+      _authService = owned;
     }
+    _logoutService = widget.logoutService ?? _authService;
+
+    _loadIdentity();
   }
+
+  // Prefills username/phone from the currently persisted session (display
+  // only — never used to decide authentication, see
+  // AuthService.currentSession's doc comment). Resolves the dial code from
+  // AuthSession.country via kCountryCodes and strips it from the stored
+  // E.164 phone so the field shows only the locally-editable digits — the
+  // dial code itself is rendered read-only (see _buildFormFields) and is
+  // re-attached exactly once, at submit time (see _composePhoneForSubmit),
+  // so it can never be double-prefixed.
+  Future<void> _loadIdentity() async {
+    final session = await _authService.currentSession();
+    if (!mounted || session == null) return;
+
+    final country = kCountryCodes.firstWhere(
+      (candidate) => candidate.isoCode == session.country,
+      orElse: () => kDefaultCountryCode,
+    );
+    final phoneDigits = session.phone.startsWith(country.dialCode)
+        ? session.phone.substring(country.dialCode.length)
+        : session.phone;
+
+    setState(() {
+      _selectedCountry = country;
+      _usernameController.text = session.username;
+      _phoneController.text = phoneDigits;
+      _initialUsername = session.username;
+      _initialPhoneDigits = phoneDigits;
+    });
+  }
+
+  // Composes the full E.164 phone from the fixed (read-only on this
+  // screen) dial code plus the field's current local digits — the only
+  // place this concatenation happens, so it can never run twice.
+  String _composePhoneForSubmit() =>
+      '${_selectedCountry.dialCode}${_phoneController.text.trim()}';
 
   // Rebuilds so the Save Changes button's enabled state tracks [_isDirty]
   // as the user types.
@@ -252,13 +333,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     for (final controller in _formControllers) {
       controller.removeListener(_handleFormChanged);
     }
+    _usernameController.dispose();
+    _phoneController.dispose();
     _fullNameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _companyController.dispose();
     _businessAddressController.dispose();
-    _emailFocusNode.dispose();
+    _usernameFocusNode.dispose();
     _phoneFocusNode.dispose();
+    _fullNameFocusNode.dispose();
+    _emailFocusNode.dispose();
     _companyFocusNode.dispose();
     _businessAddressFocusNode.dispose();
     _ownedAuthService?.close();
@@ -536,10 +620,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // Confirms the cropped, previewed image as the new avatar. Only reached
   // after the user explicitly taps "Use Photo" — a failed or cancelled
   // attempt at any earlier stage never reaches (or affects) this step.
+  // Success is defined solely by the server's response — the local
+  // pick/crop/preview flow above never itself counts as a saved avatar.
   Future<void> _applyAvatar(String croppedPath) async {
-    AvatarUpdateResult result;
+    final UploadAvatarResult result;
     try {
-      result = await widget.avatarUploadService.updateAvatar(croppedPath);
+      result = await _authService.uploadAvatar(File(croppedPath));
     } catch (error) {
       debugPrint('Avatar update failed: $error');
       if (mounted) {
@@ -549,22 +635,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
     if (!mounted) return;
 
-    if (result.succeeded) {
-      await _avatarController.setAvatarPath(result.localPath!);
-      if (!mounted) return;
-      _showSnackBar(
-        result.message ??
-            (result.isLocalOnly
-                ? context.t('editProfile.photoUpdatedOnDevice')
-                : context.t('editProfile.photoUpdated')),
-      );
-    } else {
-      _showSnackBar(
-        result.message ?? context.t('editProfile.photoUpdateFailed'),
-      );
+    switch (result) {
+      case UploadAvatarSuccess(:final session):
+        // Refreshed avatarUrl only — see AuthSession.fromAuthenticatedUser
+        // in AuthService.uploadAvatar for every other identity field.
+        _avatarController.setAvatarUrl(session.avatarUrl);
+        _showSnackBar(context.t('editProfile.photoUpdated'));
+      case UploadAvatarFailure(type: UploadAvatarFailureType.unauthorized):
+        handleUnauthorizedResult(context, _avatarController);
+      case UploadAvatarFailure(type: UploadAvatarFailureType.fileNotFound):
+        _showSnackBar(context.t('editProfile.fileNotFound'));
+      case UploadAvatarFailure(type: UploadAvatarFailureType.fileTooLarge):
+        _showSnackBar(context.t('editProfile.tooLarge'));
+      case UploadAvatarFailure(type: UploadAvatarFailureType.unsupportedFormat):
+        _showSnackBar(context.t('editProfile.unsupportedFormat'));
+      case UploadAvatarFailure(
+        type: UploadAvatarFailureType.rejectedByServer,
+        :final message,
+      ):
+        _showSnackBar(message ?? context.t('editProfile.photoUpdateFailed'));
+      case UploadAvatarFailure():
+        _showSnackBar(context.t('editProfile.photoUpdateFailed'));
     }
   }
 
+  // Runs the mock-backed profile save (full name/email/company/address, if
+  // dirty) and the real identity PATCH (username/phone, if dirty)
+  // independently — each only fires the request its own fields actually
+  // need, so an unchanged identity never sends an empty PATCH and an
+  // unchanged mock section never calls ProfileService pointlessly. Both
+  // share one Save Changes button/loading state, per the existing design.
   Future<void> _handleSave() async {
     if (_isSaving || !_isDirty) return;
 
@@ -574,47 +674,106 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    final request = ProfileUpdateRequest(
-      fullName: _fullNameController.text.trim(),
-      email: _emailController.text.trim(),
-      phone: _phoneController.text.trim(),
-      company: _companyController.text.trim(),
-      businessAddress: _businessAddressController.text.trim(),
-    );
-
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _usernameServerError = null;
+      _phoneServerError = null;
+    });
     FocusScope.of(context).unfocus();
 
-    try {
-      final result = await widget.service.updateProfile(request);
-      if (!mounted) return;
-      switch (result.outcome) {
-        case ProfileUpdateOutcome.success:
-          // Moves the dirty-state baseline forward to what was just saved,
-          // so the form reads as clean again instead of still reporting
-          // (and warning on back navigation about) changes already saved.
-          _initialFullName = request.fullName;
-          _initialEmail = request.email;
-          _initialPhone = request.phone;
-          _initialCompany = request.company;
-          _initialBusinessAddress = request.businessAddress;
-          _showSnackBar(
-            result.message ?? context.t('editProfile.profileUpdated'),
-          );
-        case ProfileUpdateOutcome.failure:
-          _showSnackBar(
-            result.message ?? context.t('editProfile.profileSaveFailed'),
-          );
-        case ProfileUpdateOutcome.unavailable:
-          _showSnackBar(context.t('editProfile.profileUpdatesNotConnected'));
+    String? resultMessage;
+
+    if (_isMockProfileDirty) {
+      final request = ProfileUpdateRequest(
+        fullName: _fullNameController.text.trim(),
+        email: _emailController.text.trim(),
+        // This mock/local field has no editable UI of its own anymore —
+        // see the class doc comment — so it is passed through unchanged
+        // rather than read from a repurposed controller.
+        phone: widget.profile.phone,
+        company: _companyController.text.trim(),
+        businessAddress: _businessAddressController.text.trim(),
+      );
+
+      try {
+        final result = await widget.service.updateProfile(request);
+        if (!mounted) return;
+        switch (result.outcome) {
+          case ProfileUpdateOutcome.success:
+            // Moves the dirty-state baseline forward to what was just
+            // saved, so the form reads as clean again instead of still
+            // reporting (and warning on back navigation about) changes
+            // already saved.
+            _initialFullName = request.fullName;
+            _initialEmail = request.email;
+            _initialCompany = request.company;
+            _initialBusinessAddress = request.businessAddress;
+            resultMessage =
+                result.message ?? context.t('editProfile.profileUpdated');
+          case ProfileUpdateOutcome.failure:
+            resultMessage =
+                result.message ?? context.t('editProfile.profileSaveFailed');
+          case ProfileUpdateOutcome.unavailable:
+            resultMessage = context.t('editProfile.profileUpdatesNotConnected');
+        }
+      } catch (error) {
+        // Technical detail only — never the submitted profile fields.
+        debugPrint('Profile update failed: $error');
+        if (!mounted) return;
+        resultMessage = context.t('editProfile.profileSaveFailed');
       }
-    } catch (error) {
-      // Technical detail only — never the submitted profile fields.
-      debugPrint('Profile update failed: $error');
+    }
+
+    if (_isIdentityDirty) {
+      final usernameChanged =
+          _usernameController.text.trim() != _initialUsername;
+      final phoneChanged = _phoneController.text.trim() != _initialPhoneDigits;
+
+      final result = await _authService.updateProfile(
+        username: usernameChanged ? _usernameController.text.trim() : null,
+        phone: phoneChanged ? _composePhoneForSubmit() : null,
+      );
       if (!mounted) return;
-      _showSnackBar(context.t('editProfile.profileSaveFailed'));
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+
+      switch (result) {
+        case UpdateProfileSuccess(:final session):
+          _initialUsername = session.username;
+          // session.phone is the full E.164 value; re-derive the local
+          // digits the same way _loadIdentity does, so the baseline stays
+          // consistent with what the field displays.
+          _initialPhoneDigits =
+              session.phone.startsWith(_selectedCountry.dialCode)
+              ? session.phone.substring(_selectedCountry.dialCode.length)
+              : session.phone;
+          resultMessage = context.t('editProfile.profileUpdated');
+        case UpdateProfileFailure(type: UpdateProfileFailureType.unauthorized):
+          setState(() => _isSaving = false);
+          handleUnauthorizedResult(context, _avatarController);
+          return;
+        case UpdateProfileFailure(
+          type: UpdateProfileFailureType.usernameTaken,
+          :final usernameError,
+        ):
+          setState(
+            () => _usernameServerError =
+                usernameError ?? context.t('editProfile.usernameTaken'),
+          );
+        case UpdateProfileFailure(
+          type: UpdateProfileFailureType.invalidPhone,
+          :final phoneError,
+        ):
+          setState(
+            () => _phoneServerError =
+                phoneError ?? context.t('editProfile.phoneInvalidServer'),
+          );
+        case UpdateProfileFailure():
+          resultMessage = context.t('editProfile.profileSaveFailed');
+      }
+    }
+
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (resultMessage != null) _showSnackBar(resultMessage);
     }
   }
 
@@ -645,10 +804,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await _logoutService.logout();
       if (!mounted) return;
 
-      // Clears the shared avatar state (and its stable local file) so the
-      // next signed-in user on this device never sees this user's avatar.
-      // Only reached after the secure session is confirmed cleared above.
-      await _avatarController.clear();
+      // Clears the shared avatar state so the next signed-in user on this
+      // device never sees this user's avatar. Only reached after the
+      // secure session is confirmed cleared above.
+      _avatarController.clear();
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
@@ -822,10 +981,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildDivider(),
               const SizedBox(height: 24),
               _buildSaveButton(),
-              if (widget.showLogoutAction) ...[
-                const SizedBox(height: 32),
-                _buildLogoutButton(),
-              ],
+              const SizedBox(height: 16),
+              _buildChangePasswordButton(),
+              const SizedBox(height: 32),
+              _buildLogoutButton(),
             ],
           ),
         ),
@@ -943,10 +1102,64 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ContactFormField(
+          label: context.t('editProfile.usernameFieldLabel'),
+          child: TextFormField(
+            key: const ValueKey('edit-profile-username-field'),
+            controller: _usernameController,
+            focusNode: _usernameFocusNode,
+            textInputAction: TextInputAction.next,
+            style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
+            decoration: _fieldDecoration(errorText: _usernameServerError),
+            onFieldSubmitted: (_) => _phoneFocusNode.requestFocus(),
+            // Trimmed only — never lowercased or otherwise transformed;
+            // the ANC API contract does not require that.
+            validator: (value) => validateRequiredField(
+              value,
+              context.t('editProfile.usernameFieldError'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ContactFormField(
+          label: context.t('editProfile.phoneFieldLabel'),
+          child: TextFormField(
+            key: const ValueKey('edit-profile-phone-field'),
+            controller: _phoneController,
+            focusNode: _phoneFocusNode,
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
+            // The dial code is fixed to the authenticated user's country
+            // (see the class doc comment) — shown as a read-only prefix,
+            // never an editable/selectable field, so this screen can never
+            // silently change the stored country.
+            decoration: _fieldDecoration(errorText: _phoneServerError).copyWith(
+              prefixText:
+                  '${_selectedCountry.flag} '
+                  '${_selectedCountry.dialCode} ',
+            ),
+            onFieldSubmitted: (_) => _fullNameFocusNode.requestFocus(),
+            // Local digits only — the same digits-only contract LoginScreen
+            // already enforces for its mobile-number field.
+            validator: (value) {
+              final trimmed = value?.trim() ?? '';
+              if (trimmed.isEmpty) {
+                return context.t('validators.phoneRequired');
+              }
+              if (!RegExp(r'^[0-9]+$').hasMatch(trimmed)) {
+                return context.t('validators.phoneInvalid');
+              }
+              return null;
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+        ContactFormField(
           label: context.t('editProfile.fullNameFieldLabel'),
           child: TextFormField(
             key: const ValueKey('edit-profile-full-name-field'),
             controller: _fullNameController,
+            focusNode: _fullNameFocusNode,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
@@ -969,23 +1182,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
-            onFieldSubmitted: (_) => _phoneFocusNode.requestFocus(),
-            validator: (value) => validateEmailField(context, value),
-          ),
-        ),
-        const SizedBox(height: 20),
-        ContactFormField(
-          label: context.t('editProfile.phoneFieldLabel'),
-          child: TextFormField(
-            key: const ValueKey('edit-profile-phone-field'),
-            controller: _phoneController,
-            focusNode: _phoneFocusNode,
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.next,
-            style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
-            decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _companyFocusNode.requestFocus(),
-            validator: (value) => validatePhoneField(context, value),
+            validator: (value) => validateEmailField(context, value),
           ),
         ),
         const SizedBox(height: 20),
@@ -1030,10 +1228,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  InputDecoration _fieldDecoration() {
+  // [errorText], when non-null, surfaces a backend-vetted field error (see
+  // _usernameServerError/_phoneServerError) the same way a local
+  // [TextFormField.validator] error would — Flutter shows whichever of the
+  // two is present, so a fresh local-validator failure on next submit
+  // still takes over normally.
+  InputDecoration _fieldDecoration({String? errorText}) {
     return InputDecoration(
       filled: true,
       fillColor: AppColors.background,
+      errorText: errorText,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -1096,6 +1300,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       letterSpacing: 0.3,
                     ),
                   ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Entry point to the Change Password screen — a distinct concern from
+  // the profile/identity fields above, kept as its own screen/request
+  // rather than crowded into the Save Changes form (see
+  // ChangePasswordScreen's class doc comment).
+  Widget _buildChangePasswordButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('edit-profile-change-password-button'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChangePasswordScreen(authService: _authService),
+          ),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          alignment: Alignment.center,
+          child: Text(
+            context.t('editProfile.changePassword'),
+            style: const TextStyle(
+              color: AppColors.primaryNavy,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),

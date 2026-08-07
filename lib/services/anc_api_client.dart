@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../config/api_config.dart';
 import '../models/auth/api_validation_error.dart';
@@ -87,6 +88,84 @@ class AncApiClient {
   Future<AuthenticatedUser> fetchCurrentUser({required String token}) async {
     final response = await getAuthenticatedJson(ApiConfig.mePath, token: token);
     return _decodeCurrentUserResponse(response);
+  }
+
+  /// Calls `PATCH /api/auth/me` with the given [token] as a Bearer
+  /// credential, updating the authenticated user's `username` and/or
+  /// `phone`. At least one of [username]/[phone] must be non-null — the
+  /// caller (`AuthService.updateProfile`) enforces this before calling, so
+  /// this method sends whichever of the two is supplied, omitting the
+  /// other entirely from the body (never as an empty string or `null`
+  /// value) rather than deciding a default here.
+  ///
+  /// Parses the response through the same required top-level `data`
+  /// wrapper as [fetchCurrentUser] — per the confirmed contract, this
+  /// endpoint returns the updated user in that same shape. Unlike
+  /// [fetchCurrentUser], a 422 response's body is parsed into
+  /// [ApiValidationError] (see [_decodeUpdateMeResponse]), since the
+  /// caller needs field-level `username`/`phone` validation messages.
+  Future<AuthenticatedUser> updateMe({
+    required String token,
+    String? username,
+    String? phone,
+  }) async {
+    final response = await patchAuthenticatedJson(ApiConfig.mePath, {
+      'username': ?username,
+      'phone': ?phone,
+    }, token: token);
+    return _decodeUpdateMeResponse(response);
+  }
+
+  /// Calls `POST /api/auth/me/avatar` with the given [token] as a Bearer
+  /// credential, uploading the file at [filePath] as a multipart/form-data
+  /// request under the confirmed field name `avatar`. Per the confirmed
+  /// contract, a new upload replaces and deletes the user's previous
+  /// avatar server-side — there is no separate remove-avatar endpoint.
+  ///
+  /// Callers (`AuthService.uploadAvatar`) are responsible for confirming
+  /// [filePath] exists and is within the documented 5 MB limit before
+  /// calling this method — it does not re-check either, and a file that
+  /// disappears between that check and this call surfaces as an
+  /// uncontrolled [FileSystemException] from [http.MultipartFile.fromPath],
+  /// the same way a malformed [relativePath] surfaces as an uncontrolled
+  /// [ArgumentError] elsewhere in this client (see the class doc comment).
+  ///
+  /// Always sends `image/jpeg` as the part's content type: every avatar
+  /// this app uploads has already been through `ImageCropperAvatarCropperService`,
+  /// which fixes its output format to JPEG regardless of the original
+  /// picked file's format — there is no other source of avatar bytes in
+  /// this app to accept a different content type for.
+  ///
+  /// Reuses [_authenticatedHeaders] (Accept + Authorization only) rather
+  /// than [_authenticatedJsonHeaders]: a multipart request's `Content-Type`
+  /// (with its boundary parameter) is set by [http.MultipartRequest]
+  /// itself, and must never be overridden here.
+  ///
+  /// Parses the response through the same required top-level `data`
+  /// wrapper as [fetchCurrentUser]/[updateMe] — per the confirmed
+  /// contract, this endpoint also returns the updated user in that shape,
+  /// now including `avatar_url`.
+  Future<AuthenticatedUser> uploadAvatar({
+    required String token,
+    required String filePath,
+  }) async {
+    final uri = _resolve(ApiConfig.meAvatarPath);
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(_authenticatedHeaders(token))
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'avatar',
+          filePath,
+          contentType: MediaType('image', 'jpeg'),
+        ),
+      );
+
+    final response = await _sendWithTransportHandling(
+      () async => http.Response.fromStream(
+        await _httpClient.send(request).timeout(_requestTimeout),
+      ),
+    );
+    return _decodeUploadAvatarResponse(response);
   }
 
   /// Calls `GET /api/business-central/ledger-entries` for the authenticated
@@ -393,6 +472,30 @@ class AncApiClient {
     _decodeLogoutResponse(response);
   }
 
+  /// Calls `PUT /api/auth/me/password` with the given [token] as a Bearer
+  /// credential, changing the authenticated user's password. Sends exactly
+  /// the three fields the confirmed contract requires — never trimmed or
+  /// otherwise modified, the same as [LoginRequest.password].
+  ///
+  /// The confirmed contract does not document a response body shape, so
+  /// [_decodeChangePasswordResponse] only checks for HTTP 200 (see its doc
+  /// comment) rather than assuming one. Per the contract, this endpoint
+  /// does not rotate or revoke the current bearer [token] — callers must
+  /// not treat a successful call as invalidating it.
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final response = await putAuthenticatedJson(ApiConfig.mePasswordPath, {
+      'current_password': currentPassword,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    }, token: token);
+    _decodeChangePasswordResponse(response);
+  }
+
   /// Throws an [ArgumentError] unless [url] is `https` and its host is
   /// exactly [ApiConfig.baseUrl]'s host — see [fetchLedgerEntriesPage].
   void _requireTrustedApiHost(Uri url) {
@@ -479,12 +582,68 @@ class AncApiClient {
     );
   }
 
+  /// Sends an authenticated PATCH request with a JSON [body] to
+  /// [relativePath], resolved against [ApiConfig.baseUrl], with
+  /// `Authorization: Bearer <token>` (via [_authenticatedHeaders]) plus
+  /// `Content-Type: application/json`. Same [relativePath] safety rules as
+  /// [postPublicJson]/[getAuthenticatedJson].
+  Future<http.Response> patchAuthenticatedJson(
+    String relativePath,
+    Map<String, dynamic> body, {
+    required String token,
+  }) async {
+    final uri = _resolve(relativePath);
+    final encodedBody = jsonEncode(body);
+
+    return _sendWithTransportHandling(
+      () => _httpClient
+          .patch(
+            uri,
+            headers: _authenticatedJsonHeaders(token),
+            body: encodedBody,
+          )
+          .timeout(_requestTimeout),
+    );
+  }
+
+  /// Sends an authenticated PUT request with a JSON [body] to
+  /// [relativePath], resolved against [ApiConfig.baseUrl], with the same
+  /// headers as [patchAuthenticatedJson]. Same [relativePath] safety rules
+  /// as [postPublicJson]/[getAuthenticatedJson].
+  Future<http.Response> putAuthenticatedJson(
+    String relativePath,
+    Map<String, dynamic> body, {
+    required String token,
+  }) async {
+    final uri = _resolve(relativePath);
+    final encodedBody = jsonEncode(body);
+
+    return _sendWithTransportHandling(
+      () => _httpClient
+          .put(
+            uri,
+            headers: _authenticatedJsonHeaders(token),
+            body: encodedBody,
+          )
+          .timeout(_requestTimeout),
+    );
+  }
+
   /// The one place `Authorization: Bearer ...` is built, so it can never be
   /// duplicated or drift across call sites. Never logs or otherwise exposes
   /// [token].
   static Map<String, String> _authenticatedHeaders(String token) => {
     'Accept': 'application/json',
     'Authorization': 'Bearer $token',
+  };
+
+  /// [_authenticatedHeaders] plus `Content-Type: application/json`, for the
+  /// authenticated requests that carry a JSON body ([patchAuthenticatedJson],
+  /// [putAuthenticatedJson]) — a plain authenticated GET must never send
+  /// this header (see the class doc comment).
+  static Map<String, String> _authenticatedJsonHeaders(String token) => {
+    ..._authenticatedHeaders(token),
+    'Content-Type': 'application/json',
   };
 
   /// Runs [send], normalizing transport/protocol-level failures the same
@@ -633,6 +792,71 @@ class AncApiClient {
     throw AncHttpException(
       'ANC API /auth/me request failed.',
       statusCode: response.statusCode,
+    );
+  }
+
+  /// Decodes a `PATCH /auth/me` response. HTTP 200 requires the same
+  /// top-level `data` wrapper as [_decodeCurrentUserResponse]. Unlike that
+  /// method, every other status parses [ApiValidationError] for a 422 body
+  /// — [AuthService.updateProfile] needs `errors.username`/`errors.phone`
+  /// to distinguish a taken username from an invalid phone.
+  AuthenticatedUser _decodeUpdateMeResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonMap(response.body);
+      final data = json['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const AncProtocolException(
+          'Malformed /auth/me update response: missing the required "data" '
+          'wrapper.',
+        );
+      }
+      try {
+        return AuthenticatedUser.fromJson(data);
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed /auth/me update response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API /auth/me update request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a `POST /auth/me/avatar` response. Same shape as
+  /// [_decodeUpdateMeResponse] — HTTP 200 requires the top-level `data`
+  /// wrapper, and every other status parses [ApiValidationError] for a 422
+  /// body so `AuthService.uploadAvatar` can surface `errors.avatar`.
+  AuthenticatedUser _decodeUploadAvatarResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonMap(response.body);
+      final data = json['data'];
+      if (data is! Map<String, dynamic>) {
+        throw const AncProtocolException(
+          'Malformed /auth/me/avatar response: missing the required "data" '
+          'wrapper.',
+        );
+      }
+      try {
+        return AuthenticatedUser.fromJson(data);
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed /auth/me/avatar response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API avatar-upload request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
     );
   }
 
@@ -856,6 +1080,26 @@ class AncApiClient {
     throw AncHttpException(
       'ANC API logout request failed.',
       statusCode: response.statusCode,
+    );
+  }
+
+  /// Decodes a `PUT /auth/me/password` response. The confirmed contract
+  /// does not document a response body shape (unlike [_decodeLogoutResponse]'s
+  /// confirmed `{"message": ...}` shape), so this only requires HTTP 200 —
+  /// the body, whatever it contains, is not parsed or inspected. Every
+  /// other status raises [AncHttpException] with that [statusCode],
+  /// including a parsed [ApiValidationError] for 422 — `AuthService`
+  /// distinguishes `errors.current_password` from
+  /// `errors.password`/`errors.password_confirmation`.
+  void _decodeChangePasswordResponse(http.Response response) {
+    if (response.statusCode == 200) return;
+
+    throw AncHttpException(
+      'ANC API password-change request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
     );
   }
 

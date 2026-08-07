@@ -52,6 +52,26 @@ class ApiConfig {
   /// `AncApiClient.logout`).
   static const String logoutPath = 'api/auth/logout';
 
+  /// Relative path (no leading slash) for the password-change endpoint,
+  /// resolved against [baseUrl] by [AncApiClient]. `PUT` per the confirmed
+  /// contract; does not rotate or revoke the current bearer token (see
+  /// `AncApiClient.changePassword`).
+  static const String mePasswordPath = 'api/auth/me/password';
+
+  /// Relative path (no leading slash) for the avatar-upload endpoint,
+  /// resolved against [baseUrl] by [AncApiClient]. `POST` multipart/form-data
+  /// per the confirmed contract; a new upload replaces and deletes the
+  /// previous avatar server-side. There is no separate remove-avatar
+  /// endpoint (see `AncApiClient.uploadAvatar`).
+  static const String meAvatarPath = 'api/auth/me/avatar';
+
+  /// Largest avatar file this app will ever attempt to upload, per the
+  /// confirmed `POST /auth/me/avatar` contract's documented 5 MB limit.
+  /// Checked client-side before the request is sent (see
+  /// `AuthService.uploadAvatar`) so an oversized file fails fast with a
+  /// clear local reason instead of a slow upload followed by a 422.
+  static const int avatarMaxUploadBytes = 5 * 1024 * 1024;
+
   /// Relative path (no leading slash) for the Business Central ledger-
   /// entries endpoint, resolved against [baseUrl] by [AncApiClient]. The ANC
   /// API scopes results to the authenticated user server-side — the app

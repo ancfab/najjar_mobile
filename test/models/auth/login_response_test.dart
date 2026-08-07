@@ -64,6 +64,32 @@ void main() {
       expect(AuthenticatedUser.fromJson(json).mustChangePassword, isTrue);
     });
 
+    test('maps a non-null avatar_url to avatarUrl', () {
+      final json = _validUserJson()
+        ..['avatar_url'] = 'https://cdn.example.com/avatars/1.jpg';
+
+      expect(
+        AuthenticatedUser.fromJson(json).avatarUrl,
+        'https://cdn.example.com/avatars/1.jpg',
+      );
+    });
+
+    test('accepts a null avatar_url', () {
+      final json = _validUserJson()..['avatar_url'] = null;
+
+      expect(AuthenticatedUser.fromJson(json).avatarUrl, isNull);
+    });
+
+    test('accepts a missing avatar_url key entirely', () {
+      expect(AuthenticatedUser.fromJson(_validUserJson()).avatarUrl, isNull);
+    });
+
+    test('throws FormatException when avatar_url is not a string', () {
+      final json = _validUserJson()..['avatar_url'] = 42;
+
+      expect(() => AuthenticatedUser.fromJson(json), throwsFormatException);
+    });
+
     test('throws FormatException when id is missing', () {
       final json = _validUserJson()..remove('id');
 

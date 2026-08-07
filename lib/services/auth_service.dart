@@ -1,9 +1,16 @@
+import 'dart:io';
+
 import '../config/api_config.dart';
 import '../models/auth/auth_session.dart';
+import '../models/auth/authenticated_user.dart';
+import '../models/auth/change_password_result.dart';
 import '../models/auth/login_failure.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
 import '../models/auth/session_validation_result.dart';
+import '../models/auth/update_profile_result.dart';
+import '../models/auth/upload_avatar_result.dart';
+import '../utils/image_format_sniffer.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
@@ -190,6 +197,125 @@ class AuthService implements LogoutService {
     }
   }
 
+  /// Returns the currently persisted session, if any, **without**
+  /// confirming it against the backend — for display/prefill purposes only
+  /// (e.g. showing the signed-in user's username/phone/avatar while a
+  /// screen builds, before the user has changed anything). A secure-storage
+  /// read failure resolves to `null` the same as "no session", since there
+  /// is nothing safe to prefill from either way.
+  ///
+  /// Must never be used to decide whether a user is authenticated — see
+  /// [confirmSession] for that; a value returned here could be stale or
+  /// (rarely) already revoked server-side.
+  Future<AuthSession?> currentSession() async {
+    try {
+      return await _sessionStore.read();
+    } on SessionStorageException {
+      return null;
+    }
+  }
+
+  /// Updates the authenticated user's `username` and/or `phone` against
+  /// `PATCH /auth/me`, refreshing and re-persisting the stored session on
+  /// success.
+  ///
+  /// [username] and [phone] have accidental outer whitespace trimmed, then
+  /// an empty result is treated the same as not supplying that field. At
+  /// least one of the two must resolve to a non-empty value, or this
+  /// returns [UpdateProfileFailureType.invalidInput] before any API call —
+  /// the backend field this maps to is fixed (`username`/`phone`); this
+  /// method never edits `client_id`, `country`, or `bc_customer_no`.
+  ///
+  /// - No stored session -> [UpdateProfileFailureType.unauthorized]; no
+  ///   API call is made.
+  /// - HTTP 200 -> the session is re-persisted with identity fields
+  ///   refreshed from the response (see [AuthSession.fromAuthenticatedUser],
+  ///   the same helper [confirmSession] uses), preserving [AuthSession.token]
+  ///   unchanged, and [UpdateProfileSuccess] is returned.
+  /// - HTTP 401 -> the stored token is revoked; the secure session is
+  ///   cleared (best-effort) and [UpdateProfileFailureType.unauthorized] is
+  ///   returned, the same as [confirmSession]'s HTTP 401 handling — this
+  ///   method has no dependency on `SessionExpiryCoordinator` (see the
+  ///   class doc comment).
+  /// - HTTP 422 with `errors.username` -> [UpdateProfileFailureType.usernameTaken]
+  ///   with that message. HTTP 422 with `errors.phone` (and no
+  ///   `errors.username`) -> [UpdateProfileFailureType.invalidPhone] with
+  ///   that message. Any other 422 shape -> [UpdateProfileFailureType.invalidInput].
+  /// - A network failure, timeout, or unexpected HTTP status ->
+  ///   [UpdateProfileFailureType.network] / [UpdateProfileFailureType.serviceUnavailable]
+  ///   respectively; the stored session is left untouched.
+  /// - A malformed response body -> [UpdateProfileFailureType.invalidResponse];
+  ///   the stored session is left untouched (unlike [confirmSession], this
+  ///   is not evidence the *stored* session is unusable — only that this one
+  ///   response could not be parsed).
+  /// - A failure to re-persist the refreshed session ->
+  ///   [UpdateProfileFailureType.secureStorage] — unlike [confirmSession],
+  ///   this is surfaced rather than swallowed, since the caller's own edit
+  ///   would otherwise silently appear to have not been saved.
+  Future<UpdateProfileResult> updateProfile({
+    String? username,
+    String? phone,
+  }) async {
+    final trimmedUsername = username?.trim();
+    final normalizedUsername =
+        (trimmedUsername == null || trimmedUsername.isEmpty)
+        ? null
+        : trimmedUsername;
+    final trimmedPhone = phone?.trim();
+    final normalizedPhone = (trimmedPhone == null || trimmedPhone.isEmpty)
+        ? null
+        : trimmedPhone;
+
+    if (normalizedUsername == null && normalizedPhone == null) {
+      return const UpdateProfileFailure(UpdateProfileFailureType.invalidInput);
+    }
+
+    final AuthSession? stored;
+    try {
+      stored = await _sessionStore.read();
+    } on SessionStorageException {
+      return const UpdateProfileFailure(UpdateProfileFailureType.secureStorage);
+    }
+    if (stored == null) {
+      return const UpdateProfileFailure(UpdateProfileFailureType.unauthorized);
+    }
+
+    final AuthenticatedUser user;
+    try {
+      user = await _apiClient.updateMe(
+        token: stored.token,
+        username: normalizedUsername,
+        phone: normalizedPhone,
+      );
+    } on AncHttpException catch (error) {
+      if (error.statusCode == 401) {
+        await _clearIgnoringStorageFailure();
+        return const UpdateProfileFailure(
+          UpdateProfileFailureType.unauthorized,
+        );
+      }
+      return _mapUpdateProfileHttpFailure(error);
+    } on AncNetworkException {
+      return const UpdateProfileFailure(UpdateProfileFailureType.network);
+    } on AncProtocolException {
+      return const UpdateProfileFailure(
+        UpdateProfileFailureType.invalidResponse,
+      );
+    }
+
+    final updated = AuthSession.fromAuthenticatedUser(
+      token: stored.token,
+      user: user,
+    );
+    try {
+      await _sessionStore.save(updated);
+    } on SessionStorageException {
+      return const UpdateProfileFailure(UpdateProfileFailureType.secureStorage);
+    }
+
+    return UpdateProfileSuccess(updated);
+  }
+
   /// Clears the secure session, swallowing a [SessionStorageException] so a
   /// failure to also delete the local copy never blocks reporting that the
   /// token is confirmed dead/unusable server-side — correctness of that
@@ -276,6 +402,294 @@ class AuthService implements LogoutService {
     }
 
     return const AuthLoginFailure(AuthLoginFailureType.serviceUnavailable);
+  }
+
+  /// Maps a well-formed non-2xx `PATCH /auth/me` response (other than 401,
+  /// handled separately in [updateProfile]) to a failure.
+  ///
+  /// Deterministic rule: HTTP 422 with an `errors.username` message maps to
+  /// [UpdateProfileFailureType.usernameTaken]; HTTP 422 with an
+  /// `errors.phone` message (and no `errors.username`) maps to
+  /// [UpdateProfileFailureType.invalidPhone]; any other 422 shape maps to
+  /// [UpdateProfileFailureType.invalidInput]. HTTP 5xx and every other
+  /// unexpected non-success status map to
+  /// [UpdateProfileFailureType.serviceUnavailable].
+  UpdateProfileFailure _mapUpdateProfileHttpFailure(AncHttpException error) {
+    if (error.statusCode == 422) {
+      final usernameError = error.validationError?.firstErrorFor('username');
+      if (usernameError != null) {
+        return UpdateProfileFailure(
+          UpdateProfileFailureType.usernameTaken,
+          usernameError: usernameError,
+        );
+      }
+      final phoneError = error.validationError?.firstErrorFor('phone');
+      if (phoneError != null) {
+        return UpdateProfileFailure(
+          UpdateProfileFailureType.invalidPhone,
+          phoneError: phoneError,
+        );
+      }
+      return const UpdateProfileFailure(UpdateProfileFailureType.invalidInput);
+    }
+
+    return const UpdateProfileFailure(
+      UpdateProfileFailureType.serviceUnavailable,
+    );
+  }
+
+  /// Changes the authenticated user's password against
+  /// `PUT /auth/me/password`.
+  ///
+  /// [currentPassword], [password], and [passwordConfirmation] are sent
+  /// exactly as supplied — never trimmed — the same as [login]'s password
+  /// parameter. All three must be non-empty, or this returns
+  /// [ChangePasswordFailureType.invalidInput] before any API call.
+  ///
+  /// - No stored session -> [ChangePasswordFailureType.unauthorized]; no
+  ///   API call is made.
+  /// - HTTP 200 -> [ChangePasswordSuccess]. Per the confirmed contract this
+  ///   endpoint does not rotate or revoke the current bearer token, so the
+  ///   stored session is left untouched.
+  /// - HTTP 401 -> the stored token is revoked; the secure session is
+  ///   cleared (best-effort) and [ChangePasswordFailureType.unauthorized] is
+  ///   returned, the same as [confirmSession]/[updateProfile]'s HTTP 401
+  ///   handling.
+  /// - HTTP 422 with `errors.current_password` ->
+  ///   [ChangePasswordFailureType.incorrectCurrentPassword]. HTTP 422 with
+  ///   `errors.password` (and no `errors.current_password`) ->
+  ///   [ChangePasswordFailureType.weakPassword] with that message. HTTP 422
+  ///   with `errors.password_confirmation` (and neither of the above) ->
+  ///   [ChangePasswordFailureType.passwordConfirmationMismatch] with that
+  ///   message. Any other 422 shape -> [ChangePasswordFailureType.invalidInput].
+  /// - A network failure, timeout, or unexpected HTTP status ->
+  ///   [ChangePasswordFailureType.network] /
+  ///   [ChangePasswordFailureType.serviceUnavailable] respectively.
+  /// - A malformed response body -> [ChangePasswordFailureType.invalidResponse].
+  Future<ChangePasswordResult> changePassword({
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    if (currentPassword.isEmpty ||
+        password.isEmpty ||
+        passwordConfirmation.isEmpty) {
+      return const ChangePasswordFailure(
+        ChangePasswordFailureType.invalidInput,
+      );
+    }
+
+    final AuthSession? stored;
+    try {
+      stored = await _sessionStore.read();
+    } on SessionStorageException {
+      return const ChangePasswordFailure(
+        ChangePasswordFailureType.secureStorage,
+      );
+    }
+    if (stored == null) {
+      return const ChangePasswordFailure(
+        ChangePasswordFailureType.unauthorized,
+      );
+    }
+
+    try {
+      await _apiClient.changePassword(
+        token: stored.token,
+        currentPassword: currentPassword,
+        password: password,
+        passwordConfirmation: passwordConfirmation,
+      );
+    } on AncHttpException catch (error) {
+      if (error.statusCode == 401) {
+        await _clearIgnoringStorageFailure();
+        return const ChangePasswordFailure(
+          ChangePasswordFailureType.unauthorized,
+        );
+      }
+      return _mapChangePasswordHttpFailure(error);
+    } on AncNetworkException {
+      return const ChangePasswordFailure(ChangePasswordFailureType.network);
+    } on AncProtocolException {
+      return const ChangePasswordFailure(
+        ChangePasswordFailureType.invalidResponse,
+      );
+    }
+
+    return const ChangePasswordSuccess();
+  }
+
+  /// Maps a well-formed non-2xx `PUT /auth/me/password` response (other
+  /// than 401, handled separately in [changePassword]) to a failure.
+  ///
+  /// Deterministic rule: HTTP 422 with an `errors.current_password` message
+  /// maps to [ChangePasswordFailureType.incorrectCurrentPassword]; HTTP 422
+  /// with an `errors.password` message (and no `errors.current_password`)
+  /// maps to [ChangePasswordFailureType.weakPassword]; HTTP 422 with an
+  /// `errors.password_confirmation` message (and neither of the above) maps
+  /// to [ChangePasswordFailureType.passwordConfirmationMismatch] — both
+  /// field names are confirmed by the documented contract
+  /// (`password`/`password_confirmation` are the exact request keys), not
+  /// guessed. Any other 422 shape maps to
+  /// [ChangePasswordFailureType.invalidInput]. HTTP 5xx and every other
+  /// unexpected non-success status map to
+  /// [ChangePasswordFailureType.serviceUnavailable].
+  ChangePasswordFailure _mapChangePasswordHttpFailure(AncHttpException error) {
+    if (error.statusCode == 422) {
+      final currentPasswordError = error.validationError?.firstErrorFor(
+        'current_password',
+      );
+      if (currentPasswordError != null) {
+        return const ChangePasswordFailure(
+          ChangePasswordFailureType.incorrectCurrentPassword,
+        );
+      }
+      final passwordError = error.validationError?.firstErrorFor('password');
+      if (passwordError != null) {
+        return ChangePasswordFailure(
+          ChangePasswordFailureType.weakPassword,
+          passwordError: passwordError,
+        );
+      }
+      final confirmationError = error.validationError?.firstErrorFor(
+        'password_confirmation',
+      );
+      if (confirmationError != null) {
+        return ChangePasswordFailure(
+          ChangePasswordFailureType.passwordConfirmationMismatch,
+          passwordError: confirmationError,
+        );
+      }
+      return const ChangePasswordFailure(
+        ChangePasswordFailureType.invalidInput,
+      );
+    }
+
+    return const ChangePasswordFailure(
+      ChangePasswordFailureType.serviceUnavailable,
+    );
+  }
+
+  /// Uploads [avatar] as the authenticated user's avatar against
+  /// `POST /auth/me/avatar`, refreshing and re-persisting the stored
+  /// session (with the new `avatarUrl`) on success. Per the confirmed
+  /// contract, a successful upload replaces and deletes the previous
+  /// avatar server-side — there is no separate remove-avatar endpoint, so
+  /// this is the only way the avatar ever changes.
+  ///
+  /// - No file at [avatar]'s path -> [UploadAvatarFailureType.fileNotFound];
+  ///   no API call is made.
+  /// - A file larger than [ApiConfig.avatarMaxUploadBytes] ->
+  ///   [UploadAvatarFailureType.fileTooLarge]; no API call is made — this
+  ///   is a client-side pre-check against the documented 5 MB limit, not a
+  ///   guess at a backend rule.
+  /// - A file whose leading bytes don't match jpg/png/webp (see
+  ///   [hasSupportedAvatarUploadSignature] — never decided by the file's
+  ///   extension alone) -> [UploadAvatarFailureType.unsupportedFormat]; no
+  ///   API call is made. In practice every avatar this app ever produces
+  ///   has already been through `ImageCropperAvatarCropperService`, which
+  ///   fixes its output to JPEG regardless of the original picked format —
+  ///   this check is defense-in-depth for [avatar] arguments constructed
+  ///   any other way, not a live gap in the pick→crop→upload flow.
+  /// - No stored session -> [UploadAvatarFailureType.unauthorized]; no API
+  ///   call is made.
+  /// - HTTP 200 -> the session is re-persisted with identity fields
+  ///   (including `avatarUrl`) refreshed from the response (see
+  ///   [AuthSession.fromAuthenticatedUser], the same helper
+  ///   [confirmSession]/[updateProfile] use), preserving
+  ///   [AuthSession.token] unchanged, and [UploadAvatarSuccess] is
+  ///   returned.
+  /// - HTTP 401 -> the stored token is revoked; the secure session is
+  ///   cleared (best-effort) and [UploadAvatarFailureType.unauthorized] is
+  ///   returned, the same as [confirmSession]/[updateProfile]/
+  ///   [changePassword]'s HTTP 401 handling.
+  /// - HTTP 422 with `errors.avatar` ->
+  ///   [UploadAvatarFailureType.rejectedByServer] with that message. Any
+  ///   other 422 shape also maps to [UploadAvatarFailureType.rejectedByServer],
+  ///   with no message.
+  /// - A network failure, timeout, or unexpected HTTP status ->
+  ///   [UploadAvatarFailureType.network] /
+  ///   [UploadAvatarFailureType.serviceUnavailable] respectively; the
+  ///   stored session is left untouched.
+  /// - A malformed response body -> [UploadAvatarFailureType.invalidResponse];
+  ///   the stored session is left untouched (same reasoning as
+  ///   [updateProfile]'s handling of this case).
+  /// - A failure to re-persist the refreshed session ->
+  ///   [UploadAvatarFailureType.secureStorage] — surfaced rather than
+  ///   swallowed, for the same reason as [updateProfile].
+  Future<UploadAvatarResult> uploadAvatar(File avatar) async {
+    if (!await avatar.exists()) {
+      return const UploadAvatarFailure(UploadAvatarFailureType.fileNotFound);
+    }
+    if (await avatar.length() > ApiConfig.avatarMaxUploadBytes) {
+      return const UploadAvatarFailure(UploadAvatarFailureType.fileTooLarge);
+    }
+    if (!hasSupportedAvatarUploadSignature(await avatar.readAsBytes())) {
+      return const UploadAvatarFailure(
+        UploadAvatarFailureType.unsupportedFormat,
+      );
+    }
+
+    final AuthSession? stored;
+    try {
+      stored = await _sessionStore.read();
+    } on SessionStorageException {
+      return const UploadAvatarFailure(UploadAvatarFailureType.secureStorage);
+    }
+    if (stored == null) {
+      return const UploadAvatarFailure(UploadAvatarFailureType.unauthorized);
+    }
+
+    final AuthenticatedUser user;
+    try {
+      user = await _apiClient.uploadAvatar(
+        token: stored.token,
+        filePath: avatar.path,
+      );
+    } on AncHttpException catch (error) {
+      if (error.statusCode == 401) {
+        await _clearIgnoringStorageFailure();
+        return const UploadAvatarFailure(UploadAvatarFailureType.unauthorized);
+      }
+      return _mapUploadAvatarHttpFailure(error);
+    } on AncNetworkException {
+      return const UploadAvatarFailure(UploadAvatarFailureType.network);
+    } on AncProtocolException {
+      return const UploadAvatarFailure(UploadAvatarFailureType.invalidResponse);
+    }
+
+    final updated = AuthSession.fromAuthenticatedUser(
+      token: stored.token,
+      user: user,
+    );
+    try {
+      await _sessionStore.save(updated);
+    } on SessionStorageException {
+      return const UploadAvatarFailure(UploadAvatarFailureType.secureStorage);
+    }
+
+    return UploadAvatarSuccess(updated);
+  }
+
+  /// Maps a well-formed non-2xx `POST /auth/me/avatar` response (other
+  /// than 401, handled separately in [uploadAvatar]) to a failure.
+  ///
+  /// Deterministic rule: HTTP 422 always maps to
+  /// [UploadAvatarFailureType.rejectedByServer], carrying the first
+  /// `errors.avatar` message when present. HTTP 5xx and every other
+  /// unexpected non-success status map to
+  /// [UploadAvatarFailureType.serviceUnavailable].
+  UploadAvatarFailure _mapUploadAvatarHttpFailure(AncHttpException error) {
+    if (error.statusCode == 422) {
+      return UploadAvatarFailure(
+        UploadAvatarFailureType.rejectedByServer,
+        message: error.validationError?.firstErrorFor('avatar'),
+      );
+    }
+
+    return const UploadAvatarFailure(
+      UploadAvatarFailureType.serviceUnavailable,
+    );
   }
 
   /// Closes the underlying [AncApiClient], but only when this instance

@@ -91,6 +91,13 @@ void main() {
     testWidgets('Tapping EMAIL SUPPORT opens ContactUsScreen', (tester) async {
       await pumpSupport(tester);
 
+      // The Support screen's bottom navigation footer now occupies part of
+      // the default test viewport's height, so the email button — well
+      // below the fold on a short screen — needs an explicit scroll into
+      // view before tapping.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('support-email-button')),
+      );
       await tester.tap(find.byKey(const ValueKey('support-email-button')));
       await tester.pumpAndSettle();
 
@@ -114,6 +121,13 @@ void main() {
       await tester.tap(find.text(lebanon.displayName));
       await tester.pumpAndSettle();
 
+      // The Support screen's bottom navigation footer now occupies part of
+      // the default test viewport's height, so the email button — well
+      // below the fold on a short screen — needs an explicit scroll into
+      // view before tapping.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('support-email-button')),
+      );
       await tester.tap(find.byKey(const ValueKey('support-email-button')));
       await tester.pumpAndSettle();
 
@@ -138,6 +152,13 @@ void main() {
     ) async {
       await pumpSupport(tester);
 
+      // The Support screen's bottom navigation footer now occupies part of
+      // the default test viewport's height, so the email button — well
+      // below the fold on a short screen — needs an explicit scroll into
+      // view before tapping.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('support-email-button')),
+      );
       await tester.tap(find.byKey(const ValueKey('support-email-button')));
       await tester.pumpAndSettle();
       expect(find.byType(ContactUsScreen), findsOneWidget);

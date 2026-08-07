@@ -368,6 +368,37 @@ void main() {
       );
       expect(find.byKey(_retryButtonKey), findsNothing);
     });
+
+    testWidgets(
+      'The preview widget is mounted before start() is called, not after '
+      'it resolves — real mobile_scanner requires its widget to already be '
+      'attached to the controller when start() runs',
+      (tester) async {
+        final scanner = FakeBarcodeScannerController()
+          ..startGate = Completer<void>();
+        await _pumpScanStockScreen(tester, scannerController: scanner);
+
+        // start() has been invoked and is still pending (gated on
+        // startGate), yet the preview widget must already be in the tree —
+        // otherwise the real mobile_scanner controller would still be
+        // waiting on its widget's initState to call attach().
+        expect(scanner.startCallCount, 1);
+        expect(
+          find.byKey(const ValueKey('scan-stock-camera-preview')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('scan-stock-initializing-scanner')),
+          findsOneWidget,
+        );
+
+        scanner.startGate!.complete();
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.byKey(_qrFrameKey), findsOneWidget);
+      },
+    );
   });
 
   group('Scan frame', () {

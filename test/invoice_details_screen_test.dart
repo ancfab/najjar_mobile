@@ -4,7 +4,6 @@
 // narrow-width overflow safety, and scrolling to the Payment Method section.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +20,6 @@ import 'package:anc_fabrics/widgets/payment_timeline.dart';
 import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_lookup_data_source.dart' show sampleInvoiceLine;
 import 'helpers/fake_invoice_pdf_service.dart';
-import 'helpers/valid_avatar_image.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
@@ -72,11 +70,6 @@ Future<void> _pumpInvoiceDetailsScreen(
 
 void main() {
   setUp(() {
-    // CurrentUserAvatarController.setAvatarPath persists the path via
-    // SharedPreferences; without a mock in place, the real plugin's
-    // getInstance() call never resolves in a widget test (no platform to
-    // answer it), hanging avatar-setting tests until they time out instead
-    // of failing fast.
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -125,21 +118,15 @@ void main() {
           findsOneWidget,
         );
 
-        late File tempFile;
-        await tester.runAsync(() async {
-          tempFile = await writeAndPrecacheAvatarFile(
-            path:
-                '${Directory.systemTemp.path}/invoice_details_avatar_test.png',
-            bytes: validAvatarPngBytes,
-            context: tester.element(find.byType(MaterialApp)),
-          );
-        });
-        addTearDown(() async {
-          if (await tempFile.exists()) await tempFile.delete();
-        });
-
-        await avatarController.setAvatarPath(tempFile.path);
-        await tester.pumpAndSettle();
+        // A single pump (never pumpAndSettle) — the controller now holds a
+        // network URL, and this only asserts the ImageProvider reference
+        // was wired through the widget tree, not that a real fetch
+        // completed. Loopback with nothing listening refuses the
+        // connection almost instantly (no DNS lookup, no real round trip),
+        // unlike a real internet host, which can resolve its async failure
+        // late enough to be misattributed to whichever test runs next.
+        avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
+        await tester.pump();
 
         circleAvatar = tester.widget<CircleAvatar>(
           find.descendant(

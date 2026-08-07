@@ -91,6 +91,7 @@ _RecordingHttpClient _shouldNeverBeCalledHttpClient() =>
 http.StreamedResponse _meSuccessResponse(
   http.Request request, {
   String username = 'sample.user',
+  String? avatarUrl,
 }) {
   final body = jsonEncode({
     'data': {
@@ -101,6 +102,7 @@ http.StreamedResponse _meSuccessResponse(
       'client_id': ApiConfig.clientId,
       'bc_customer_no': 'SAMPLE-0001',
       'must_change_password': false,
+      'avatar_url': avatarUrl,
     },
   });
   return http.StreamedResponse(
@@ -213,8 +215,55 @@ void main() {
         expect(result.isLoggedIn, isTrue);
         expect(result.startupMessage, isNull);
         expect(result.sessionInvalidated, isFalse);
+        expect(
+          result.avatarUrl,
+          isNull,
+          reason: 'the confirmed /auth/me response here has no avatar_url',
+        );
       },
     );
+
+    test(
+      'a valid session with a confirmed avatar_url surfaces it on the '
+      'startup result, for main() to hand to CurrentUserAvatarController',
+      () async {
+        final fakeStore = FakeSecureKeyValueStore();
+        await SecureAuthSessionStore(
+          secureStore: fakeStore,
+        ).save(_validSession());
+        final fakeHttp = _RecordingHttpClient(
+          (req) async => _meSuccessResponse(
+            req,
+            avatarUrl: 'https://cdn.example.com/avatars/7.jpg',
+          ),
+        );
+
+        final result = await resolveStartupSession(
+          serviceOver(fakeStore, fakeHttp),
+        );
+
+        expect(result.isLoggedIn, isTrue);
+        expect(result.avatarUrl, 'https://cdn.example.com/avatars/7.jpg');
+      },
+    );
+
+    test('a session-invalidated outcome (401/malformed) never carries an '
+        'avatarUrl', () async {
+      final fakeStore = FakeSecureKeyValueStore();
+      await SecureAuthSessionStore(
+        secureStore: fakeStore,
+      ).save(_validSession());
+      final fakeHttp = _RecordingHttpClient(
+        (req) async => _meStatusResponse(req, 401),
+      );
+
+      final result = await resolveStartupSession(
+        serviceOver(fakeStore, fakeHttp),
+      );
+
+      expect(result.sessionInvalidated, isTrue);
+      expect(result.avatarUrl, isNull);
+    });
 
     test(
       'confirming a valid session sends Authorization: Bearer <storedToken>',

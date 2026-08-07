@@ -27,6 +27,7 @@ class AuthSession {
     required this.clientId,
     this.bcCustomerNo,
     required this.mustChangePassword,
+    this.avatarUrl,
   });
 
   /// Opaque Sanctum personal access token, persisted and restored exactly
@@ -52,6 +53,12 @@ class AuthSession {
   /// password-change screen until one does.
   final bool mustChangePassword;
 
+  /// The user's avatar image URL, if one has been uploaded — see
+  /// `AuthenticatedUser.avatarUrl`, which this mirrors. Refreshed the same
+  /// way every other identity field is: via [fromAuthenticatedUser] after
+  /// `GET /auth/me`, `PATCH /auth/me`, or `POST /auth/me/avatar`.
+  final String? avatarUrl;
+
   /// The schema version this class reads and writes. Bump this and add
   /// explicit migration/rejection logic in [fromJson] if the persisted
   /// shape ever changes.
@@ -71,6 +78,7 @@ class AuthSession {
       clientId: user.clientId,
       bcCustomerNo: user.bcCustomerNo,
       mustChangePassword: response.mustChangePassword,
+      avatarUrl: user.avatarUrl,
     );
   }
 
@@ -92,10 +100,17 @@ class AuthSession {
     clientId: user.clientId,
     bcCustomerNo: user.bcCustomerNo,
     mustChangePassword: user.mustChangePassword,
+    avatarUrl: user.avatarUrl,
   );
 
   /// Serializes to the versioned envelope persisted by
   /// `SecureAuthSessionStore`.
+  ///
+  /// [avatarUrl] is included as a plain optional field (present as `null`
+  /// when absent) rather than bumping [schemaVersion]: it is a purely
+  /// additive field an older-schema reader would simply not have written,
+  /// and [fromJson] already treats a missing key the same as an explicit
+  /// `null` — no migration or rejection logic is needed for it.
   Map<String, dynamic> toJson() => {
     'schema_version': schemaVersion,
     'token': token,
@@ -106,6 +121,7 @@ class AuthSession {
     'client_id': clientId,
     'bc_customer_no': bcCustomerNo,
     'must_change_password': mustChangePassword,
+    'avatar_url': avatarUrl,
   };
 
   /// Parses a persisted session envelope.
@@ -166,6 +182,11 @@ class AuthSession {
       );
     }
 
+    final avatarUrl = json['avatar_url'];
+    if (avatarUrl != null && avatarUrl is! String) {
+      throw const FormatException('AuthSession.avatar_url was not a string');
+    }
+
     return AuthSession(
       token: token,
       userId: userId,
@@ -175,6 +196,7 @@ class AuthSession {
       clientId: clientId,
       bcCustomerNo: bcCustomerNo as String?,
       mustChangePassword: mustChangePassword,
+      avatarUrl: avatarUrl as String?,
     );
   }
 
@@ -189,7 +211,8 @@ class AuthSession {
           country == other.country &&
           clientId == other.clientId &&
           bcCustomerNo == other.bcCustomerNo &&
-          mustChangePassword == other.mustChangePassword);
+          mustChangePassword == other.mustChangePassword &&
+          avatarUrl == other.avatarUrl);
 
   @override
   int get hashCode => Object.hash(
@@ -201,6 +224,7 @@ class AuthSession {
     clientId,
     bcCustomerNo,
     mustChangePassword,
+    avatarUrl,
   );
 
   /// Deliberately omits [token]: this must never appear in logs, crash

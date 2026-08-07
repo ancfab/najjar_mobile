@@ -18,13 +18,18 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/models/auth/auth_session.dart';
+import 'package:anc_fabrics/models/auth/change_password_result.dart';
 import 'package:anc_fabrics/models/auth/login_failure.dart';
 import 'package:anc_fabrics/models/auth/session_validation_result.dart';
+import 'package:anc_fabrics/models/auth/update_profile_result.dart';
+import 'package:anc_fabrics/models/auth/upload_avatar_result.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 
 import '../helpers/fake_auth_session_store.dart';
+import '../helpers/recording_multipart_http_client.dart';
+import '../helpers/valid_avatar_image.dart';
 
 /// Records the single request it receives and replies with a canned
 /// response (or throws, to simulate a transport failure), so tests can
@@ -121,7 +126,7 @@ _RecordingHttpClient _neverRespondingHttpClient() =>
     _RecordingHttpClient((req) => Completer<http.StreamedResponse>().future);
 
 AuthService _service(
-  _RecordingHttpClient httpClient,
+  http.Client httpClient,
   FakeAuthSessionStore store, {
   Duration requestTimeout = const Duration(seconds: 15),
 }) => AuthService(
@@ -645,6 +650,32 @@ void main() {
         AuthLoginFailureType.serviceUnavailable,
       );
     });
+
+    test(
+      'HTTP 502 (temporary Business Central upstream failure) maps to '
+      'serviceUnavailable, the same retryable failure class as HTTP 500',
+      () async {
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(502, {
+            'message': 'Internal detail that should not leak',
+          }, request: req),
+        );
+        final service = _service(http, store);
+
+        final result = await service.login(
+          country: _validCountry,
+          phone: _validPhone,
+          username: _validUsername,
+          password: _validPassword,
+        );
+
+        expect(
+          (result as AuthLoginFailure).type,
+          AuthLoginFailureType.serviceUnavailable,
+        );
+        expect(store.saveCallCount, 0);
+      },
+    );
 
     test('a malformed successful response maps to invalidResponse', () async {
       final http = _RecordingHttpClient(
@@ -1418,6 +1449,983 @@ void main() {
         source,
         isNot(contains("import '../services/session_expiry_coordinator")),
       );
+    });
+  });
+
+  group('updateProfile', () {
+    const storedToken = 'synthetic-id|synthetic-secret';
+
+    AuthSession storedSession() => const AuthSession(
+      token: storedToken,
+      userId: 7,
+      username: _validUsername,
+      phone: _validPhone,
+      country: _validCountry,
+      clientId: 'ANCNAJJAR',
+      bcCustomerNo: 'SAMPLE-0001',
+      mustChangePassword: false,
+    );
+
+    Map<String, dynamic> updatedUserJson({
+      String username = _validUsername,
+      String phone = _validPhone,
+    }) => {
+      'id': 7,
+      'username': username,
+      'phone': phone,
+      'country': _validCountry,
+      'client_id': ApiConfig.clientId,
+      'bc_customer_no': 'SAMPLE-0001',
+      'must_change_password': false,
+    };
+
+    _RecordingHttpClient updateSuccessHttpClient({
+      String username = _validUsername,
+      String phone = _validPhone,
+    }) => _RecordingHttpClient(
+      (req) async => _jsonResponse(200, {
+        'data': updatedUserJson(username: username, phone: phone),
+      }, request: req),
+    );
+
+    test(
+      'both fields empty resolves to invalidInput without an API call',
+      () async {
+        final http = updateSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.updateProfile();
+
+        expect(
+          (result as UpdateProfileFailure).type,
+          UpdateProfileFailureType.invalidInput,
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test(
+      'whitespace-only fields resolve to invalidInput without an API call',
+      () async {
+        final http = updateSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.updateProfile(
+          username: '   ',
+          phone: '  ',
+        );
+
+        expect(
+          (result as UpdateProfileFailure).type,
+          UpdateProfileFailureType.invalidInput,
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test(
+      'no stored session resolves to unauthorized without an API call',
+      () async {
+        final http = updateSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.updateProfile(username: 'new.username');
+
+        expect(
+          (result as UpdateProfileFailure).type,
+          UpdateProfileFailureType.unauthorized,
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test(
+      'sends Authorization: Bearer <storedToken> to PATCH /auth/me',
+      () async {
+        store.seed(storedSession());
+        final http = updateSuccessHttpClient();
+        final service = _service(http, store);
+
+        await service.updateProfile(username: 'new.username');
+
+        expect(http.lastRequest!.method, 'PATCH');
+        expect(
+          http.lastRequest!.headers['Authorization'],
+          'Bearer $storedToken',
+        );
+        expect(
+          http.lastRequest!.url,
+          Uri.parse('https://api.ancfab.com/api/auth/me'),
+        );
+      },
+    );
+
+    test('trims outer whitespace before sending', () async {
+      store.seed(storedSession());
+      final http = updateSuccessHttpClient();
+      final service = _service(http, store);
+
+      await service.updateProfile(username: '  new.username  ');
+
+      final sentBody =
+          jsonDecode(http.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody['username'], 'new.username');
+    });
+
+    test('sends only the supplied field', () async {
+      store.seed(storedSession());
+      final http = updateSuccessHttpClient();
+      final service = _service(http, store);
+
+      await service.updateProfile(phone: '+96890000001');
+
+      final sentBody =
+          jsonDecode(http.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'phone': '+96890000001'});
+    });
+
+    test(
+      'HTTP 200 refreshes and re-persists the session, preserving the token',
+      () async {
+        store.seed(storedSession());
+        final http = updateSuccessHttpClient(username: 'fresh.username');
+        final service = _service(http, store);
+
+        final result = await service.updateProfile(username: 'fresh.username');
+
+        final success = result as UpdateProfileSuccess;
+        expect(success.session.username, 'fresh.username');
+        expect(success.session.token, storedToken);
+        expect(store.saveCallCount, 1);
+        expect(store.savedSessions.single.username, 'fresh.username');
+      },
+    );
+
+    test('HTTP 401 resolves to unauthorized and clears the store', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.unauthorized,
+      );
+      expect(store.clearCallCount, 1);
+    });
+
+    test('HTTP 422 with errors.username maps to usernameTaken', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, {
+          'errors': {
+            'username': ['The username has already been taken.'],
+          },
+        }, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'taken.username');
+
+      final failure = result as UpdateProfileFailure;
+      expect(failure.type, UpdateProfileFailureType.usernameTaken);
+      expect(failure.usernameError, 'The username has already been taken.');
+    });
+
+    test(
+      'HTTP 422 with errors.phone (no errors.username) maps to invalidPhone',
+      () async {
+        store.seed(storedSession());
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'errors': {
+              'phone': ['The phone has already been taken.'],
+            },
+          }, request: req),
+        );
+        final service = _service(http, store);
+
+        final result = await service.updateProfile(phone: '+96890000001');
+
+        final failure = result as UpdateProfileFailure;
+        expect(failure.type, UpdateProfileFailureType.invalidPhone);
+        expect(failure.phoneError, 'The phone has already been taken.');
+      },
+    );
+
+    test('HTTP 422 with neither field maps to invalidInput', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.invalidInput,
+      );
+    });
+
+    test('HTTP 500 maps to serviceUnavailable', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.serviceUnavailable,
+      );
+    });
+
+    test('a network failure maps to network', () async {
+      store.seed(storedSession());
+      final http = _neverRespondingHttpClient();
+      final service = _service(
+        http,
+        store,
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.network,
+      );
+    });
+
+    test('a malformed response body maps to invalidResponse', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _rawResponse(200, 'not json at all', request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.invalidResponse,
+      );
+    });
+
+    test('a session-store read failure maps to secureStorage', () async {
+      store.readError = const SessionStorageException(
+        SessionStorageOperation.read,
+      );
+      final http = updateSuccessHttpClient();
+      final service = _service(http, store);
+
+      final result = await service.updateProfile(username: 'new.username');
+
+      expect(
+        (result as UpdateProfileFailure).type,
+        UpdateProfileFailureType.secureStorage,
+      );
+      expect(http.requestCount, 0);
+    });
+
+    test(
+      'a session-store save failure after HTTP 200 maps to secureStorage',
+      () async {
+        store.seed(storedSession());
+        store.saveError = const SessionStorageException(
+          SessionStorageOperation.write,
+        );
+        final http = updateSuccessHttpClient(username: 'fresh.username');
+        final service = _service(http, store);
+
+        final result = await service.updateProfile(username: 'fresh.username');
+
+        expect(
+          (result as UpdateProfileFailure).type,
+          UpdateProfileFailureType.secureStorage,
+        );
+      },
+    );
+
+    test(
+      'never sends client_id, country, or bc_customer_no in the request body',
+      () async {
+        store.seed(storedSession());
+        final http = updateSuccessHttpClient();
+        final service = _service(http, store);
+
+        await service.updateProfile(
+          username: 'new.username',
+          phone: '+96890000001',
+        );
+
+        final sentBody =
+            jsonDecode(http.lastRequest!.body) as Map<String, dynamic>;
+        expect(sentBody.containsKey('client_id'), isFalse);
+        expect(sentBody.containsKey('country'), isFalse);
+        expect(sentBody.containsKey('bc_customer_no'), isFalse);
+      },
+    );
+  });
+
+  group('changePassword', () {
+    const storedToken = 'synthetic-id|synthetic-secret';
+
+    AuthSession storedSession() => const AuthSession(
+      token: storedToken,
+      userId: 7,
+      username: _validUsername,
+      phone: _validPhone,
+      country: _validCountry,
+      clientId: 'ANCNAJJAR',
+      bcCustomerNo: 'SAMPLE-0001',
+      mustChangePassword: false,
+    );
+
+    _RecordingHttpClient passwordChangedHttpClient() => _RecordingHttpClient(
+      (req) async => _rawResponse(200, '', request: req),
+    );
+
+    Future<ChangePasswordResult> callChangePassword(
+      AuthService service, {
+      String currentPassword = 'Password123!',
+      String newPassword = 'NewPassword456!',
+      String newPasswordConfirmation = 'NewPassword456!',
+    }) => service.changePassword(
+      currentPassword: currentPassword,
+      password: newPassword,
+      passwordConfirmation: newPasswordConfirmation,
+    );
+
+    test(
+      'an empty field resolves to invalidInput without an API call',
+      () async {
+        final http = passwordChangedHttpClient();
+        final service = _service(http, store);
+
+        final result = await callChangePassword(service, currentPassword: '');
+
+        expect(
+          (result as ChangePasswordFailure).type,
+          ChangePasswordFailureType.invalidInput,
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test(
+      'no stored session resolves to unauthorized without an API call',
+      () async {
+        final http = passwordChangedHttpClient();
+        final service = _service(http, store);
+
+        final result = await callChangePassword(service);
+
+        expect(
+          (result as ChangePasswordFailure).type,
+          ChangePasswordFailureType.unauthorized,
+        );
+        expect(http.requestCount, 0);
+      },
+    );
+
+    test(
+      'sends Authorization: Bearer <storedToken> to PUT /auth/me/password',
+      () async {
+        store.seed(storedSession());
+        final http = passwordChangedHttpClient();
+        final service = _service(http, store);
+
+        await callChangePassword(service);
+
+        expect(http.lastRequest!.method, 'PUT');
+        expect(
+          http.lastRequest!.headers['Authorization'],
+          'Bearer $storedToken',
+        );
+        expect(
+          http.lastRequest!.url,
+          Uri.parse('https://api.ancfab.com/api/auth/me/password'),
+        );
+      },
+    );
+
+    test('sends the three fields exactly, without trimming', () async {
+      store.seed(storedSession());
+      final http = passwordChangedHttpClient();
+      final service = _service(http, store);
+
+      await callChangePassword(
+        service,
+        currentPassword: ' Password123! ',
+        newPassword: 'NewPassword456!',
+        newPasswordConfirmation: 'NewPassword456!',
+      );
+
+      final sentBody =
+          jsonDecode(http.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody['current_password'], ' Password123! ');
+      expect(sentBody['password'], 'NewPassword456!');
+      expect(sentBody['password_confirmation'], 'NewPassword456!');
+    });
+
+    test(
+      'HTTP 200 resolves to ChangePasswordSuccess and never touches the store',
+      () async {
+        store.seed(storedSession());
+        final http = passwordChangedHttpClient();
+        final service = _service(http, store);
+
+        final result = await callChangePassword(service);
+
+        expect(result, isA<ChangePasswordSuccess>());
+        expect(store.saveCallCount, 0);
+        expect(store.clearCallCount, 0);
+      },
+    );
+
+    test('HTTP 401 resolves to unauthorized and clears the store', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.unauthorized,
+      );
+      expect(store.clearCallCount, 1);
+    });
+
+    test(
+      'HTTP 422 with errors.current_password maps to incorrectCurrentPassword',
+      () async {
+        store.seed(storedSession());
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'errors': {
+              'current_password': ['The current password is incorrect.'],
+            },
+          }, request: req),
+        );
+        final service = _service(http, store);
+
+        final result = await callChangePassword(service);
+
+        expect(
+          (result as ChangePasswordFailure).type,
+          ChangePasswordFailureType.incorrectCurrentPassword,
+        );
+      },
+    );
+
+    test('HTTP 422 with errors.password (no errors.current_password) maps to '
+        'weakPassword', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, {
+          'errors': {
+            'password': ['The password must contain at least one symbol.'],
+          },
+        }, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      final failure = result as ChangePasswordFailure;
+      expect(failure.type, ChangePasswordFailureType.weakPassword);
+      expect(
+        failure.passwordError,
+        'The password must contain at least one symbol.',
+      );
+    });
+
+    test('HTTP 422 with errors.password_confirmation (and no errors.password) '
+        'maps to passwordConfirmationMismatch', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, {
+          'errors': {
+            'password_confirmation': [
+              'The password confirmation does not match.',
+            ],
+          },
+        }, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      final failure = result as ChangePasswordFailure;
+      expect(
+        failure.type,
+        ChangePasswordFailureType.passwordConfirmationMismatch,
+      );
+      expect(
+        failure.passwordError,
+        'The password confirmation does not match.',
+      );
+    });
+
+    test('HTTP 422 with both errors.password and errors.password_confirmation '
+        'maps to weakPassword (password takes precedence)', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, {
+          'errors': {
+            'password': ['The password must contain at least one symbol.'],
+            'password_confirmation': [
+              'The password confirmation does not match.',
+            ],
+          },
+        }, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.weakPassword,
+      );
+    });
+
+    test('HTTP 422 with neither field maps to invalidInput', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(422, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.invalidInput,
+      );
+    });
+
+    test('HTTP 500 maps to serviceUnavailable', () async {
+      store.seed(storedSession());
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.serviceUnavailable,
+      );
+    });
+
+    test('a network failure maps to network', () async {
+      store.seed(storedSession());
+      final http = _neverRespondingHttpClient();
+      final service = _service(
+        http,
+        store,
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.network,
+      );
+    });
+
+    test('a session-store read failure maps to secureStorage', () async {
+      store.readError = const SessionStorageException(
+        SessionStorageOperation.read,
+      );
+      final http = passwordChangedHttpClient();
+      final service = _service(http, store);
+
+      final result = await callChangePassword(service);
+
+      expect(
+        (result as ChangePasswordFailure).type,
+        ChangePasswordFailureType.secureStorage,
+      );
+      expect(http.requestCount, 0);
+    });
+
+    test(
+      'no thrown value or failure ever exposes the password or token',
+      () async {
+        store.seed(storedSession());
+        final http = _RecordingHttpClient(
+          (req) async => _jsonResponse(401, const {}, request: req),
+        );
+        final service = _service(http, store);
+
+        final result = await callChangePassword(service);
+
+        expect(result.toString(), isNot(contains(storedToken)));
+        expect(result.toString(), isNot(contains('Password123!')));
+        expect(result.toString(), isNot(contains('NewPassword456!')));
+      },
+    );
+  });
+
+  group('uploadAvatar', () {
+    const storedToken = 'synthetic-id|synthetic-secret';
+
+    AuthSession storedSession() => const AuthSession(
+      token: storedToken,
+      userId: 7,
+      username: _validUsername,
+      phone: _validPhone,
+      country: _validCountry,
+      clientId: 'ANCNAJJAR',
+      bcCustomerNo: 'SAMPLE-0001',
+      mustChangePassword: false,
+    );
+
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp(
+        'auth_service_avatar_test',
+      );
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    });
+
+    Future<String> writeAvatarFile({List<int>? bytes}) async {
+      final file = File('${tempDir.path}/avatar.jpg');
+      await file.writeAsBytes(bytes ?? validAvatarPngBytes);
+      return file.path;
+    }
+
+    Map<String, dynamic> uploadedUserJson({
+      String avatarUrl = 'https://cdn.example.com/avatars/7.jpg',
+    }) => {
+      'id': 7,
+      'username': _validUsername,
+      'phone': _validPhone,
+      'country': _validCountry,
+      'client_id': ApiConfig.clientId,
+      'bc_customer_no': 'SAMPLE-0001',
+      'must_change_password': false,
+      'avatar_url': avatarUrl,
+    };
+
+    RecordingMultipartHttpClient uploadSuccessHttpClient({
+      String avatarUrl = 'https://cdn.example.com/avatars/7.jpg',
+    }) => RecordingMultipartHttpClient(
+      (req) async => multipartJsonResponse(200, {
+        'data': uploadedUserJson(avatarUrl: avatarUrl),
+      }, request: req),
+    );
+
+    test(
+      'a missing source file resolves to fileNotFound without an API call',
+      () async {
+        store.seed(storedSession());
+        final http = uploadSuccessHttpClient();
+        final service = _service(http, store);
+
+        final result = await service.uploadAvatar(
+          File('${tempDir.path}/does-not-exist.jpg'),
+        );
+
+        expect(
+          (result as UploadAvatarFailure).type,
+          UploadAvatarFailureType.fileNotFound,
+        );
+        expect(http.lastRequest, isNull);
+      },
+    );
+
+    test('a file over the 5 MB limit resolves to fileTooLarge without an API '
+        'call', () async {
+      store.seed(storedSession());
+      final http = uploadSuccessHttpClient();
+      final service = _service(http, store);
+      final oversizedPath = await writeAvatarFile(
+        bytes: List<int>.filled(ApiConfig.avatarMaxUploadBytes + 1, 0),
+      );
+
+      final result = await service.uploadAvatar(File(oversizedPath));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.fileTooLarge,
+      );
+      expect(http.lastRequest, isNull);
+    });
+
+    test('a file at exactly the 5 MB limit is not rejected locally', () async {
+      store.seed(storedSession());
+      final http = uploadSuccessHttpClient();
+      final service = _service(http, store);
+      // A valid PNG signature (checked by the local format sniff) followed
+      // by padding up to exactly the byte limit — only the leading bytes
+      // matter for the signature check.
+      final paddedBytes = [
+        ...validAvatarPngBytes,
+        ...List<int>.filled(
+          ApiConfig.avatarMaxUploadBytes - validAvatarPngBytes.length,
+          0,
+        ),
+      ];
+      final exactPath = await writeAvatarFile(bytes: paddedBytes);
+
+      final result = await service.uploadAvatar(File(exactPath));
+
+      expect(result, isA<UploadAvatarSuccess>());
+    });
+
+    test('a file whose bytes do not match jpg/png/webp resolves to '
+        'unsupportedFormat without an API call', () async {
+      store.seed(storedSession());
+      final http = uploadSuccessHttpClient();
+      final service = _service(http, store);
+      final path = await writeAvatarFile(bytes: List<int>.filled(64, 0x00));
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.unsupportedFormat,
+      );
+      expect(http.lastRequest, isNull);
+    });
+
+    test(
+      'no stored session resolves to unauthorized without an API call',
+      () async {
+        final http = uploadSuccessHttpClient();
+        final service = _service(http, store);
+        final path = await writeAvatarFile();
+
+        final result = await service.uploadAvatar(File(path));
+
+        expect(
+          (result as UploadAvatarFailure).type,
+          UploadAvatarFailureType.unauthorized,
+        );
+        expect(http.lastRequest, isNull);
+      },
+    );
+
+    test(
+      'sends Authorization: Bearer <storedToken> to POST /auth/me/avatar',
+      () async {
+        store.seed(storedSession());
+        final http = uploadSuccessHttpClient();
+        final service = _service(http, store);
+        final path = await writeAvatarFile();
+
+        await service.uploadAvatar(File(path));
+
+        expect(http.lastRequest!.method, 'POST');
+        expect(
+          http.lastRequest!.headers['Authorization'],
+          'Bearer $storedToken',
+        );
+        expect(
+          http.lastRequest!.url,
+          Uri.parse('https://api.ancfab.com/api/auth/me/avatar'),
+        );
+      },
+    );
+
+    test('HTTP 200 refreshes and re-persists the session with the new '
+        'avatarUrl, preserving the token', () async {
+      store.seed(storedSession());
+      final http = uploadSuccessHttpClient(
+        avatarUrl: 'https://cdn.example.com/avatars/fresh.jpg',
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      final success = result as UploadAvatarSuccess;
+      expect(
+        success.session.avatarUrl,
+        'https://cdn.example.com/avatars/fresh.jpg',
+      );
+      expect(success.session.token, storedToken);
+      expect(store.saveCallCount, 1);
+      expect(
+        store.savedSessions.single.avatarUrl,
+        'https://cdn.example.com/avatars/fresh.jpg',
+      );
+    });
+
+    test('HTTP 401 resolves to unauthorized and clears the store', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.unauthorized,
+      );
+      expect(store.clearCallCount, 1);
+    });
+
+    test('HTTP 422 with errors.avatar maps to rejectedByServer with that '
+        'message', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(422, {
+          'errors': {
+            'avatar': [
+              'The avatar must be a file of type: jpg, jpeg, png, webp.',
+            ],
+          },
+        }, request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      final failure = result as UploadAvatarFailure;
+      expect(failure.type, UploadAvatarFailureType.rejectedByServer);
+      expect(
+        failure.message,
+        'The avatar must be a file of type: jpg, jpeg, png, webp.',
+      );
+    });
+
+    test('HTTP 422 with no errors.avatar still maps to rejectedByServer, with '
+        'no message', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(422, const {}, request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      final failure = result as UploadAvatarFailure;
+      expect(failure.type, UploadAvatarFailureType.rejectedByServer);
+      expect(failure.message, isNull);
+    });
+
+    test('HTTP 500 maps to serviceUnavailable', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(500, const {}, request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.serviceUnavailable,
+      );
+    });
+
+    test('a network failure maps to network', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => throw const SocketException('No route to host'),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.network,
+      );
+    });
+
+    test('a malformed response body maps to invalidResponse', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async =>
+            multipartRawResponse(200, 'not json at all', request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.invalidResponse,
+      );
+    });
+
+    test('a session-store read failure maps to secureStorage', () async {
+      store.readError = const SessionStorageException(
+        SessionStorageOperation.read,
+      );
+      final http = uploadSuccessHttpClient();
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(
+        (result as UploadAvatarFailure).type,
+        UploadAvatarFailureType.secureStorage,
+      );
+      expect(http.lastRequest, isNull);
+    });
+
+    test(
+      'a session-store save failure after HTTP 200 maps to secureStorage',
+      () async {
+        store.seed(storedSession());
+        store.saveError = const SessionStorageException(
+          SessionStorageOperation.write,
+        );
+        final http = uploadSuccessHttpClient();
+        final service = _service(http, store);
+        final path = await writeAvatarFile();
+
+        final result = await service.uploadAvatar(File(path));
+
+        expect(
+          (result as UploadAvatarFailure).type,
+          UploadAvatarFailureType.secureStorage,
+        );
+      },
+    );
+
+    test('no thrown value or failure ever exposes the token', () async {
+      store.seed(storedSession());
+      final http = RecordingMultipartHttpClient(
+        (req) async => multipartJsonResponse(401, const {}, request: req),
+      );
+      final service = _service(http, store);
+      final path = await writeAvatarFile();
+
+      final result = await service.uploadAvatar(File(path));
+
+      expect(result.toString(), isNot(contains(storedToken)));
     });
   });
 }

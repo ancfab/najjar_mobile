@@ -40,9 +40,9 @@ class _FakeAvatarController extends CurrentUserAvatarController {
   int clearCallCount = 0;
 
   @override
-  Future<void> clear() async {
+  void clear() {
     clearCallCount++;
-    await super.clear();
+    super.clear();
   }
 }
 

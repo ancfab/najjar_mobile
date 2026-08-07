@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/sales_order_line.dart';
+import '../navigation/main_bottom_nav.dart';
 import '../services/business_central_error_mapper.dart';
+import '../services/demo_sales_order_lines_data_source.dart';
 import '../services/sales_order_lines_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
+import '../widgets/custom_bottom_nav.dart';
 import '../widgets/sales_order_line_card.dart';
 import 'order_detail_screen.dart';
 
@@ -44,9 +48,14 @@ class OrdersScreen extends StatefulWidget {
 
   final OrderStatusFilter filter;
 
-  /// Sales-order-lines data seam. Defaults (lazily, in State) to
+  /// Sales-order-lines data seam. Defaults (lazily, in State) via
+  /// [resolveDefaultSalesOrderLinesDataSource] to
   /// [LiveSalesOrderLinesDataSource] — the live Business Central
-  /// sales-orders endpoint; overridable so tests can inject a fake.
+  /// sales-orders endpoint — unless [DemoConfig.useDemoOrders] (TEMPORARY
+  /// CLIENT DEMO MODE) is `true`, in which case
+  /// [DemoSalesOrderLinesDataSource] is used instead; overridable so tests
+  /// (and the demo flag) can inject a fake instead of exercising real
+  /// HTTP/secure storage.
   final SalesOrderLinesDataSource? salesOrderLinesSource;
 
   @override
@@ -58,9 +67,30 @@ class OrdersScreen extends StatefulWidget {
 /// per the confirmed pagination rules.
 const int _kOrdersPerPage = 25;
 
+/// Resolves the [SalesOrderLinesDataSource] `OrdersScreen` falls back to
+/// when no source is injected by a caller (every existing test already
+/// injects one, so this only ever runs in the real app). Defaults [useDemo]
+/// to [DemoConfig.useDemoOrders] but accepts it as a parameter so both
+/// branches stay unit-testable regardless of the flag's current compiled-in
+/// value.
+///
+/// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
+/// returns [DemoSalesOrderLinesDataSource] instead of
+/// [LiveSalesOrderLinesDataSource] — the live service, data source, error
+/// mapping, pagination, session-expiry handling, and retry behavior
+/// underneath are untouched and fully restored once the flag is set back to
+/// `false`.
+SalesOrderLinesDataSource resolveDefaultSalesOrderLinesDataSource({
+  bool useDemo = DemoConfig.useDemoOrders,
+}) {
+  return useDemo
+      ? const DemoSalesOrderLinesDataSource()
+      : LiveSalesOrderLinesDataSource();
+}
+
 class _OrdersScreenState extends State<OrdersScreen> {
   late final SalesOrderLinesDataSource _salesOrderLinesSource =
-      widget.salesOrderLinesSource ?? LiveSalesOrderLinesDataSource();
+      widget.salesOrderLinesSource ?? resolveDefaultSalesOrderLinesDataSource();
 
   PaginatedResponse<BusinessCentralSalesOrderLine>? _result;
 
@@ -197,6 +227,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _loadPage(_result!.currentPage + 1);
   }
 
+  // Handles the shared bottom tab bar's taps — see main_bottom_nav.dart.
+  // This screen is itself the Orders tab's destination, so Orders is kept
+  // as the selected tab.
+  void _handleBottomNavTap(int tabIndex) {
+    handleMainBottomNavTap(context, tabIndex, ownTabIndex: kMainNavIndexOrders);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -211,28 +248,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: RefreshIndicator(
-          onRefresh: refreshSalesOrderLines,
-          child: ResponsiveMaxWidth(
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _buildPageIntro()),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  sliver: _buildOrdersSliver(),
-                ),
-                if (_shouldShowResultsChrome())
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    sliver: SliverToBoxAdapter(child: _buildPaginationFooter()),
+        child: Column(
+          children: [
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: refreshSalesOrderLines,
+                child: ResponsiveMaxWidth(
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        sliver: SliverToBoxAdapter(child: _buildPageIntro()),
+                      ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        sliver: _buildOrdersSliver(),
+                      ),
+                      if (_shouldShowResultsChrome())
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          sliver: SliverToBoxAdapter(
+                            child: _buildPaginationFooter(),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
-          ),
+            CustomBottomNav(
+              currentIndex: kMainNavIndexOrders,
+              onTap: _handleBottomNavTap,
+            ),
+          ],
         ),
       ),
     );

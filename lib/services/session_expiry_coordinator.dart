@@ -64,7 +64,7 @@ class SessionExpiryCoordinator {
       // Best-effort: the token is already confirmed dead server-side, so a
       // local clear failure must not block navigating away from Home.
     }
-    await _avatarController.clear();
+    _avatarController.clear();
 
     _navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(

@@ -1,46 +1,150 @@
 // Widget checks for the Edit Profile screen: header/back button, avatar +
 // camera overlay, client info, prefilled form fields (including multiline
 // Business Address), Save Changes submission against a fake in-memory
-// service, confirmation that Logout is hidden (per the approved Figma, with
-// the implementation preserved behind a disabled flag for later
-// restoration), bottom navigation (Profile selected), responsive/overflow
+// service, Logout, bottom navigation (Profile selected), responsive/overflow
 // safety, and real back navigation.
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:anc_fabrics/config/api_config.dart';
 import 'package:anc_fabrics/data/mock_profile_data.dart';
+import 'package:anc_fabrics/models/auth/auth_session.dart';
+import 'package:anc_fabrics/screens/change_password_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/anc_api_client.dart';
+import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/avatar_image_processor.dart';
 import 'package:anc_fabrics/services/avatar_permission_service.dart';
 import 'package:anc_fabrics/services/avatar_picker_service.dart';
-import 'package:anc_fabrics/services/avatar_upload_service.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/services/profile_service.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
+import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_avatar_cropper_service.dart';
 import 'helpers/fake_avatar_image_processor.dart';
 import 'helpers/fake_avatar_permission_service.dart';
 import 'helpers/fake_avatar_picker_service.dart';
-import 'helpers/fake_avatar_upload_service.dart';
 import 'helpers/fake_logout_service.dart';
 import 'helpers/fake_profile_service.dart';
+import 'helpers/recording_multipart_http_client.dart';
+import 'helpers/valid_avatar_image.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
+const _syntheticToken = 'synthetic-id|synthetic-secret';
+
+AuthSession _defaultIdentitySession() => const AuthSession(
+  token: _syntheticToken,
+  userId: 7,
+  username: 'sample.user',
+  phone: '+96890000000',
+  country: 'OM',
+  clientId: 'ANCNAJJAR',
+  bcCustomerNo: 'SAMPLE-0001',
+  mustChangePassword: false,
+);
+
+/// An http.Client that fails the test if it is ever called — the default
+/// for tests that don't exercise the real identity/avatar network flow, so
+/// an accidental unwanted call is caught immediately rather than silently
+/// hanging or returning an unrelated canned response.
+class _ShouldNeverBeCalledHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    throw StateError(
+      'AuthService must not call the ANC API in this test — no '
+      'identity/avatar flow is under test here.',
+    );
+  }
+
+  @override
+  void close() {}
+}
+
+/// Builds a real [AuthService] over [httpClient] (defaulting to one that
+/// fails the test if ever called) and a [FakeAuthSessionStore] seeded with
+/// [session] (defaulting to [_defaultIdentitySession]) — the same
+/// real-service-over-fake-transport pattern used throughout
+/// auth_service_test.dart, so EditProfileScreen's real
+/// updateProfile/uploadAvatar/currentSession calls are exercised for real,
+/// never re-implemented as a parallel fake.
+AuthService _authServiceFor({http.Client? httpClient, AuthSession? session}) {
+  final store = FakeAuthSessionStore()
+    ..seed(session ?? _defaultIdentitySession());
+  return AuthService(
+    apiClient: AncApiClient(
+      httpClient: httpClient ?? _ShouldNeverBeCalledHttpClient(),
+    ),
+    sessionStore: store,
+  );
+}
+
+/// Records the single plain (non-multipart) request it receives and
+/// replies with a canned response — for `PATCH /auth/me` calls
+/// (`AuthService.updateProfile`), which never use multipart. Mirrors the
+/// fixture in auth_service_test.dart.
+class _RecordingHttpClient extends http.BaseClient {
+  _RecordingHttpClient(this._respond);
+
+  final Future<http.StreamedResponse> Function(http.Request request) _respond;
+
+  http.Request? lastRequest;
+  int requestCount = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final req = request as http.Request;
+    lastRequest = req;
+    requestCount++;
+    return _respond(req);
+  }
+
+  @override
+  void close() {}
+}
+
+http.StreamedResponse _jsonResponse(
+  int statusCode,
+  Map<String, dynamic> body, {
+  required http.Request request,
+}) {
+  return http.StreamedResponse(
+    Stream.value(utf8.encode(jsonEncode(body))),
+    statusCode,
+    request: request,
+    headers: {'content-type': 'application/json'},
+  );
+}
+
+/// Default `PATCH /auth/me` success-response user body, matching
+/// [_defaultIdentitySession]'s fields — [username]/[phone] overridable to
+/// simulate the field(s) that were actually changed.
+Map<String, dynamic> updateMeUserJson({
+  String username = 'sample.user',
+  String phone = '+96890000000',
+}) => {
+  'id': 7,
+  'username': username,
+  'phone': phone,
+  'country': 'OM',
+  'client_id': ApiConfig.clientId,
+  'bc_customer_no': 'SAMPLE-0001',
+  'must_change_password': false,
+};
+
 void main() {
-  // CurrentUserAvatarController.setAvatarPath/restorePersisted/clear read
-  // and write SharedPreferences; without a mock configured, the platform
-  // channel call has no handler in a widget test and never resolves,
-  // hanging any test that reaches it.
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
@@ -51,13 +155,12 @@ void main() {
     double height = 800,
     FakeProfileService? service,
     FakeLogoutService? logoutService,
+    AuthService? authService,
     FakeAvatarPickerService? avatarPickerService,
     FakeAvatarPermissionService? avatarPermissionService,
     FakeAvatarCropperService? avatarCropperService,
     FakeAvatarImageProcessor? avatarImageProcessor,
-    FakeAvatarUploadService? avatarUploadService,
     CurrentUserAvatarController? avatarController,
-    bool showLogoutAction = false,
   }) async {
     tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1.0;
@@ -76,6 +179,7 @@ void main() {
         home: EditProfileScreen(
           service: service ?? FakeProfileService(),
           logoutService: logoutService ?? FakeLogoutService(),
+          authService: authService ?? _authServiceFor(),
           avatarPickerService: avatarPickerService ?? FakeAvatarPickerService(),
           avatarPermissionService:
               avatarPermissionService ?? FakeAvatarPermissionService(),
@@ -83,13 +187,16 @@ void main() {
               avatarCropperService ?? FakeAvatarCropperService(),
           avatarImageProcessor:
               avatarImageProcessor ?? FakeAvatarImageProcessor(),
-          avatarUploadService: avatarUploadService ?? FakeAvatarUploadService(),
           avatarController: avatarController ?? CurrentUserAvatarController(),
-          showLogoutAction: showLogoutAction,
         ),
       ),
     );
+    // The screen's own async identity prefill (AuthService.currentSession,
+    // a local secure-storage read with no network call) needs one extra
+    // pump beyond pumpAndSettle's own frame-scheduling wait, since it's
+    // driven by a plain awaited Future, not an animation.
     await tester.pumpAndSettle();
+    await tester.pump();
   }
 
   // Pushes EditProfileScreen on top of a stand-in "Home" screen, the way it
@@ -100,8 +207,8 @@ void main() {
     WidgetTester tester, {
     FakeProfileService? service,
     FakeLogoutService? logoutService,
+    AuthService? authService,
     CurrentUserAvatarController? avatarController,
-    bool showLogoutAction = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -121,9 +228,9 @@ void main() {
                     builder: (_) => EditProfileScreen(
                       service: service ?? FakeProfileService(),
                       logoutService: logoutService ?? FakeLogoutService(),
+                      authService: authService ?? _authServiceFor(),
                       avatarController:
                           avatarController ?? CurrentUserAvatarController(),
-                      showLogoutAction: showLogoutAction,
                     ),
                   ),
                 ),
@@ -138,6 +245,7 @@ void main() {
 
     await tester.tap(find.text('Open Edit Profile'));
     await tester.pumpAndSettle();
+    await tester.pump();
     expect(find.byType(EditProfileScreen), findsOneWidget);
   }
 
@@ -192,6 +300,95 @@ void main() {
         find.byKey(const ValueKey('edit-profile-avatar')),
       );
       return container.child is Image;
+    }
+
+    // The cropper echoes the picker's resultPath through unchanged by
+    // default, and AuthService.uploadAvatar checks the file actually
+    // exists/reads its bytes before ever making a network call — so any
+    // test that reaches "Use Photo" needs a real file on disk (the default
+    // /tmp/fake_picked_avatar.jpg placeholder path is not enough).
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp(
+        'edit_profile_avatar_test',
+      );
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    });
+
+    Future<String> writeRealAvatarFile({List<int>? bytes}) async {
+      final file = File('${tempDir.path}/cropped_avatar.jpg');
+      await file.writeAsBytes(bytes ?? validAvatarPngBytes);
+      return file.path;
+    }
+
+    // Convenience wrapper: real dart:io file writes awaited directly in a
+    // testWidgets body have been observed to hang (see
+    // valid_avatar_image.dart's doc comment) — runAsync is the escape
+    // hatch onto the real event loop for exactly this.
+    Future<String> writeRealAvatarFileAsync(
+      WidgetTester tester, {
+      List<int>? bytes,
+    }) async {
+      late String path;
+      await tester.runAsync(() async {
+        path = await writeRealAvatarFile(bytes: bytes);
+      });
+      return path;
+    }
+
+    Map<String, dynamic> uploadedUserJson({
+      // A loopback address with nothing listening refuses the connection
+      // almost instantly, without a real DNS lookup or network round trip
+      // — unlike a real internet host, which occasionally takes long
+      // enough to resolve the NetworkImage's async failure after this
+      // test has already ended, misattributing the error to whichever
+      // test happens to be running next.
+      String avatarUrl = 'http://127.0.0.1:9/avatars/7.jpg',
+    }) => {
+      'id': 7,
+      'username': 'sample.user',
+      'phone': '+96890000000',
+      'country': 'OM',
+      'client_id': ApiConfig.clientId,
+      'bc_customer_no': 'SAMPLE-0001',
+      'must_change_password': false,
+      'avatar_url': avatarUrl,
+    };
+
+    // Runs the whole camera-tap-through-"Use Photo" flow inside one
+    // tester.runAsync call. AuthService.uploadAvatar reads the confirmed
+    // avatar from a real file on disk — genuine dart:io async work the
+    // fake-async zone testWidgets normally runs in can never observe
+    // completing (see valid_avatar_image.dart's doc comment) — and since
+    // the whole pick→crop→preview→confirm chain is one continuous async
+    // function starting at the camera-button tap (each `await`'s
+    // continuation resumes in the zone captured when that chain started,
+    // not whatever zone later re-enters it), the *entire* chain has to
+    // run inside the same runAsync call, not just the final tap, for that
+    // real read to actually complete. pumpAndSettle is safe for the first
+    // two (finite, fake/instant) modal-entrance animations; it is
+    // deliberately never used after the final tap — the camera button's
+    // indeterminate loading spinner (shown while the upload is in flight)
+    // never stops scheduling frames on its own, so pumpAndSettle would
+    // never observe "settled" regardless of whether the upload itself has
+    // finished, the same reasoning already documented elsewhere in this
+    // file for the logout spinner. Bounded pumps instead.
+    Future<void> confirmAvatarUpload(WidgetTester tester) async {
+      await tester.runAsync(() async {
+        await tester.tap(cameraButton);
+        await tester.pumpAndSettle();
+        await tester.tap(sourceGalleryOption);
+        await tester.pumpAndSettle();
+        await tester.tap(previewUsePhoto);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+      });
     }
 
     testWidgets('Shows the avatar and camera/edit overlay', (tester) async {
@@ -513,28 +710,42 @@ void main() {
       testWidgets('Cancelling the preview preserves the previous avatar', (
         tester,
       ) async {
-        final uploadService = FakeAvatarUploadService();
-        await pumpEditProfile(tester, avatarUploadService: uploadService);
+        final httpClient = RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(200, {
+            'data': uploadedUserJson(),
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: httpClient),
+        );
 
         await pickThroughToPreview(tester);
         await tester.tap(previewCancel);
         await tester.pumpAndSettle();
 
-        expect(uploadService.submittedPaths, isEmpty);
+        expect(httpClient.lastRequest, isNull);
         expect(avatarShowsImage(tester), isFalse);
       });
 
       testWidgets('Choose Again returns to source selection instead of '
           'confirming the current crop', (tester) async {
-        final uploadService = FakeAvatarUploadService();
-        await pumpEditProfile(tester, avatarUploadService: uploadService);
+        final httpClient = RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(200, {
+            'data': uploadedUserJson(),
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: httpClient),
+        );
 
         await pickThroughToPreview(tester);
         await tester.tap(previewChooseAgain);
         await tester.pumpAndSettle();
 
         expect(find.text('Take Photo'), findsOneWidget);
-        expect(uploadService.submittedPaths, isEmpty);
+        expect(httpClient.lastRequest, isNull);
 
         await tester.tap(sourceCancelOption);
         await tester.pumpAndSettle();
@@ -543,15 +754,27 @@ void main() {
       });
 
       testWidgets('Confirming the preview (Use Photo) invokes the avatar '
-          'service exactly once', (tester) async {
-        final uploadService = FakeAvatarUploadService();
-        await pumpEditProfile(tester, avatarUploadService: uploadService);
+          'service exactly once, sending the file under the "avatar" field', (
+        tester,
+      ) async {
+        final path = await writeRealAvatarFileAsync(tester);
+        final picker = FakeAvatarPickerService(resultPath: path);
+        final httpClient = RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(200, {
+            'data': uploadedUserJson(),
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          avatarPickerService: picker,
+          authService: _authServiceFor(httpClient: httpClient),
+        );
 
-        await pickThroughToPreview(tester);
-        await tester.tap(previewUsePhoto);
-        await tester.pumpAndSettle();
+        await confirmAvatarUpload(tester);
 
-        expect(uploadService.submittedPaths, hasLength(1));
+        expect(httpClient.requestCount, 1);
+        expect(httpClient.lastRequest!.method, 'POST');
+        expect(httpClient.lastRequest!.files.single.field, 'avatar');
       });
     });
 
@@ -647,30 +870,43 @@ void main() {
         'Shows a loading indicator while the confirmed photo is being '
         'applied, then clears it',
         (tester) async {
-          final pending = Completer<AvatarUpdateResult>();
-          final uploadService = FakeAvatarUploadService(pending: pending);
-          await pumpEditProfile(tester, avatarUploadService: uploadService);
-
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          // A duration (not a bare pump()) so the dialog's dismiss
-          // transition finishes and the upload service's pending future is
-          // actually reached before asserting on the loading state.
-          await tester.pump(const Duration(milliseconds: 300));
-
-          expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-          pending.complete(
-            const AvatarUpdateResult(
-              AvatarUpdateOutcome.success,
-              localPath: '/tmp/stable/current_avatar.jpg',
-              isLocalOnly: true,
-            ),
+          final path = await writeRealAvatarFileAsync(tester);
+          final picker = FakeAvatarPickerService(resultPath: path);
+          final pending = Completer<http.StreamedResponse>();
+          final httpClient = RecordingMultipartHttpClient(
+            (req) => pending.future,
           );
-          await tester.pumpAndSettle();
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
+
+          // The whole chain — including the real file read triggered by
+          // tapping "Use Photo" — must run inside one runAsync call, or
+          // the continuation resumes in the wrong (fake-async) zone and
+          // never reaches the pending future.
+          await tester.runAsync(() async {
+            await tester.tap(cameraButton);
+            await tester.pumpAndSettle();
+            await tester.tap(sourceGalleryOption);
+            await tester.pumpAndSettle();
+            await tester.tap(previewUsePhoto);
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            await tester.pump(const Duration(milliseconds: 300));
+
+            expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+            pending.complete(
+              multipartJsonResponse(200, {
+                'data': uploadedUserJson(),
+              }, request: httpClient.lastRequest!),
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.pump(const Duration(milliseconds: 300));
+          });
 
           expect(find.byType(CircularProgressIndicator), findsNothing);
         },
@@ -679,54 +915,75 @@ void main() {
 
     group('Success', () {
       testWidgets(
-        'A successful update replaces the Profile avatar with the stored '
-        'image',
+        'A successful update replaces the Profile avatar with the returned '
+        'avatar_url',
         (tester) async {
-          await pumpEditProfile(tester);
+          final path = await writeRealAvatarFileAsync(tester);
+          final picker = FakeAvatarPickerService(resultPath: path);
+          final avatarController = CurrentUserAvatarController();
+          final httpClient = RecordingMultipartHttpClient(
+            (req) async => multipartJsonResponse(200, {
+              'data': uploadedUserJson(),
+            }, request: req),
+          );
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            avatarController: avatarController,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
 
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          await tester.pumpAndSettle();
+          await confirmAvatarUpload(tester);
 
           expect(avatarShowsImage(tester), isTrue);
-        },
-      );
-
-      testWidgets(
-        'Shows local-only success feedback, never claiming a server upload',
-        (tester) async {
-          await pumpEditProfile(tester);
-
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          await tester.pumpAndSettle();
-
           expect(
-            find.text('Profile photo updated on this device.'),
-            findsOneWidget,
+            avatarController.avatarUrl,
+            'http://127.0.0.1:9/avatars/7.jpg',
           );
         },
       );
+
+      testWidgets('Shows success feedback only after the server responds', (
+        tester,
+      ) async {
+        final path = await writeRealAvatarFileAsync(tester);
+        final picker = FakeAvatarPickerService(resultPath: path);
+        final httpClient = RecordingMultipartHttpClient(
+          (req) async => multipartJsonResponse(200, {
+            'data': uploadedUserJson(),
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          avatarPickerService: picker,
+          authService: _authServiceFor(httpClient: httpClient),
+        );
+
+        await confirmAvatarUpload(tester);
+
+        expect(find.text('Profile photo updated.'), findsOneWidget);
+      });
 
       testWidgets(
         'A successful avatar update does not mark the text form as dirty '
         'or touch the Save Changes button',
         (tester) async {
+          final path = await writeRealAvatarFileAsync(tester);
+          final picker = FakeAvatarPickerService(resultPath: path);
           final profileService = FakeProfileService();
-          await pumpEditProfile(tester, service: profileService);
+          final httpClient = RecordingMultipartHttpClient(
+            (req) async => multipartJsonResponse(200, {
+              'data': uploadedUserJson(),
+            }, request: req),
+          );
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            service: profileService,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
 
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          await tester.pumpAndSettle();
+          await confirmAvatarUpload(tester);
 
           expect(
             fieldText(tester, const ValueKey('edit-profile-full-name-field')),
@@ -750,23 +1007,25 @@ void main() {
 
     group('Upload/service failure', () {
       testWidgets(
-        'Shows feedback and preserves the previous avatar when the avatar '
-        'service fails',
+        'Shows feedback and preserves the previous avatar when the server '
+        'rejects the upload',
         (tester) async {
-          final uploadService = FakeAvatarUploadService(
-            result: const AvatarUpdateResult(
-              AvatarUpdateOutcome.failure,
-              message: "We couldn't update your photo. Please try again.",
-            ),
+          final path = await writeRealAvatarFileAsync(tester);
+          final picker = FakeAvatarPickerService(resultPath: path);
+          final httpClient = RecordingMultipartHttpClient(
+            (req) async => multipartJsonResponse(422, {
+              'errors': {
+                'avatar': ["We couldn't update your photo. Please try again."],
+              },
+            }, request: req),
           );
-          await pumpEditProfile(tester, avatarUploadService: uploadService);
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
 
-          await tester.tap(cameraButton);
-          await tester.pumpAndSettle();
-          await tester.tap(sourceGalleryOption);
-          await tester.pumpAndSettle();
-          await tester.tap(previewUsePhoto);
-          await tester.pumpAndSettle();
+          await confirmAvatarUpload(tester);
 
           expect(
             find.text("We couldn't update your photo. Please try again."),
@@ -777,27 +1036,69 @@ void main() {
         },
       );
 
-      testWidgets('Shows a generic error message, not a crash, when the avatar '
-          'service throws', (tester) async {
-        final uploadService = FakeAvatarUploadService(
-          result: Exception('boom'),
-        );
-        await pumpEditProfile(tester, avatarUploadService: uploadService);
+      testWidgets(
+        'Shows a generic error message, not a crash, when the upload throws '
+        'a transport failure',
+        (tester) async {
+          final path = await writeRealAvatarFileAsync(tester);
+          final picker = FakeAvatarPickerService(resultPath: path);
+          final httpClient = RecordingMultipartHttpClient(
+            (req) async => throw const SocketException('No route to host'),
+          );
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
 
-        await tester.tap(cameraButton);
-        await tester.pumpAndSettle();
-        await tester.tap(sourceGalleryOption);
-        await tester.pumpAndSettle();
-        await tester.tap(previewUsePhoto);
-        await tester.pumpAndSettle();
+          await confirmAvatarUpload(tester);
 
-        expect(
-          find.text("We couldn't update your photo. Please try again."),
-          findsOneWidget,
-        );
-        expect(avatarShowsImage(tester), isFalse);
-        expect(tester.takeException(), isNull);
-      });
+          expect(
+            find.text("We couldn't update your photo. Please try again."),
+            findsOneWidget,
+          );
+          expect(avatarShowsImage(tester), isFalse);
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      testWidgets(
+        'A file exceeding 5 MB is rejected locally, without an API call',
+        (tester) async {
+          final oversizedPath = await writeRealAvatarFileAsync(
+            tester,
+            bytes: <int>[
+              ...validAvatarPngBytes,
+              ...List<int>.filled(
+                ApiConfig.avatarMaxUploadBytes + 1 - validAvatarPngBytes.length,
+                0,
+              ),
+            ],
+          );
+          final picker = FakeAvatarPickerService(resultPath: oversizedPath);
+          final httpClient = RecordingMultipartHttpClient(
+            (req) async => multipartJsonResponse(200, {
+              'data': uploadedUserJson(),
+            }, request: req),
+          );
+          await pumpEditProfile(
+            tester,
+            avatarPickerService: picker,
+            authService: _authServiceFor(httpClient: httpClient),
+          );
+
+          await confirmAvatarUpload(tester);
+
+          expect(
+            find.text(
+              'That photo is too large. Please choose a smaller image.',
+            ),
+            findsOneWidget,
+          );
+          expect(httpClient.lastRequest, isNull);
+          expect(avatarShowsImage(tester), isFalse);
+        },
+      );
     });
   });
 
@@ -811,41 +1112,37 @@ void main() {
   });
 
   group('Form fields', () {
-    testWidgets('All five fields render with the expected initial values', (
-      tester,
-    ) async {
-      await pumpEditProfile(tester);
+    testWidgets(
+      'The four mock-backed fields render with the expected initial values',
+      (tester) async {
+        await pumpEditProfile(tester);
 
-      expect(find.text('Full Name'), findsOneWidget);
-      expect(find.text('Email Address'), findsOneWidget);
-      expect(find.text('Phone Number'), findsOneWidget);
-      expect(find.text('Company'), findsOneWidget);
-      expect(find.text('Business Address'), findsOneWidget);
+        expect(find.text('Full Name'), findsOneWidget);
+        expect(find.text('Email Address'), findsOneWidget);
+        expect(find.text('Company'), findsOneWidget);
+        expect(find.text('Business Address'), findsOneWidget);
 
-      expect(
-        fieldText(tester, const ValueKey('edit-profile-full-name-field')),
-        kMockUserProfile.fullName,
-      );
-      expect(
-        fieldText(tester, const ValueKey('edit-profile-email-field')),
-        kMockUserProfile.email,
-      );
-      expect(
-        fieldText(tester, const ValueKey('edit-profile-phone-field')),
-        kMockUserProfile.phone,
-      );
-      expect(
-        fieldText(tester, const ValueKey('edit-profile-company-field')),
-        kMockUserProfile.company,
-      );
-      expect(
-        fieldText(
-          tester,
-          const ValueKey('edit-profile-business-address-field'),
-        ),
-        kMockUserProfile.businessAddress,
-      );
-    });
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-full-name-field')),
+          kMockUserProfile.fullName,
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-email-field')),
+          kMockUserProfile.email,
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-company-field')),
+          kMockUserProfile.company,
+        );
+        expect(
+          fieldText(
+            tester,
+            const ValueKey('edit-profile-business-address-field'),
+          ),
+          kMockUserProfile.businessAddress,
+        );
+      },
+    );
 
     testWidgets('Business Address field supports multiline content', (
       tester,
@@ -859,6 +1156,343 @@ void main() {
       await tester.pump();
 
       expect(fieldText(tester, key), 'Line one\nLine two\nLine three');
+    });
+  });
+
+  group('Identity fields (username/phone)', () {
+    testWidgets(
+      'Username and phone are prepopulated from the authenticated session, '
+      'with the dial code shown as a read-only prefix',
+      (tester) async {
+        await pumpEditProfile(tester);
+
+        expect(find.text('Username'), findsOneWidget);
+        expect(find.text('Phone Number'), findsOneWidget);
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-username-field')),
+          'sample.user',
+        );
+        // Local digits only — the +968 dial code (Oman, the default
+        // session's country) is shown as a fixed prefix, not editable
+        // text, and must never be duplicated into the field's own value.
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-phone-field')),
+          '90000000',
+        );
+        expect(find.textContaining('+968'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'A different session country renders that country\'s dial code and '
+      'strips it from the displayed digits',
+      (tester) async {
+        const session = AuthSession(
+          token: _syntheticToken,
+          userId: 7,
+          username: 'other.user',
+          phone: '+96170123456',
+          country: 'LB',
+          clientId: 'ANCNAJJAR',
+          bcCustomerNo: 'SAMPLE-0001',
+          mustChangePassword: false,
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(session: session),
+        );
+
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-phone-field')),
+          '70123456',
+        );
+        expect(find.textContaining('+961'), findsOneWidget);
+      },
+    );
+
+    testWidgets('No request occurs when neither username nor phone changed', (
+      tester,
+    ) async {
+      final recorder = _RecordingHttpClient(
+        (req) async =>
+            _jsonResponse(200, {'data': updateMeUserJson()}, request: req),
+      );
+      await pumpEditProfile(
+        tester,
+        authService: _authServiceFor(httpClient: recorder),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('edit-profile-save-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('edit-profile-save-button')));
+      await tester.pumpAndSettle();
+
+      expect(recorder.lastRequest, isNull);
+    });
+
+    testWidgets(
+      'A username-only change sends only username to PATCH /auth/me',
+      (tester) async {
+        final recorder = _RecordingHttpClient(
+          (req) async => _jsonResponse(200, {
+            'data': updateMeUserJson(username: 'new.username'),
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: recorder),
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-username-field')),
+          'new.username',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(recorder.lastRequest!.method, 'PATCH');
+        final sentBody =
+            jsonDecode(recorder.lastRequest!.body) as Map<String, dynamic>;
+        expect(sentBody, {'username': 'new.username'});
+        expect(find.text('Profile updated.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('A phone-only change sends only phone (composed with the '
+        'fixed dial code) to PATCH /auth/me', (tester) async {
+      final recorder = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, {
+          'data': updateMeUserJson(phone: '+96890009999'),
+        }, request: req),
+      );
+      await pumpEditProfile(
+        tester,
+        authService: _authServiceFor(httpClient: recorder),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-profile-phone-field')),
+        '90009999',
+      );
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('edit-profile-save-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('edit-profile-save-button')));
+      await tester.pumpAndSettle();
+
+      final sentBody =
+          jsonDecode(recorder.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'phone': '+96890009999'});
+    });
+
+    testWidgets('Both changed fields are sent together', (tester) async {
+      final recorder = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, {
+          'data': updateMeUserJson(
+            username: 'new.username',
+            phone: '+96890009999',
+          ),
+        }, request: req),
+      );
+      await pumpEditProfile(
+        tester,
+        authService: _authServiceFor(httpClient: recorder),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-profile-username-field')),
+        'new.username',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-profile-phone-field')),
+        '90009999',
+      );
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('edit-profile-save-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('edit-profile-save-button')));
+      await tester.pumpAndSettle();
+
+      final sentBody =
+          jsonDecode(recorder.lastRequest!.body) as Map<String, dynamic>;
+      expect(sentBody, {'username': 'new.username', 'phone': '+96890009999'});
+    });
+
+    testWidgets(
+      'Save is disabled while submitting and a duplicate tap sends only one '
+      'request',
+      (tester) async {
+        final pending = Completer<http.StreamedResponse>();
+        final recorder = _RecordingHttpClient((req) => pending.future);
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: recorder),
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-username-field')),
+          'new.username',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pump();
+
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pump();
+        expect(recorder.requestCount, 1);
+
+        pending.complete(
+          _jsonResponse(200, {
+            'data': updateMeUserJson(username: 'new.username'),
+          }, request: recorder.lastRequest!),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'A taken-username failure shows an inline field error and preserves '
+      'the typed value',
+      (tester) async {
+        final recorder = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'errors': {
+              'username': ['The username has already been taken.'],
+            },
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: recorder),
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-username-field')),
+          'taken.username',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('The username has already been taken.'),
+          findsOneWidget,
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-username-field')),
+          'taken.username',
+        );
+      },
+    );
+
+    testWidgets(
+      'An invalid-phone failure shows an inline field error and preserves '
+      'the typed value',
+      (tester) async {
+        final recorder = _RecordingHttpClient(
+          (req) async => _jsonResponse(422, {
+            'errors': {
+              'phone': ['The phone has already been taken.'],
+            },
+          }, request: req),
+        );
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: recorder),
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-phone-field')),
+          '90009999',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('The phone has already been taken.'), findsOneWidget);
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-phone-field')),
+          '90009999',
+        );
+      },
+    );
+
+    testWidgets(
+      'HTTP 401 clears the avatar and navigates to Login with the stack '
+      'removed',
+      (tester) async {
+        final recorder = _RecordingHttpClient(
+          (req) async => _jsonResponse(401, const {}, request: req),
+        );
+        final avatarController = CurrentUserAvatarController();
+        avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
+        await pumpPushedEditProfile(
+          tester,
+          authService: _authServiceFor(httpClient: recorder),
+          avatarController: avatarController,
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-username-field')),
+          'new.username',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(avatarController.avatarUrl, isNull);
+        expect(find.byType(LoginScreen), findsOneWidget);
+        expect(find.byType(EditProfileScreen), findsNothing);
+      },
+    );
+
+    testWidgets('Managed fields (country, client_id, bc_customer_no) are never '
+        'editable and never sent', (tester) async {
+      // No dedicated country/client_id/bc_customer_no TextFormField
+      // exists anywhere on this screen — the only country-related UI is
+      // the phone field's fixed, non-interactive dial-code prefix.
+      await pumpEditProfile(tester);
+
+      expect(find.byType(TextFormField), findsNWidgets(6));
+      expect(find.text('AE'), findsNothing);
+      expect(find.text('OM'), findsNothing);
+      expect(find.text('ANCNAJJAR'), findsNothing);
+      expect(find.text('SAMPLE-0001'), findsNothing);
     });
   });
 
@@ -1242,68 +1876,16 @@ void main() {
     );
   });
 
-  group('Logout (hidden per approved Figma)', () {
-    // The approved Edit Profile Figma has no Logout button, row, or menu
-    // entry. The implementation (LogoutService plumbing, _handleLogout,
-    // and _buildLogoutButton in edit_profile_screen.dart) is preserved
-    // behind EditProfileScreen.showLogoutAction, which defaults to false
-    // in every production call site, for later restoration; these tests
-    // assert only on what's currently rendered by default. See the
-    // "Logout (test-only visibility seam enabled)" group below for tests
-    // of the already-implemented logout behavior itself.
-    testWidgets('No Logout button, text, or key is rendered', (tester) async {
-      await pumpEditProfile(tester);
-
-      expect(find.text('Logout'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('edit-profile-logout-button')),
-        findsNothing,
-      );
-    });
-
-    testWidgets(
-      'The three-dot icon stays non-interactive and reveals no Logout entry',
-      (tester) async {
-        await pumpEditProfile(tester);
-
-        await tester.tap(find.byIcon(Icons.more_vert_rounded));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Logout'), findsNothing);
-        expect(tester.takeException(), isNull);
-      },
-    );
-
-    testWidgets(
-      'Nothing renders below Save Changes other than the bottom navigation',
-      (tester) async {
-        await pumpEditProfile(tester);
-
-        expect(
-          find.byKey(const ValueKey('edit-profile-save-button')),
-          findsOneWidget,
-        );
-        expect(find.byType(CustomBottomNav), findsOneWidget);
-        expect(find.text('Logout'), findsNothing);
-      },
-    );
-  });
-
-  group('Logout (test-only visibility seam enabled)', () {
-    // Exercises the already-implemented logout behavior via
-    // EditProfileScreen.showLogoutAction: true — a @visibleForTesting-only
-    // constructor parameter that defaults to false in every production
-    // call site (see the group above, which is unaffected by these
-    // tests). Never contacts real secure storage or the live API — only
+  group('Logout', () {
+    // Exercises the logout action, now rendered by default in production.
+    // Never contacts real secure storage or the live API — only
     // FakeLogoutService, which stands in for AuthService.logout() (see
     // auth_service_test.dart's "logout" group for the real remote+local
     // orchestration this fake represents).
     const logoutButton = ValueKey('edit-profile-logout-button');
 
-    testWidgets('the Logout action renders only when the seam is enabled', (
-      tester,
-    ) async {
-      await pumpEditProfile(tester, showLogoutAction: true);
+    testWidgets('the Logout action renders by default', (tester) async {
+      await pumpEditProfile(tester);
 
       expect(find.byKey(logoutButton), findsOneWidget);
     });
@@ -1313,11 +1895,7 @@ void main() {
         tester,
       ) async {
         final logoutService = FakeLogoutService();
-        await pumpPushedEditProfile(
-          tester,
-          logoutService: logoutService,
-          showLogoutAction: true,
-        );
+        await pumpPushedEditProfile(tester, logoutService: logoutService);
 
         await tester.ensureVisible(find.byKey(logoutButton));
         await tester.tap(find.byKey(logoutButton));
@@ -1331,11 +1909,7 @@ void main() {
       ) async {
         final completer = Completer<void>();
         final logoutService = FakeLogoutService(pending: completer);
-        await pumpPushedEditProfile(
-          tester,
-          logoutService: logoutService,
-          showLogoutAction: true,
-        );
+        await pumpPushedEditProfile(tester, logoutService: logoutService);
 
         await tester.ensureVisible(find.byKey(logoutButton));
         await tester.tap(find.byKey(logoutButton));
@@ -1357,12 +1931,11 @@ void main() {
         final completer = Completer<void>();
         final logoutService = FakeLogoutService(pending: completer);
         final avatarController = CurrentUserAvatarController();
-        await avatarController.setAvatarPath('/fake/path/avatar.png');
+        avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
         await pumpPushedEditProfile(
           tester,
           logoutService: logoutService,
           avatarController: avatarController,
-          showLogoutAction: true,
         );
 
         await tester.ensureVisible(find.byKey(logoutButton));
@@ -1370,7 +1943,7 @@ void main() {
         await tester.pump();
 
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
-        expect(avatarController.avatarFile, isNotNull);
+        expect(avatarController.avatarUrl, isNotNull);
 
         completer.complete();
         // Bounded pumps through the pushAndRemoveUntil transition,
@@ -1381,17 +1954,13 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(avatarController.avatarFile, isNull);
+        expect(avatarController.avatarUrl, isNull);
       });
 
       testWidgets('navigates with full-stack removal: Login is shown and Back '
           'cannot return to Profile or Home', (tester) async {
         final logoutService = FakeLogoutService();
-        await pumpPushedEditProfile(
-          tester,
-          logoutService: logoutService,
-          showLogoutAction: true,
-        );
+        await pumpPushedEditProfile(tester, logoutService: logoutService);
 
         await tester.ensureVisible(find.byKey(logoutButton));
         await tester.tap(find.byKey(logoutButton));
@@ -1421,11 +1990,7 @@ void main() {
           // simply completes. This fake represents that "502, but still
           // locally successful" outcome.
           final logoutService = FakeLogoutService();
-          await pumpPushedEditProfile(
-            tester,
-            logoutService: logoutService,
-            showLogoutAction: true,
-          );
+          await pumpPushedEditProfile(tester, logoutService: logoutService);
 
           await tester.ensureVisible(find.byKey(logoutButton));
           await tester.tap(find.byKey(logoutButton));
@@ -1452,12 +2017,11 @@ void main() {
             error: const SessionStorageException(SessionStorageOperation.clear),
           );
           final avatarController = CurrentUserAvatarController();
-          await avatarController.setAvatarPath('/fake/path/avatar.png');
+          avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
           await pumpPushedEditProfile(
             tester,
             logoutService: logoutService,
             avatarController: avatarController,
-            showLogoutAction: true,
           );
 
           await tester.ensureVisible(find.byKey(logoutButton));
@@ -1466,7 +2030,7 @@ void main() {
 
           expect(find.byType(EditProfileScreen), findsOneWidget);
           expect(find.byType(LoginScreen), findsNothing);
-          expect(avatarController.avatarFile, isNotNull);
+          expect(avatarController.avatarUrl, isNotNull);
           expect(find.byType(CircularProgressIndicator), findsNothing);
           expect(
             find.text('Unable to sign out securely. Please try again.'),
@@ -1482,11 +2046,7 @@ void main() {
           final logoutService = FakeLogoutService(
             error: const SessionStorageException(SessionStorageOperation.clear),
           );
-          await pumpPushedEditProfile(
-            tester,
-            logoutService: logoutService,
-            showLogoutAction: true,
-          );
+          await pumpPushedEditProfile(tester, logoutService: logoutService);
 
           await tester.ensureVisible(find.byKey(logoutButton));
           await tester.tap(find.byKey(logoutButton));
@@ -1509,11 +2069,7 @@ void main() {
         final logoutService = FakeLogoutService(
           error: StateError('simulated programmer error'),
         );
-        await pumpPushedEditProfile(
-          tester,
-          logoutService: logoutService,
-          showLogoutAction: true,
-        );
+        await pumpPushedEditProfile(tester, logoutService: logoutService);
 
         // Invokes the button's onTap directly rather than through
         // tester.tap(): FakeLogoutService.logout's synchronous throw (no
@@ -1545,11 +2101,7 @@ void main() {
       'no confirmation dialog appears before or after tapping Logout',
       (tester) async {
         final logoutService = FakeLogoutService();
-        await pumpPushedEditProfile(
-          tester,
-          logoutService: logoutService,
-          showLogoutAction: true,
-        );
+        await pumpPushedEditProfile(tester, logoutService: logoutService);
 
         await tester.ensureVisible(find.byKey(logoutButton));
         await tester.tap(find.byKey(logoutButton));
@@ -1562,6 +2114,32 @@ void main() {
         expect(find.byType(AlertDialog), findsNothing);
       },
     );
+  });
+
+  group('Change Password entry point', () {
+    testWidgets('Renders a Change Password action', (tester) async {
+      await pumpEditProfile(tester);
+
+      expect(
+        find.byKey(const ValueKey('edit-profile-change-password-button')),
+        findsOneWidget,
+      );
+      expect(find.text('Change Password'), findsOneWidget);
+    });
+
+    testWidgets('Tapping it pushes ChangePasswordScreen', (tester) async {
+      await pumpPushedEditProfile(tester);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('edit-profile-change-password-button')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('edit-profile-change-password-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChangePasswordScreen), findsOneWidget);
+    });
   });
 
   group('Bottom navigation', () {

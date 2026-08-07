@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../data/support_regions_data.dart';
 import '../localization/translations.dart';
 import '../models/support_region.dart';
+import '../navigation/main_bottom_nav.dart';
 import '../services/phone_launcher.dart';
 import '../services/support_region_service.dart';
 import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
+import '../widgets/custom_bottom_nav.dart';
 import '../widgets/support_action_card.dart';
 import '../widgets/support_hours_card.dart';
 import '../widgets/support_info_card.dart';
@@ -154,6 +156,17 @@ class _SupportScreenState extends State<SupportScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  // Handles the shared bottom tab bar's taps — see main_bottom_nav.dart.
+  // This screen is itself the Support tab's destination, so Support is
+  // kept as the selected tab.
+  void _handleBottomNavTap(int tabIndex) {
+    handleMainBottomNavTap(
+      context,
+      tabIndex,
+      ownTabIndex: kMainNavIndexSupport,
+    );
+  }
+
   void _onEmailSupport() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -196,70 +209,82 @@ class _SupportScreenState extends State<SupportScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ResponsiveMaxWidth(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildIntro(),
-                const SizedBox(height: 20),
-                if (_isLoadingRegions)
-                  _buildRegionsLoading()
-                else ...[
-                  SupportRegionSelector(
-                    key: const ValueKey('support-region-selector'),
-                    regions: _regions,
-                    selectedRegionId: _selectedRegionId!,
-                    onRegionSelected: _selectRegion,
-                  ),
-                  const SizedBox(height: 20),
-                  SupportActionCard(
-                    onChatOnWhatsApp: _onChatOnWhatsApp,
-                    onEmailSupport: _onEmailSupport,
-                  ),
-                  const SizedBox(height: 20),
-                  const SupportTextileVisual(),
-                  const SizedBox(height: 20),
-                  SupportInfoCard(
-                    key: const ValueKey('support-corporate-office-card'),
-                    icon: Icons.apartment_rounded,
-                    label: context.t('support.corporateOfficeLabel'),
-                    child: Text(
-                      _selectedRegion.officeAddress ??
-                          context.t(
-                            'support.officeDetailsFallback',
-                            params: {'region': _selectedRegion.displayName},
-                          ),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textNavy,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SupportInfoCard(
-                    key: const ValueKey('support-hotline-card'),
-                    icon: Icons.call_rounded,
-                    label: context.t('support.directHotlineLabel'),
-                    child: _buildHotlineContent(),
-                  ),
-                  const SizedBox(height: 16),
-                  SupportHoursCard(
-                    key: const ValueKey('support-hours-card'),
-                    scheduleText:
-                        _selectedRegion.supportHours ??
-                        context.t(
-                          'support.hoursFallback',
-                          params: {'region': _selectedRegion.displayName},
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: ResponsiveMaxWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildIntro(),
+                      const SizedBox(height: 20),
+                      if (_isLoadingRegions)
+                        _buildRegionsLoading()
+                      else ...[
+                        SupportRegionSelector(
+                          key: const ValueKey('support-region-selector'),
+                          regions: _regions,
+                          selectedRegionId: _selectedRegionId!,
+                          onRegionSelected: _selectRegion,
                         ),
+                        const SizedBox(height: 20),
+                        SupportActionCard(
+                          onChatOnWhatsApp: _onChatOnWhatsApp,
+                          onEmailSupport: _onEmailSupport,
+                        ),
+                        const SizedBox(height: 20),
+                        const SupportTextileVisual(),
+                        const SizedBox(height: 20),
+                        SupportInfoCard(
+                          key: const ValueKey('support-corporate-office-card'),
+                          icon: Icons.apartment_rounded,
+                          label: context.t('support.corporateOfficeLabel'),
+                          child: Text(
+                            _selectedRegion.officeAddress ??
+                                context.t(
+                                  'support.officeDetailsFallback',
+                                  params: {
+                                    'region': _selectedRegion.displayName,
+                                  },
+                                ),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textNavy,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SupportInfoCard(
+                          key: const ValueKey('support-hotline-card'),
+                          icon: Icons.call_rounded,
+                          label: context.t('support.directHotlineLabel'),
+                          child: _buildHotlineContent(),
+                        ),
+                        const SizedBox(height: 16),
+                        SupportHoursCard(
+                          key: const ValueKey('support-hours-card'),
+                          scheduleText:
+                              _selectedRegion.supportHours ??
+                              context.t(
+                                'support.hoursFallback',
+                                params: {'region': _selectedRegion.displayName},
+                              ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                ],
-              ],
+                ),
+              ),
             ),
-          ),
+            CustomBottomNav(
+              currentIndex: kMainNavIndexSupport,
+              onTap: _handleBottomNavTap,
+            ),
+          ],
         ),
       ),
     );
