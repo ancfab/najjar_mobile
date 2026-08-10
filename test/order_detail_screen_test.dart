@@ -15,6 +15,10 @@ import 'package:anc_fabrics/models/business_central/business_central_invoice_lin
 import 'package:anc_fabrics/models/business_central/sales_order_line.dart';
 import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
+import 'package:anc_fabrics/services/demo_invoice_lookup_data_source.dart';
+import 'package:anc_fabrics/services/demo_order_detail_data_source.dart';
+import 'package:anc_fabrics/services/invoice_lookup_data_source.dart';
+import 'package:anc_fabrics/services/order_detail_data_source.dart';
 import 'package:anc_fabrics/widgets/live_invoice_lines_card.dart';
 import 'package:anc_fabrics/widgets/payment_timeline.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -594,6 +598,152 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  group('Order Detail demo mode', () {
+    // TEMPORARY CLIENT DEMO MODE: covers resolveDefaultOrderDetailDataSource
+    // and resolveDefaultInvoiceLookupDataSource (the pure resolvers
+    // OrderDetailScreen falls back to when no source is injected) for both
+    // DemoConfig.useDemoOrders branches, regardless of the flag's current
+    // compiled-in value, plus the actual default-injection behavior at the
+    // flag's current value — mirroring OrdersScreen's "Orders demo mode"
+    // group.
+    test('useDemo: true resolves order-detail fetch to '
+        'DemoOrderDetailDataSource, never the live sales-orders integration', () {
+      final source = resolveDefaultOrderDetailDataSource(useDemo: true);
+      expect(source, isA<DemoOrderDetailDataSource>());
+    });
+
+    test('useDemo: false resolves order-detail fetch to '
+        'LiveOrderDetailDataSource, leaving the live integration fully '
+        'reachable', () {
+      final source = resolveDefaultOrderDetailDataSource(useDemo: false);
+      expect(source, isA<LiveOrderDetailDataSource>());
+    });
+
+    test('useDemo: true resolves invoice lookup to '
+        'DemoInvoiceLookupDataSource, never the live invoices integration', () {
+      final source = resolveDefaultInvoiceLookupDataSource(useDemo: true);
+      expect(source, isA<DemoInvoiceLookupDataSource>());
+    });
+
+    test('useDemo: false resolves invoice lookup to '
+        'LiveInvoiceLookupDataSource, leaving the live integration fully '
+        'reachable', () {
+      final source = resolveDefaultInvoiceLookupDataSource(useDemo: false);
+      expect(source, isA<LiveInvoiceLookupDataSource>());
+    });
+
+    testWidgets(
+      'REGRESSION: with no sources injected, a demo Document_No from '
+      'OrdersScreen loads coherent demo order-detail data instead of '
+      'hitting the live sales-orders endpoint and showing Order Not Found',
+      (tester) async {
+        // No orderDetailSource/invoiceLookupSource injected: OrderDetailScreen
+        // resolves its own real defaults. This only ever completes in this
+        // widget-test sandbox (no real HTTP/secure storage available) if the
+        // demo path was actually taken — pumpAndSettle completing at all,
+        // and the demo order's own line data appearing, is the proof.
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: OrderDetailScreen(documentNo: 'SO-100234'),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('order-detail-not-found')),
+          findsNothing,
+        );
+        expect(
+          find.text('Premium Cotton Twill - Ivory White'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('ANC Textiles Trading LLC (C-10045)'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'REGRESSION: the Invoice button for a demo order resolves a coherent '
+      'demo invoice without reaching the live invoices endpoint',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: OrderDetailScreen(documentNo: 'SO-100234'),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        // SO-100234 has two order lines, pushing the Invoice button below
+        // the fold — scroll it into view before tapping.
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('order-detail-invoice-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('order-detail-invoice-button')),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('No invoice is available for this order.'),
+          findsNothing,
+        );
+        expect(find.text('INV-100234'), findsOneWidget);
+        expect(find.byType(LiveInvoiceLinesCard), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'REGRESSION: a demo order with no invoice (SO-100237) shows the '
+      'neutral no-invoice message rather than a live lookup failure',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: OrderDetailScreen(documentNo: 'SO-100237'),
+          ),
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const ValueKey('order-detail-invoice-button')),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('No invoice is available for this order.'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('Responsive layout', () {

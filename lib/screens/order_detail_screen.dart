@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/sales_order_line.dart';
 import '../services/business_central_error_mapper.dart';
+import '../services/demo_invoice_lookup_data_source.dart';
+import '../services/demo_order_detail_data_source.dart';
 import '../services/invoice_grouping.dart';
 import '../services/invoice_lookup_data_source.dart';
 import '../services/order_detail_data_source.dart';
@@ -20,7 +23,12 @@ import 'invoice_details_screen.dart';
 /// document_no=...`, all required pages), and resolves the Invoice button
 /// via [invoiceLookupSource] (`GET /api/business-central/invoices?
 /// order_no=...`, grouped by invoice `Document_No`, highest one selected —
-/// see `selectLatestInvoiceLines`).
+/// see `selectLatestInvoiceLines`) — unless [DemoConfig.useDemoOrders]
+/// (TEMPORARY CLIENT DEMO MODE) is `true`, in which case
+/// [DemoOrderDetailDataSource]/[DemoInvoiceLookupDataSource] are used
+/// instead (see `resolveDefaultOrderDetailDataSource`/
+/// `resolveDefaultInvoiceLookupDataSource`), so a demo `Document_No` opened
+/// from `OrdersScreen`'s demo list is never sent to the live endpoints.
 ///
 /// Shows only fields the confirmed sales-orders contract documents
 /// (`Document_No`, `Line_No`, item `No.`, `Description`, `Quantity`,
@@ -30,15 +38,47 @@ import 'invoice_details_screen.dart';
 /// screen must never fabricate them. The completed Order History action
 /// (a localized "coming soon" placeholder — see `_openOrderHistory`) is
 /// preserved unchanged; it is out of scope for this live-wiring task.
+///
+/// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
+/// returns [DemoOrderDetailDataSource] instead of [LiveOrderDetailDataSource]
+/// — the live service, pagination, deduplication, and session-expiry
+/// handling underneath are untouched and fully restored once the flag is set
+/// back to `false`. Defaults [useDemo] to [DemoConfig.useDemoOrders] but
+/// accepts it as a parameter so both branches stay unit-testable regardless
+/// of the flag's current compiled-in value, mirroring
+/// `resolveDefaultSalesOrderLinesDataSource` (`orders_screen.dart`).
+OrderDetailDataSource resolveDefaultOrderDetailDataSource({
+  bool useDemo = DemoConfig.useDemoOrders,
+}) {
+  return useDemo
+      ? const DemoOrderDetailDataSource()
+      : LiveOrderDetailDataSource();
+}
+
+/// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
+/// returns [DemoInvoiceLookupDataSource] instead of
+/// [LiveInvoiceLookupDataSource] — the live invoice-lookup service is
+/// untouched and fully restored once the flag is set back to `false`. See
+/// [resolveDefaultOrderDetailDataSource]'s doc comment for the rest of this
+/// convention.
+InvoiceLookupDataSource resolveDefaultInvoiceLookupDataSource({
+  bool useDemo = DemoConfig.useDemoOrders,
+}) {
+  return useDemo
+      ? const DemoInvoiceLookupDataSource()
+      : LiveInvoiceLookupDataSource();
+}
+
 class OrderDetailScreen extends StatefulWidget {
   OrderDetailScreen({
     super.key,
     required this.documentNo,
     OrderDetailDataSource? orderDetailSource,
     InvoiceLookupDataSource? invoiceLookupSource,
-  }) : orderDetailSource = orderDetailSource ?? LiveOrderDetailDataSource(),
+  }) : orderDetailSource =
+           orderDetailSource ?? resolveDefaultOrderDetailDataSource(),
        invoiceLookupSource =
-           invoiceLookupSource ?? LiveInvoiceLookupDataSource();
+           invoiceLookupSource ?? resolveDefaultInvoiceLookupDataSource();
 
   /// The sales order's confirmed `Document_No` (e.g. `"SO-24001"`) — the
   /// order identifier per the confirmed contract.
