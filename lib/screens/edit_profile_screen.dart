@@ -404,6 +404,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // while `_isAvatarBusy` (the spinner) is true.
   Future<void> _handleChangePhoto() async {
     if (_isAvatarFlowActive) return;
+    debugPrint('[AVATAR DEBUG] Change-photo button tapped.');
     setState(() => _isAvatarFlowActive = true);
     try {
       await _runAvatarSelectionFlow();
@@ -421,8 +422,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Loops so "Choose Again" from the preview step can restart from
     // source selection without leaving the active/guarded state.
     while (true) {
+      debugPrint('[AVATAR DEBUG] Source sheet opened.');
       final source = await _showAvatarSourceSheet();
-      if (!mounted || source == null) return;
+      if (!mounted || source == null) {
+        debugPrint('[AVATAR DEBUG] Source sheet cancelled/dismissed.');
+        return;
+      }
+      debugPrint(
+        '[AVATAR DEBUG] Source selected: '
+        '${source == AvatarImageSource.camera ? 'Camera' : 'Gallery'}',
+      );
 
       setState(() => _isAvatarBusy = true);
       final validatedPath = await _pickAndValidateImage(source);
@@ -444,17 +453,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // open (the camera button stays disabled throughout regardless, via
       // `_isAvatarFlowActive`).
       setState(() => _isAvatarBusy = false);
+      debugPrint('[AVATAR DEBUG] Preview opened for: $croppedPath');
       final action = await _showAvatarPreviewDialog(croppedPath);
       if (!mounted) return;
 
       switch (action) {
         case _AvatarPreviewAction.usePhoto:
+          debugPrint('[AVATAR DEBUG] Use Photo selected.');
           setState(() => _isAvatarBusy = true);
           await _applyAvatar(croppedPath);
           return;
         case _AvatarPreviewAction.chooseAgain:
+          debugPrint('[AVATAR DEBUG] Choose Again selected.');
           continue;
         case _AvatarPreviewAction.cancel:
+          debugPrint('[AVATAR DEBUG] Preview cancelled.');
           return;
       }
     }
@@ -501,10 +514,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // (except a plain picker cancel, which is silent by design) and the
   // previous avatar is left untouched.
   Future<String?> _pickAndValidateImage(AvatarImageSource source) async {
+    debugPrint(
+      '[AVATAR DEBUG] Permission request started for '
+      '${source == AvatarImageSource.camera ? 'camera' : 'gallery'}.',
+    );
     final permissionStatus = source == AvatarImageSource.camera
         ? await widget.avatarPermissionService.requestCameraPermission()
         : await widget.avatarPermissionService.requestGalleryPermission();
     if (!mounted) return null;
+    debugPrint('[AVATAR DEBUG] Permission result: $permissionStatus');
 
     switch (permissionStatus) {
       case AvatarPermissionStatus.granted:
@@ -525,27 +543,50 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         return null;
     }
 
+    debugPrint('[AVATAR DEBUG] Picker started.');
     PickedAvatarImage? picked;
     try {
       picked = await widget.avatarPickerService.pickImage(source);
     } catch (error) {
       // Technical detail only — never shown to the user.
       debugPrint('Avatar picker failed: $error');
+      debugPrint('[AVATAR DEBUG] Picker threw: $error');
       if (mounted) {
         _showSnackBar(context.t('editProfile.pickerFailed'));
       }
       return null;
     }
     if (!mounted) return null;
-    if (picked == null) return null; // User cancelled the platform picker.
+    if (picked == null) {
+      debugPrint('[AVATAR DEBUG] Picker cancelled by user.');
+      return null; // User cancelled the platform picker.
+    }
 
+    // Sync stat calls deliberately, not the async File.exists()/length():
+    // the async dart:io variants route through the real IO-service thread,
+    // which a fake-picker widget test's pumpAndSettle() never waits for
+    // (there is no injected fake for raw dart:io), causing a timeout. Sync
+    // calls run inline on the calling isolate instead, so they can't strand
+    // a pump loop that has nothing else pending.
+    final pickedFile = File(picked.path);
+    final pickedExists = pickedFile.existsSync();
+    final pickedLength = pickedExists ? pickedFile.lengthSync() : 0;
+    debugPrint('[AVATAR DEBUG] Picker returned a file.');
+    debugPrint('[AVATAR DEBUG] Picked file path: ${picked.path}');
+    debugPrint('[AVATAR DEBUG] Picked file exists: $pickedExists');
+    debugPrint('[AVATAR DEBUG] Picked file size: $pickedLength bytes');
+
+    debugPrint('[AVATAR DEBUG] Image validation started.');
     try {
       await widget.avatarImageProcessor.validate(picked.path);
+      debugPrint('[AVATAR DEBUG] Image validation succeeded.');
     } on AvatarImageValidationException catch (error) {
+      debugPrint('[AVATAR DEBUG] Image validation failed: ${error.reason}');
       if (mounted) _showSnackBar(_messageForValidationReason(error.reason));
       return null;
     } catch (error) {
       debugPrint('Avatar validation failed: $error');
+      debugPrint('[AVATAR DEBUG] Image validation failed: $error');
       if (mounted) {
         _showSnackBar(context.t('editProfile.photoUnusable'));
       }
@@ -556,14 +597,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<String?> _cropImage(String sourcePath) async {
+    debugPrint('[AVATAR DEBUG] Crop started for: $sourcePath');
     try {
       final croppedPath = await widget.avatarCropperService.cropToSquare(
         sourcePath,
         toolbarTitle: context.t('editProfile.cropToolbarTitle'),
       );
-      return croppedPath; // null == user cancelled cropping.
+      if (croppedPath == null) {
+        debugPrint('[AVATAR DEBUG] Crop cancelled by user.');
+        return null; // null == user cancelled cropping.
+      }
+
+      // Sync stat calls — see the matching comment in
+      // _pickAndValidateImage above.
+      final croppedFile = File(croppedPath);
+      final croppedExists = croppedFile.existsSync();
+      final croppedLength = croppedExists ? croppedFile.lengthSync() : 0;
+      debugPrint('[AVATAR DEBUG] Crop succeeded.');
+      debugPrint('[AVATAR DEBUG] Cropped file path: $croppedPath');
+      debugPrint('[AVATAR DEBUG] Cropped file exists: $croppedExists');
+      debugPrint('[AVATAR DEBUG] Cropped file size: $croppedLength bytes');
+      return croppedPath;
     } catch (error) {
       debugPrint('Avatar crop failed: $error');
+      debugPrint('[AVATAR DEBUG] Crop threw: $error');
       if (mounted) {
         _showSnackBar(context.t('editProfile.cropFailed'));
       }
@@ -623,38 +680,63 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // Success is defined solely by the server's response — the local
   // pick/crop/preview flow above never itself counts as a saved avatar.
   Future<void> _applyAvatar(String croppedPath) async {
+    debugPrint('[AVATAR DEBUG] Upload started for: $croppedPath');
     final UploadAvatarResult result;
     try {
       result = await _authService.uploadAvatar(File(croppedPath));
     } catch (error) {
       debugPrint('Avatar update failed: $error');
+      debugPrint('[AVATAR DEBUG] Upload threw: $error');
       if (mounted) {
         _showSnackBar(context.t('editProfile.photoUpdateFailed'));
       }
       return;
     }
+    debugPrint('[AVATAR DEBUG] Upload result type: ${result.runtimeType}');
     if (!mounted) return;
 
     switch (result) {
       case UploadAvatarSuccess(:final session):
+        debugPrint('[AVATAR DEBUG] UI avatar update started.');
+        debugPrint(
+          '[AVATAR DEBUG] New avatar URL received: ${session.avatarUrl}',
+        );
         // Refreshed avatarUrl only — see AuthSession.fromAuthenticatedUser
         // in AuthService.uploadAvatar for every other identity field.
+        debugPrint(
+          '[AVATAR DEBUG] Avatar controller update + cache eviction '
+          'attempted.',
+        );
         _avatarController.setAvatarUrl(session.avatarUrl);
+        debugPrint(
+          '[AVATAR DEBUG] Avatar controller update + cache eviction '
+          'completed.',
+        );
+        debugPrint('[AVATAR DEBUG] Success snackbar shown.');
         _showSnackBar(context.t('editProfile.photoUpdated'));
       case UploadAvatarFailure(type: UploadAvatarFailureType.unauthorized):
+        debugPrint('[AVATAR DEBUG] Error snackbar branch: unauthorized.');
         handleUnauthorizedResult(context, _avatarController);
       case UploadAvatarFailure(type: UploadAvatarFailureType.fileNotFound):
+        debugPrint('[AVATAR DEBUG] Error snackbar branch: fileNotFound.');
         _showSnackBar(context.t('editProfile.fileNotFound'));
       case UploadAvatarFailure(type: UploadAvatarFailureType.fileTooLarge):
+        debugPrint('[AVATAR DEBUG] Error snackbar branch: fileTooLarge.');
         _showSnackBar(context.t('editProfile.tooLarge'));
       case UploadAvatarFailure(type: UploadAvatarFailureType.unsupportedFormat):
+        debugPrint('[AVATAR DEBUG] Error snackbar branch: unsupportedFormat.');
         _showSnackBar(context.t('editProfile.unsupportedFormat'));
       case UploadAvatarFailure(
         type: UploadAvatarFailureType.rejectedByServer,
         :final message,
       ):
+        debugPrint(
+          '[AVATAR DEBUG] Error snackbar branch: rejectedByServer '
+          '(message present: ${message != null}).',
+        );
         _showSnackBar(message ?? context.t('editProfile.photoUpdateFailed'));
-      case UploadAvatarFailure():
+      case UploadAvatarFailure(:final type):
+        debugPrint('[AVATAR DEBUG] Error snackbar branch: $type.');
         _showSnackBar(context.t('editProfile.photoUpdateFailed'));
     }
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -149,7 +150,22 @@ class AncApiClient {
     required String token,
     required String filePath,
   }) async {
+    debugPrint('[AVATAR DEBUG] AncApiClient.uploadAvatar entered.');
     final uri = _resolve(ApiConfig.meAvatarPath);
+    debugPrint('[AVATAR DEBUG] Endpoint: $uri (token never logged).');
+
+    final sourceFile = File(filePath);
+    final sourceExists = await sourceFile.exists();
+    final sourceLength = sourceExists ? await sourceFile.length() : 0;
+    debugPrint('[AVATAR DEBUG] Source file exists: $sourceExists');
+    debugPrint('[AVATAR DEBUG] Source file length: $sourceLength bytes');
+    debugPrint("[AVATAR DEBUG] Multipart field name: 'avatar'");
+    debugPrint(
+      '[AVATAR DEBUG] Multipart filename: '
+      '${filePath.split(Platform.pathSeparator).last}',
+    );
+    debugPrint('[AVATAR DEBUG] Content type: image/jpeg');
+
     final request = http.MultipartRequest('POST', uri)
       ..headers.addAll(_authenticatedHeaders(token))
       ..files.add(
@@ -160,10 +176,20 @@ class AncApiClient {
         ),
       );
 
+    debugPrint('[AVATAR DEBUG] Request send started.');
     final response = await _sendWithTransportHandling(
       () async => http.Response.fromStream(
         await _httpClient.send(request).timeout(_requestTimeout),
       ),
+    );
+    debugPrint('[AVATAR DEBUG] HTTP response received.');
+    debugPrint('[AVATAR DEBUG] HTTP status code: ${response.statusCode}');
+    debugPrint(
+      '[AVATAR DEBUG] Response Content-Type header: '
+      '${response.headers['content-type']}',
+    );
+    debugPrint(
+      '[AVATAR DEBUG] Response body length: ${response.body.length} chars',
     );
     return _decodeUploadAvatarResponse(response);
   }
@@ -833,18 +859,30 @@ class AncApiClient {
   /// wrapper, and every other status parses [ApiValidationError] for a 422
   /// body so `AuthService.uploadAvatar` can surface `errors.avatar`.
   AuthenticatedUser _decodeUploadAvatarResponse(http.Response response) {
+    _logAvatarResponseStructure(response.body);
+
     if (response.statusCode == 200) {
       final json = _decodeJsonMap(response.body);
       final data = json['data'];
       if (data is! Map<String, dynamic>) {
+        debugPrint(
+          '[AVATAR DEBUG] Parsing AuthenticatedUser succeeded: false '
+          '(missing/invalid "data" wrapper).',
+        );
         throw const AncProtocolException(
           'Malformed /auth/me/avatar response: missing the required "data" '
           'wrapper.',
         );
       }
       try {
-        return AuthenticatedUser.fromJson(data);
+        final user = AuthenticatedUser.fromJson(data);
+        debugPrint('[AVATAR DEBUG] Parsing AuthenticatedUser succeeded: true.');
+        return user;
       } on FormatException catch (error) {
+        debugPrint(
+          '[AVATAR DEBUG] Parsing AuthenticatedUser succeeded: false '
+          '(${error.message}).',
+        );
         throw AncProtocolException(
           'Malformed /auth/me/avatar response: ${error.message}',
         );
@@ -858,6 +896,56 @@ class AncApiClient {
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
           : null,
     );
+  }
+
+  /// Temporary diagnostic-only helper for the profile-avatar investigation:
+  /// a best-effort, side-effect-free look at an `/auth/me/avatar` response
+  /// body's *shape* — never its values (beyond `avatar_url`'s type) — so we
+  /// can tell whether production's response actually matches the assumed
+  /// `{"data": {..., "avatar_url": ...}}` envelope. Never throws and never
+  /// influences [_decodeUploadAvatarResponse]'s return value or the
+  /// exception it raises; [_decodeJsonMap]/[AuthenticatedUser.fromJson]
+  /// remain the only source of truth for parsing.
+  void _logAvatarResponseStructure(String body) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(body);
+    } on FormatException catch (error) {
+      debugPrint(
+        '[AVATAR DEBUG] Response JSON decoding failed: ${error.runtimeType}.',
+      );
+      final truncated = body.length > 300 ? '${body.substring(0, 300)}…' : body;
+      debugPrint('[AVATAR DEBUG] Response body (truncated): $truncated');
+      return;
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      debugPrint(
+        '[AVATAR DEBUG] Response JSON top-level type: '
+        '${decoded.runtimeType} (expected a JSON object).',
+      );
+      return;
+    }
+
+    debugPrint('[AVATAR DEBUG] Response top-level keys: ${decoded.keys}');
+    final hasData = decoded.containsKey('data');
+    final data = decoded['data'];
+    debugPrint('[AVATAR DEBUG] Response "data" key exists: $hasData');
+    debugPrint(
+      '[AVATAR DEBUG] Response "data" is a Map: '
+      '${data is Map<String, dynamic>}',
+    );
+    if (data is Map<String, dynamic>) {
+      debugPrint('[AVATAR DEBUG] Response "data" keys: ${data.keys}');
+      debugPrint(
+        '[AVATAR DEBUG] Response "avatar_url" exists: '
+        '${data.containsKey('avatar_url')}',
+      );
+      debugPrint(
+        '[AVATAR DEBUG] Response "avatar_url" type: '
+        '${data['avatar_url']?.runtimeType}',
+      );
+    }
   }
 
   /// Decodes a ledger-entries response. HTTP 200 is parsed as a

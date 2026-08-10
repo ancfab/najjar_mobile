@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../config/api_config.dart';
 import '../models/auth/auth_session.dart';
 import '../models/auth/authenticated_user.dart';
@@ -618,13 +620,31 @@ class AuthService implements LogoutService {
   ///   [UploadAvatarFailureType.secureStorage] — surfaced rather than
   ///   swallowed, for the same reason as [updateProfile].
   Future<UploadAvatarResult> uploadAvatar(File avatar) async {
-    if (!await avatar.exists()) {
+    debugPrint('[AVATAR DEBUG] AuthService.uploadAvatar entered.');
+    debugPrint('[AVATAR DEBUG] Image path received: ${avatar.path}');
+
+    final exists = await avatar.exists();
+    debugPrint('[AVATAR DEBUG] Image file exists: $exists');
+    if (!exists) {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: fileNotFound (local check).',
+      );
       return const UploadAvatarFailure(UploadAvatarFailureType.fileNotFound);
     }
-    if (await avatar.length() > ApiConfig.avatarMaxUploadBytes) {
+
+    final length = await avatar.length();
+    debugPrint('[AVATAR DEBUG] Image file length: $length bytes');
+    if (length > ApiConfig.avatarMaxUploadBytes) {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: fileTooLarge (local check).',
+      );
       return const UploadAvatarFailure(UploadAvatarFailureType.fileTooLarge);
     }
     if (!hasSupportedAvatarUploadSignature(await avatar.readAsBytes())) {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: unsupportedFormat '
+        '(local check).',
+      );
       return const UploadAvatarFailure(
         UploadAvatarFailureType.unsupportedFormat,
       );
@@ -634,27 +654,63 @@ class AuthService implements LogoutService {
     try {
       stored = await _sessionStore.read();
     } on SessionStorageException {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: secureStorage '
+        '(session read failed).',
+      );
       return const UploadAvatarFailure(UploadAvatarFailureType.secureStorage);
     }
+    debugPrint(
+      '[AVATAR DEBUG] Local authenticated session exists: ${stored != null}',
+    );
     if (stored == null) {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: unauthorized '
+        '(no stored session).',
+      );
       return const UploadAvatarFailure(UploadAvatarFailureType.unauthorized);
     }
+    // Never printed: stored.token itself — only whether one is present.
+    debugPrint(
+      '[AVATAR DEBUG] Token present: ${stored.token.isNotEmpty} '
+      '(value never logged).',
+    );
 
     final AuthenticatedUser user;
     try {
+      debugPrint('[AVATAR DEBUG] Delegating request to AncApiClient.');
       user = await _apiClient.uploadAvatar(
         token: stored.token,
         filePath: avatar.path,
       );
+      debugPrint('[AVATAR DEBUG] Result received from AncApiClient: success.');
     } on AncHttpException catch (error) {
+      debugPrint(
+        '[AVATAR DEBUG] Result received from AncApiClient: '
+        'AncHttpException (status ${error.statusCode}).',
+      );
       if (error.statusCode == 401) {
+        debugPrint('[AVATAR DEBUG] Result classification: unauthorized.');
+        debugPrint('[AVATAR DEBUG] Clearing local session: true.');
         await _clearIgnoringStorageFailure();
         return const UploadAvatarFailure(UploadAvatarFailureType.unauthorized);
       }
-      return _mapUploadAvatarHttpFailure(error);
-    } on AncNetworkException {
+      final failure = _mapUploadAvatarHttpFailure(error);
+      debugPrint('[AVATAR DEBUG] Result classification: ${failure.type}.');
+      return failure;
+    } on AncNetworkException catch (error) {
+      debugPrint(
+        '[AVATAR DEBUG] Result received from AncApiClient: '
+        'AncNetworkException: $error.',
+      );
+      debugPrint('[AVATAR DEBUG] Result classification: network.');
       return const UploadAvatarFailure(UploadAvatarFailureType.network);
-    } on AncProtocolException {
+    } on AncProtocolException catch (error) {
+      debugPrint(
+        '[AVATAR DEBUG] Result received from AncApiClient: '
+        'AncProtocolException: $error.',
+      );
+      debugPrint('[AVATAR DEBUG] Result classification: invalidResponse.');
       return const UploadAvatarFailure(UploadAvatarFailureType.invalidResponse);
     }
 
@@ -662,12 +718,18 @@ class AuthService implements LogoutService {
       token: stored.token,
       user: user,
     );
+    debugPrint('[AVATAR DEBUG] AuthenticatedUser returned: true.');
     try {
       await _sessionStore.save(updated);
     } on SessionStorageException {
+      debugPrint(
+        '[AVATAR DEBUG] Result classification: secureStorage '
+        '(session save failed).',
+      );
       return const UploadAvatarFailure(UploadAvatarFailureType.secureStorage);
     }
 
+    debugPrint('[AVATAR DEBUG] Result classification: success.');
     return UploadAvatarSuccess(updated);
   }
 
