@@ -1,9 +1,12 @@
-// Unit tests for InventoryService: first-page load, load-more append via
-// currentPage + 1 (never a next_page_url — a live response is not yet
-// available and every other Business Central list endpoint's confirmed live
-// envelope has returned unsafe/incomplete pagination URLs), fixed perPage
-// preservation, duplicate-request guards, stopping when currentPage >=
-// lastPage or next_page_url is null, load-more-failure row preservation,
+// Unit tests for InventoryService: the required-itemNo contract (loadFirstPage
+// throws ArgumentError on a blank itemNo and never sends a request; every
+// request — first page, load-more, and refresh alike — carries the same
+// item_no the caller supplied, never omitted), first-page load, load-more
+// append via currentPage + 1 (never a next_page_url — a live response is not
+// yet available and every other Business Central list endpoint's confirmed
+// live envelope has returned unsafe/incomplete pagination URLs), fixed
+// perPage preservation, duplicate-request guards, stopping when currentPage
+// >= lastPage or next_page_url is null, load-more-failure row preservation,
 // refresh reset, the stale-response generation guard, id-based dedupe (rows
 // sharing itemNo or locationCode are both kept — dedup is by id only), 401
 // handoff to the session coordinator, and the inventory-specific 422
@@ -130,35 +133,70 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       expect(service.entries.map((e) => e.id), ['id-1', 'id-2']);
       expect(fakeHttp.requestCount, 1);
     });
 
+    test('requests the inventory endpoint with page=1, per_page=25, and the '
+        'exact requested item_no', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async =>
+            _jsonResponse(200, _envelope(ids: ['id-1']), request: req),
+      ]);
+      final service = InventoryService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadFirstPage(itemNo: 'ITEM-001');
+
+      expect(
+        fakeHttp.requestedUrls.single.path,
+        '/api/business-central/inventory',
+      );
+      expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
+      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
+      expect(
+        fakeHttp.requestedUrls.single.queryParameters['item_no'],
+        'ITEM-001',
+      );
+    });
+
     test(
-      'requests the inventory endpoint with page=1 and per_page=25',
+      'a blank itemNo throws ArgumentError and never sends a request',
       () async {
-        final fakeHttp = _ScriptedHttpClient([
-          (req) async =>
-              _jsonResponse(200, _envelope(ids: ['id-1']), request: req),
-        ]);
+        final fakeHttp = _ScriptedHttpClient([]);
         final service = InventoryService(
           apiClient: AncApiClient(httpClient: fakeHttp),
           sessionStore: FakeAuthSessionStore()..seed(_session()),
           coordinator: FakeSessionExpiryCoordinator(),
         );
 
-        await service.loadFirstPage();
-
         expect(
-          fakeHttp.requestedUrls.single.path,
-          '/api/business-central/inventory',
+          () => service.loadFirstPage(itemNo: '   '),
+          throwsA(isA<ArgumentError>()),
         );
-        expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
-        expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
+        expect(fakeHttp.requestCount, 0);
       },
     );
+
+    test('an empty-string itemNo throws ArgumentError', () async {
+      final fakeHttp = _ScriptedHttpClient([]);
+      final service = InventoryService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      expect(
+        () => service.loadFirstPage(itemNo: ''),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(fakeHttp.requestCount, 0);
+    });
 
     test('parses an empty first page (no rows)', () async {
       final fakeHttp = _ScriptedHttpClient([
@@ -171,7 +209,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       expect(service.entries, isEmpty);
       expect(service.hasNextPage, isFalse);
@@ -190,7 +228,7 @@ void main() {
           coordinator: FakeSessionExpiryCoordinator(),
         );
 
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
 
         expect(service.hasNextPage, isFalse);
         await service.loadNextPage();
@@ -214,7 +252,7 @@ void main() {
           coordinator: FakeSessionExpiryCoordinator(),
         );
 
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
 
         expect(service.hasNextPage, isFalse);
       },
@@ -231,8 +269,8 @@ void main() {
           coordinator: FakeSessionExpiryCoordinator(),
         );
 
-        final first = service.loadFirstPage();
-        final second = service.loadFirstPage();
+        final first = service.loadFirstPage(itemNo: 'ITEM-001');
+        final second = service.loadFirstPage(itemNo: 'ITEM-001');
         await Future<void>.delayed(Duration.zero); // let the HTTP call fire
 
         expect(fakeHttp.requestCount, 1);
@@ -270,7 +308,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       expect(service.hasNextPage, isTrue);
       await service.loadNextPage();
 
@@ -288,6 +326,55 @@ void main() {
       expect(fakeHttp.requestedUrls[0].queryParameters['page'], '1');
       expect(fakeHttp.requestedUrls[1].queryParameters['page'], '2');
     });
+
+    test('is a no-op — sends no request — before loadFirstPage is ever '
+        'called', () async {
+      final fakeHttp = _ScriptedHttpClient([]);
+      final service = InventoryService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadNextPage();
+
+      expect(fakeHttp.requestCount, 0);
+    });
+
+    test(
+      'load-more sends the same item_no as the first page, never omitted',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async => _jsonResponse(
+            200,
+            _envelope(ids: ['id-1'], lastPage: 2),
+            request: req,
+          ),
+          (req) async => _jsonResponse(
+            200,
+            _envelope(ids: ['id-2'], currentPage: 2, lastPage: 2),
+            request: req,
+          ),
+        ]);
+        final service = InventoryService(
+          apiClient: AncApiClient(httpClient: fakeHttp),
+          sessionStore: FakeAuthSessionStore()..seed(_session()),
+          coordinator: FakeSessionExpiryCoordinator(),
+        );
+
+        await service.loadFirstPage(itemNo: 'ITEM-001');
+        await service.loadNextPage();
+
+        expect(
+          fakeHttp.requestedUrls[0].queryParameters['item_no'],
+          'ITEM-001',
+        );
+        expect(
+          fakeHttp.requestedUrls[1].queryParameters['item_no'],
+          'ITEM-001',
+        );
+      },
+    );
 
     test('preserves the original perPage on the load-more request, never '
         'increasing it', () async {
@@ -309,7 +396,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       await service.loadNextPage();
 
       expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '25');
@@ -331,7 +418,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       final first = service.loadNextPage();
       final second = service.loadNextPage();
@@ -368,7 +455,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       await expectLater(
         service.loadNextPage(),
@@ -397,7 +484,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       await expectLater(
         service.loadNextPage(),
         throwsA(isA<BusinessCentralFailureException>()),
@@ -427,7 +514,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       await service.loadNextPage();
 
       expect(
@@ -456,7 +543,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       await service.loadNextPage();
 
       expect(service.entries.map((e) => e.id), ['id-1', 'id-2', 'id-3']);
@@ -478,7 +565,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       expect(service.entries.map((e) => e.id), ['id-1', 'id-2']);
       expect(service.entries.map((e) => e.itemNo).toSet(), {'ITEM-001'});
@@ -508,7 +595,7 @@ void main() {
         coordinator: FakeSessionExpiryCoordinator(),
       );
 
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       expect(service.entries.map((e) => e.id), ['id-1', 'id-2']);
       expect(service.entries.map((e) => e.locationCode).toSet(), {
@@ -534,7 +621,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
       expect(service.hasNextPage, isTrue);
 
       await service.refresh();
@@ -561,7 +648,7 @@ void main() {
         sessionStore: FakeAuthSessionStore()..seed(_session()),
         coordinator: FakeSessionExpiryCoordinator(),
       );
-      await service.loadFirstPage();
+      await service.loadFirstPage(itemNo: 'ITEM-001');
 
       final loadMoreFuture = service.loadNextPage();
       await service.refresh(); // completes before the stale load-more does
@@ -580,6 +667,46 @@ void main() {
 
       expect(service.entries.map((e) => e.id), ['id-99']);
     });
+
+    test(
+      'reuses the same item_no as the original loadFirstPage call',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async =>
+              _jsonResponse(200, _envelope(ids: ['id-1']), request: req),
+          (req) async =>
+              _jsonResponse(200, _envelope(ids: ['id-2']), request: req),
+        ]);
+        final service = InventoryService(
+          apiClient: AncApiClient(httpClient: fakeHttp),
+          sessionStore: FakeAuthSessionStore()..seed(_session()),
+          coordinator: FakeSessionExpiryCoordinator(),
+        );
+        await service.loadFirstPage(itemNo: 'ITEM-001');
+
+        await service.refresh();
+
+        expect(
+          fakeHttp.requestedUrls[1].queryParameters['item_no'],
+          'ITEM-001',
+        );
+      },
+    );
+
+    test('is a no-op — sends no request — before loadFirstPage is ever '
+        'called', () async {
+      final fakeHttp = _ScriptedHttpClient([]);
+      final service = InventoryService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.refresh();
+
+      expect(fakeHttp.requestCount, 0);
+      expect(service.entries, isEmpty);
+    });
   });
 
   group('InventoryService session/failure handling', () {
@@ -596,7 +723,7 @@ void main() {
       );
 
       await expectLater(
-        service.loadFirstPage(),
+        service.loadFirstPage(itemNo: 'ITEM-001'),
         throwsA(isA<SessionExpiredException>()),
       );
       expect(coordinator.handleUnauthorizedCallCount, 1);
@@ -620,7 +747,7 @@ void main() {
       );
 
       try {
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
         fail('Expected a BusinessCentralFailureException');
       } on BusinessCentralFailureException catch (error) {
         expect(error.outcome, isA<BusinessCentralRequestDefect>());
@@ -645,7 +772,7 @@ void main() {
       );
 
       try {
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
         fail('Expected a BusinessCentralFailureException');
       } on BusinessCentralFailureException catch (error) {
         expect(error.outcome, isA<BusinessCentralRequestDefect>());
@@ -665,7 +792,7 @@ void main() {
       );
 
       try {
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
         fail('Expected a BusinessCentralFailureException');
       } on BusinessCentralFailureException catch (error) {
         expect(error.outcome, isA<BusinessCentralUpstreamFailure>());
@@ -683,7 +810,7 @@ void main() {
       );
 
       try {
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
         fail('Expected a BusinessCentralFailureException');
       } on BusinessCentralFailureException catch (error) {
         expect(error.outcome, isA<BusinessCentralTemporarilyUnavailable>());
@@ -702,7 +829,7 @@ void main() {
       );
 
       try {
-        await service.loadFirstPage();
+        await service.loadFirstPage(itemNo: 'ITEM-001');
         fail('Expected a BusinessCentralFailureException');
       } on BusinessCentralFailureException catch (error) {
         expect(error.outcome, isA<BusinessCentralNetworkFailure>());
@@ -726,7 +853,7 @@ void main() {
         );
 
         try {
-          await service.loadFirstPage();
+          await service.loadFirstPage(itemNo: 'ITEM-001');
           fail('Expected a BusinessCentralFailureException');
         } on BusinessCentralFailureException catch (error) {
           expect(error.outcome, isA<BusinessCentralProtocolFailure>());
@@ -750,7 +877,7 @@ void main() {
         );
 
         await expectLater(
-          service.loadFirstPage(),
+          service.loadFirstPage(itemNo: 'ITEM-001'),
           throwsA(isA<BusinessCentralFailureException>()),
         );
         expect(coordinator.handleUnauthorizedCallCount, 0);

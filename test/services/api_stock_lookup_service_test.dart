@@ -755,6 +755,21 @@ void main() {
       expect(result, isA<StockLookupRetryableFailure>());
     });
 
+    test('HTTP 500 (the currently observed live production failure for a '
+        'valid item_no) maps to StockLookupUnexpectedFailure — never '
+        'StockLookupNotFound, so a server-side outage is never shown to the '
+        'user as "item not found"', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(500, const {}, request: req),
+      ]);
+      final service = _service(httpClient: fakeHttp, session: _session());
+
+      final result = await service.lookup('1012A01');
+
+      expect(result, isA<StockLookupUnexpectedFailure>());
+      expect(result, isNot(isA<StockLookupNotFound>()));
+    });
+
     test('HTTP 503 maps to StockLookupTemporarilyUnavailable', () async {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(503, const {}, request: req),

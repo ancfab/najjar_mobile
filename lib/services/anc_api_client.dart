@@ -14,6 +14,7 @@ import '../models/auth/login_response.dart';
 import '../models/business_central/business_central_inventory_entry.dart';
 import '../models/business_central/business_central_invoice_line.dart';
 import '../models/business_central/business_central_item.dart';
+import '../models/business_central/business_central_item_search_group.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
@@ -419,25 +420,90 @@ class AncApiClient {
     return _decodeItemsResponse(response);
   }
 
+  /// Calls `GET /api/business-central/items` with a `search` query
+  /// parameter, requesting [page] at a fixed [perPage] size. Per the
+  /// confirmed live contract, supplying `search` changes the endpoint's
+  /// response shape from a flat list of [BusinessCentralItem] rows (see
+  /// [fetchItems]) to *grouped* rows keyed by `commonItemNo` — see
+  /// [BusinessCentralItemSearchGroup]. [fetchItems] itself is untouched and
+  /// must never be reused for a search request.
+  ///
+  /// [search] is sent exactly as given (already trimmed by the caller —
+  /// see `ItemCatalogueSearchService`) via [getAuthenticatedJson]'s
+  /// percent-encoded `queryParameters`, so a space or other special
+  /// character is never manually concatenated into the query string.
+  ///
+  /// [page]/[perPage] are clamped the same way as [fetchItems]/
+  /// [fetchInventory]/every other Business Central list call on this
+  /// client.
+  Future<PaginatedResponse<BusinessCentralItemSearchGroup>> searchItems({
+    required String token,
+    required String search,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.itemsPath,
+      token: token,
+      queryParameters: {
+        'search': search,
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+      },
+    );
+
+    
+
+    final PaginatedResponse<BusinessCentralItemSearchGroup> decoded;
+    try {
+      decoded = _decodeItemSearchResponse(response);
+    } on AncApiException catch (error) {
+      
+      rethrow;
+    }
+
+    
+    for (final group in decoded.data) {
+      debugPrint(
+      
+        'variations=${group.variations.length}',
+      );
+    }
+
+    return decoded;
+  }
+
   /// Calls `GET /api/business-central/inventory` for the authenticated
-  /// user, requesting [page] at a fixed [perPage] size. Like [fetchItems],
-  /// this data is company-scoped rather than user-specific, but the request
-  /// still requires the same Bearer authentication as every other Business
-  /// Central endpoint. Never sends a customer identifier.
+  /// user, requesting [page] at a fixed [perPage] size, filtered to the
+  /// exact Business Central item [itemNo]. Like [fetchItems], this data is
+  /// company-scoped rather than user-specific, but the request still
+  /// requires the same Bearer authentication as every other Business Central
+  /// endpoint. Never sends a customer identifier.
   ///
   /// [page] is clamped to `>= 1` and [perPage] to
   /// `[ApiConfig.businessCentralMinPerPage, ApiConfig.businessCentralMaxPerPage]`
   /// before the request is sent, same as [fetchLedgerEntries]/
   /// [fetchPayments]/[fetchInvoices]/[fetchItems].
   ///
-  /// [itemNo], when supplied, is sent as the `item_no` query parameter,
-  /// filtering the response to that exact Business Central item — see
-  /// `ApiStockLookupService`, the only caller that supplies it. Sent via
-  /// [getAuthenticatedJson]'s `queryParameters` (backed by [Uri.replace]),
-  /// never by manual string concatenation, so a value containing a space,
-  /// hyphen, or slash is percent-encoded safely. Omitted entirely (not sent
-  /// as an empty string) when `null`, so every other caller of this method
-  /// — e.g. `InventoryService`'s unfiltered paging — is unaffected.
+  /// [itemNo] is REQUIRED per the confirmed contract: `GET
+  /// /api/business-central/inventory` now rejects a missing `item_no` with
+  /// HTTP 422. Sent as-is (not trimmed — trimming/emptiness is the calling
+  /// service's boundary responsibility, same as [searchItems]'s [search]) as
+  /// the `item_no` query parameter via [getAuthenticatedJson]'s
+  /// `queryParameters` (backed by [Uri.replace]), never by manual string
+  /// concatenation, so a value containing a space, hyphen, or slash is
+  /// percent-encoded safely. A blank (empty or whitespace-only) [itemNo]
+  /// throws [ArgumentError] instead of silently sending an empty/omitted
+  /// `item_no` — this method must never generate an unfiltered inventory
+  /// request.
   ///
   /// Deliberately has no `fetchInventoryPage(nextPageUrl:)` counterpart, for
   /// the same reason as [fetchItems]: a live response for this endpoint is
@@ -449,10 +515,14 @@ class AncApiClient {
   /// `ApiStockLookupService`.
   Future<PaginatedResponse<BusinessCentralInventoryEntry>> fetchInventory({
     required String token,
+    required String itemNo,
     int page = 1,
     int perPage = ApiConfig.businessCentralDefaultPerPage,
-    String? itemNo,
   }) async {
+    if (itemNo.trim().isEmpty) {
+      throw ArgumentError.value(itemNo, 'itemNo', 'must not be blank');
+    }
+
     final safePage = page < 1 ? 1 : page;
     final safePerPage = perPage.clamp(
       ApiConfig.businessCentralMinPerPage,
@@ -465,7 +535,7 @@ class AncApiClient {
       queryParameters: {
         'page': '$safePage',
         'per_page': '$safePerPage',
-        'item_no': ?itemNo,
+        'item_no': itemNo,
       },
     );
     return _decodeInventoryResponse(response);
@@ -1107,6 +1177,39 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API items request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a `search`-scoped items response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [BusinessCentralItemSearchGroup] — the grouped
+  /// shape this endpoint returns only when a `search` query parameter was
+  /// sent (see [searchItems]) — never [BusinessCentralItem]. Every other
+  /// status raises [AncHttpException] with that [statusCode] — including a
+  /// parsed [ApiValidationError] for 422 — the same shape as
+  /// [_decodeItemsResponse].
+  PaginatedResponse<BusinessCentralItemSearchGroup> _decodeItemSearchResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralItemSearchGroup>.fromJson(
+          json,
+          BusinessCentralItemSearchGroup.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed item search response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API item search request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))

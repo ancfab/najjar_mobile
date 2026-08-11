@@ -47,7 +47,15 @@
     "enterCatalogueCode": "أدخل رمز الكتالوج",
     "checkAvailabilityHelper": "تحقق بسرعة من التوفر في جميع المستودعات.",
     "activeOrders": "الطلبات النشطة",
-    "overdueInvoices": "الفواتير المتأخرة"
+    "overdueInvoices": "الفواتير المتأخرة",
+    "catalogueSearchError": "حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى.",
+    "catalogueSearchUnavailable": "غير متاح مؤقتًا.",
+    "catalogueNoMatchFound": "لم يتم العثور على كتالوج لـ \"{code}\".",
+    "catalogueMatchingTitle": "الكتالوجات المطابقة",
+    "catalogueGroupLabel": "كتالوج {code}",
+    "catalogueVariationCount": "{count} صنف فرعي",
+    "catalogueGroupTotalInventory": "إجمالي المجموعة: {amount}",
+    "catalogueSelectVariation": "اختر صنفًا فرعيًا"
   },
   "balanceCard": {
     "label": "الرصيد الحالي",

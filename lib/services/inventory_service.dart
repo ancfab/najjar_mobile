@@ -7,17 +7,25 @@ import 'business_central_error_mapper.dart';
 import 'secure_auth_session_store.dart';
 import 'session_expiry_coordinator.dart';
 
-/// Purpose: Owns paging through the Business Central inventory endpoint for
-/// one caller's lifetime, following the same lifecycle/error-handling
-/// architecture as `ItemsService`/`PaymentsService`/`InvoicesService`. Not
-/// yet wired to any screen — this is the reusable data-load engine only.
-/// The scanned-code identity (itemNo vs. GTIN vs. commonItemNo vs. batch ID
-/// vs. documentNo) is still unresolved, so this service exposes only raw,
-/// unfiltered, unaggregated pagination — no scan-to-stock lookup.
+/// Purpose: Owns paging through the Business Central inventory endpoint,
+/// filtered to one exact `itemNo`, for one caller's lifetime, following the
+/// same lifecycle/error-handling architecture as
+/// `ItemsService`/`PaymentsService`/`InvoicesService`. Not yet wired to any
+/// screen — this is the reusable data-load engine only; `ApiStockLookupService`
+/// is the production `itemNo` → availability path.
+///
+/// CONFIRMED(inventory contract): `GET /api/business-central/inventory`
+/// requires `item_no` — a missing value is rejected with HTTP 422. This
+/// service therefore requires an exact `itemNo` up front (see
+/// [loadFirstPage]) and never pages through the endpoint unfiltered. It
+/// still performs no further business filtering — `open`, zero/negative
+/// quantities, or location — on the rows the backend returns; see
+/// `ApiStockLookupService` for that aggregation.
 ///
 /// Responsibilities:
-/// - Load the first page, load the next page, and refresh (restart from
-///   page 1), always at a fixed page size recorded from the first load.
+/// - Load the first page (for the [loadFirstPage]-supplied `itemNo`), load
+///   the next page, and refresh (restart from page 1 for the same
+///   `itemNo`), always at a fixed page size recorded from the first load.
 /// - Advance pagination only by requesting `page: currentPage + 1` against
 ///   the fixed inventory endpoint with the original `perPage` — never by
 ///   following a backend-provided `next_page_url`/`first_page_url`/
@@ -69,6 +77,11 @@ class InventoryService {
   int _currentPage = 1;
   int _lastPage = 1;
 
+  /// The exact Business Central `itemNo` this session is scoped to — set by
+  /// [loadFirstPage] and reused by every subsequent [loadNextPage]/[refresh]
+  /// call. `null` until [loadFirstPage] has been called at least once.
+  String? _itemNo;
+
   /// The fixed `per_page` size sent on every request — page 1 and every
   /// subsequent `loadNextPage()` call alike — so the effective page size
   /// never drifts across a paging session.
@@ -103,17 +116,38 @@ class InventoryService {
   bool get isLoadingFirstPage => _isLoadingFirstPage;
   bool get isLoadingMore => _isLoadingMore;
 
-  /// Loads page 1. Safe to call while already loading (a duplicate call is
-  /// ignored) — see [refresh] for restarting an already-loaded list.
-  Future<void> loadFirstPage() => _loadFirstPage();
+  /// Loads page 1, filtered to the exact Business Central [itemNo] — see the
+  /// class-level doc comment on why this is now required (a missing
+  /// `item_no` is rejected by the backend with HTTP 422). Safe to call while
+  /// already loading (a duplicate call is ignored) — see [refresh] for
+  /// restarting an already-loaded list for the same [itemNo].
+  ///
+  /// Throws [ArgumentError] if [itemNo] is blank (empty or whitespace-only)
+  /// rather than silently sending — or omitting — an empty `item_no`; this
+  /// service must never generate an unfiltered inventory request.
+  Future<void> loadFirstPage({required String itemNo}) {
+    if (itemNo.trim().isEmpty) {
+      throw ArgumentError.value(itemNo, 'itemNo', 'must not be blank');
+    }
+    _itemNo = itemNo;
+    return _loadFirstPage();
+  }
 
-  /// Restarts paging from page 1, replacing [entries] only once the new
-  /// first page succeeds. Any load-more in flight when this is called will,
-  /// on completion, recognize itself as stale (via the generation counter)
-  /// and be discarded rather than appended onto the refreshed rows.
-  Future<void> refresh() => _loadFirstPage();
+  /// Restarts paging from page 1 for the same `itemNo` last passed to
+  /// [loadFirstPage], replacing [entries] only once the new first page
+  /// succeeds. Any load-more in flight when this is called will, on
+  /// completion, recognize itself as stale (via the generation counter) and
+  /// be discarded rather than appended onto the refreshed rows.
+  ///
+  /// A no-op if [loadFirstPage] has never been called.
+  Future<void> refresh() {
+    if (_itemNo == null) return Future<void>.value();
+    return _loadFirstPage();
+  }
 
   Future<void> _loadFirstPage() async {
+    final itemNo = _itemNo;
+    if (itemNo == null) return; // loadFirstPage(itemNo:) never called
     if (_isLoadingFirstPage) return;
     _isLoadingFirstPage = true;
     final myGeneration = ++_generation;
@@ -122,6 +156,7 @@ class InventoryService {
       final token = await _requireToken();
       final page = await _apiClient.fetchInventory(
         token: token,
+        itemNo: itemNo,
         page: 1,
         perPage: _perPage,
       );
@@ -144,6 +179,8 @@ class InventoryService {
   /// load-more is already in flight, and when no next page exists. On
   /// failure, [entries] is left exactly as it was.
   Future<void> loadNextPage() async {
+    final itemNo = _itemNo;
+    if (itemNo == null) return; // loadFirstPage(itemNo:) never called
     if (_isLoadingFirstPage || _isLoadingMore) return;
     if (!hasNextPage) return;
 
@@ -155,6 +192,7 @@ class InventoryService {
       final token = await _requireToken();
       final page = await _apiClient.fetchInventory(
         token: token,
+        itemNo: itemNo,
         page: requestedPage,
         perPage: _perPage,
       );

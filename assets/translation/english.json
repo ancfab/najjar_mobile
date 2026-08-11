@@ -47,7 +47,15 @@
     "enterCatalogueCode": "Enter Catalogue Code",
     "checkAvailabilityHelper": "Quickly check availability across all warehouses.",
     "activeOrders": "Active Orders",
-    "overdueInvoices": "Overdue Invoices"
+    "overdueInvoices": "Overdue Invoices",
+    "catalogueSearchError": "Something went wrong while searching. Please try again.",
+    "catalogueSearchUnavailable": "Temporarily unavailable.",
+    "catalogueNoMatchFound": "No catalogue found for \"{code}\".",
+    "catalogueMatchingTitle": "Matching catalogues",
+    "catalogueGroupLabel": "Catalogue {code}",
+    "catalogueVariationCount": "{count} variations",
+    "catalogueGroupTotalInventory": "Group total: {amount}",
+    "catalogueSelectVariation": "Select a variation"
   },
   "balanceCard": {
     "label": "CURRENT BALANCE",

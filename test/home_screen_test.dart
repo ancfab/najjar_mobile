@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:anc_fabrics/models/business_central/business_central_item_search_group.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
@@ -18,6 +19,7 @@ import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
+import 'package:anc_fabrics/services/item_catalogue_search_service.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
 import 'package:anc_fabrics/widgets/availability_search_card.dart';
@@ -28,8 +30,37 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 import 'helpers/fake_current_balance_data_source.dart';
+import 'helpers/fake_item_catalogue_search_service.dart';
 import 'helpers/fake_last_payment_data_source.dart';
 import 'helpers/fake_stock_lookup_service.dart';
+
+/// Builds a single-variation exact-commonItemNo match, the common fixture
+/// shape for tests that only care about the eventual stock lookup, not
+/// catalogue search/suggestion behavior itself — [commonItemNo] and
+/// [itemNo] default to the same value so "search X" resolves straight to
+/// one variation whose itemNo is also X.
+ItemCatalogueExactMatch _singleVariationExactMatch(
+  String commonItemNo, {
+  String? itemNo,
+  String? description,
+}) {
+  final resolvedItemNo = itemNo ?? commonItemNo;
+  return ItemCatalogueExactMatch(
+    commonItemNo,
+    BusinessCentralItemSearchGroup(
+      commonItemNo: commonItemNo,
+      totalInventory: 0,
+      variations: [
+        BusinessCentralItemVariation(
+          id: 'id-$resolvedItemNo',
+          itemNo: resolvedItemNo,
+          commonItemNo: commonItemNo,
+          description: description,
+        ),
+      ],
+    ),
+  );
+}
 
 /// A canned live [PaymentEntry] matching the confirmed API contract's
 /// example payload (negative `amount`, non-USD `currencyCode`), used as the
@@ -77,6 +108,7 @@ Future<void> _pumpHomeScreen(
   LastPaymentDataSource? lastPaymentSource,
   CurrentBalanceDataSource? currentBalanceSource,
   StockLookupService? checkAvailabilityService,
+  ItemCatalogueSearchService? catalogueSearchService,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -100,10 +132,13 @@ Future<void> _pumpHomeScreen(
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
         // Check Availability only performs a lookup on user action (unlike
-        // Last Payment, it never auto-fetches on initState), so this fake
-        // is never actually invoked by tests that don't search — it exists
-        // so a test that DOES search never accidentally reaches the live
-        // ApiStockLookupService default (real HTTP/secure storage).
+        // Last Payment, it never auto-fetches on initState), so these fakes
+        // are never actually invoked by tests that don't search — they
+        // exist so a test that DOES search never accidentally reaches the
+        // live ApiItemCatalogueSearchService/ApiStockLookupService defaults
+        // (real HTTP/secure storage).
+        catalogueSearchService:
+            catalogueSearchService ?? FakeItemCatalogueSearchService(),
         checkAvailabilityService:
             checkAvailabilityService ?? FakeStockLookupService(),
       ),
@@ -312,83 +347,95 @@ void main() {
   });
 
   testWidgets(
-    'Catalogue lookup shows a validation error on empty input without '
+    'Catalogue search shows a validation error on empty input without '
     'calling the API',
     (tester) async {
-      final stockLookupService = FakeStockLookupService();
+      final catalogueSearchService = FakeItemCatalogueSearchService();
       await _pumpHomeScreen(
         tester,
         390,
-        checkAvailabilityService: stockLookupService,
+        catalogueSearchService: catalogueSearchService,
       );
 
       await tester.tap(find.byIcon(Icons.search_rounded));
       await tester.pump();
 
       expect(find.text('Please enter a catalogue code.'), findsOneWidget);
-      expect(stockLookupService.callCount, 0);
+      expect(catalogueSearchService.callCount, 0);
     },
   );
 
-  testWidgets('Catalogue lookup shows loading then a success result', (
-    tester,
-  ) async {
-    final gate = Completer<void>();
-    final stockLookupService = FakeStockLookupService()
-      ..gate = gate
-      ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
-        rawCode,
-        scannedAt: DateTime(2026, 1, 1),
-        description: 'Test Fabric',
-        availabilityByLocation: const [
-          StockLocationAvailability(
-            locationCode: 'LOC-01',
-            remainingQuantity: 80,
-            unitOfMeasureCode: 'MT',
-          ),
-        ],
+  testWidgets(
+    'Catalogue search resolves an exact match, and selecting its only '
+    'variation shows a success result',
+    (tester) async {
+      final gate = Completer<void>();
+      final catalogueSearchService = FakeItemCatalogueSearchService()
+        ..gate = gate
+        ..defaultResultBuilder = (query) =>
+            _singleVariationExactMatch(query, description: 'Test Fabric');
+      final stockLookupService = FakeStockLookupService()
+        ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
+          rawCode,
+          scannedAt: DateTime(2026, 1, 1),
+          description: 'Test Fabric',
+          availabilityByLocation: const [
+            StockLocationAvailability(
+              locationCode: 'LOC-01',
+              remainingQuantity: 80,
+              unitOfMeasureCode: 'MT',
+            ),
+          ],
+        );
+      await _pumpHomeScreen(
+        tester,
+        390,
+        catalogueSearchService: catalogueSearchService,
+        checkAvailabilityService: stockLookupService,
       );
-    await _pumpHomeScreen(
-      tester,
-      390,
-      checkAvailabilityService: stockLookupService,
-    );
 
-    await tester.enterText(find.byType(TextField), 'TEST-ITEM-01');
-    await tester.tap(find.byIcon(Icons.search_rounded));
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), 'TEST-ITEM-01');
+      await tester.tap(find.byIcon(Icons.search_rounded));
+      await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(stockLookupService.calls, ['TEST-ITEM-01']);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(catalogueSearchService.calls, ['TEST-ITEM-01']);
 
-    gate.complete();
-    await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
 
-    expect(
-      find.text('Test Fabric\n80 MT available at LOC-01.'),
-      findsOneWidget,
-    );
-  });
+      expect(stockLookupService.calls, isEmpty, reason: 'not selected yet');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('variation-TEST-ITEM-01')),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
+      await tester.pumpAndSettle();
 
-  testWidgets('Catalogue lookup shows a no-results state for unknown codes', (
+      expect(stockLookupService.calls, ['TEST-ITEM-01']);
+      expect(
+        find.text('Test Fabric\n80 MT available at LOC-01.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('Catalogue search shows a no-match state for unknown codes', (
     tester,
   ) async {
-    final stockLookupService = FakeStockLookupService()
-      ..defaultResultBuilder = StockLookupNotFound.new;
+    final catalogueSearchService = FakeItemCatalogueSearchService()
+      ..defaultResultBuilder = ItemCatalogueNoResults.new;
     await _pumpHomeScreen(
       tester,
       390,
-      checkAvailabilityService: stockLookupService,
+      catalogueSearchService: catalogueSearchService,
     );
 
     await tester.enterText(find.byType(TextField), 'UNKNOWN-CODE');
     await tester.tap(find.byIcon(Icons.search_rounded));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('No availability found for "UNKNOWN-CODE".'),
-      findsOneWidget,
-    );
+    expect(find.text('No catalogue found for "UNKNOWN-CODE".'), findsOneWidget);
   });
 
   group('Check Availability card', () {
@@ -401,251 +448,209 @@ void main() {
       matching: find.byType(InkWell),
     );
 
-    testWidgets('surrounding whitespace is trimmed before the lookup', (
-      tester,
-    ) async {
-      final stockLookupService = FakeStockLookupService();
-      await _pumpHomeScreen(
+    group('catalogue search', () {
+      testWidgets('surrounding whitespace is trimmed before searching', (
         tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), '  TEST-ITEM-01  ');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(stockLookupService.calls, ['TEST-ITEM-01']);
-    });
-
-    testWidgets('a meaningful internal space is preserved exactly', (
-      tester,
-    ) async {
-      final stockLookupService = FakeStockLookupService();
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), '  1038 01  ');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(stockLookupService.calls, ['1038 01']);
-    });
-
-    testWidgets('multiple locations and different units remain separate, never '
-        'combined into one total', (tester) async {
-      final stockLookupService = FakeStockLookupService()
-        ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
-          rawCode,
-          scannedAt: DateTime(2026, 1, 1),
-          availabilityByLocation: const [
-            StockLocationAvailability(
-              locationCode: 'LOC-01',
-              remainingQuantity: 80,
-              unitOfMeasureCode: 'MT',
-            ),
-            StockLocationAvailability(
-              locationCode: 'LOC-02',
-              remainingQuantity: 15,
-              unitOfMeasureCode: 'YD',
-            ),
-          ],
-        );
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), 'TEST-ITEM-01');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('80 MT available at LOC-01.\n15 YD available at LOC-02.'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets(
-      'duplicate submissions are prevented while a lookup is active',
-      (tester) async {
-        final gate = Completer<void>();
-        final stockLookupService = FakeStockLookupService()..gate = gate;
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService();
         await _pumpHomeScreen(
           tester,
           390,
-          checkAvailabilityService: stockLookupService,
+          catalogueSearchService: catalogueSearchService,
         );
 
-        await tester.enterText(find.byType(TextField), 'ITEM-DUP');
-        await tester.tap(searchButtonFinder);
-        await tester.pump();
-
-        expect(stockLookupService.callCount, 1);
-
-        // A further tap while loading (the button now shows a spinner,
-        // onTap: null) must not start a second lookup.
-        await tester.tap(searchButtonFinder, warnIfMissed: false);
-        await tester.pump();
-
-        expect(stockLookupService.callCount, 1);
-
-        gate.complete();
-        await tester.pumpAndSettle();
-      },
-    );
-
-    testWidgets(
-      'keyboard submission and the search button use the same lookup logic',
-      (tester) async {
-        final stockLookupService = FakeStockLookupService()
-          ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
-            rawCode,
-            scannedAt: DateTime(2026, 1, 1),
-            availabilityByLocation: const [
-              StockLocationAvailability(
-                locationCode: 'LOC-01',
-                remainingQuantity: 80,
-                unitOfMeasureCode: 'MT',
-              ),
-            ],
-          );
-        await _pumpHomeScreen(
-          tester,
-          390,
-          checkAvailabilityService: stockLookupService,
-        );
-
-        await tester.enterText(find.byType(TextField), 'ITEM-KB');
-        await tester.testTextInput.receiveAction(TextInputAction.done);
-        await tester.pumpAndSettle();
-
-        expect(stockLookupService.calls, ['ITEM-KB']);
-        expect(
-          find.descendant(
-            of: find.byType(AvailabilitySearchCard),
-            matching: find.textContaining('available'),
-          ),
-          findsOneWidget,
-          reason:
-              'the default StockLookupSuccess fixture always yields a '
-              'success result, whichever code path triggered it',
-        );
-      },
-    );
-
-    testWidgets('HTTP 401 (session expiry) shows no local error card', (
-      tester,
-    ) async {
-      final stockLookupService = FakeStockLookupService()
-        ..defaultResultBuilder = StockLookupSessionExpired.new;
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), 'ITEM-401');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('available'), findsNothing);
-      expect(
-        find.text('Something went wrong. Please try again.'),
-        findsNothing,
-      );
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('HTTP 502 / a network failure shows a retryable error', (
-      tester,
-    ) async {
-      final stockLookupService = FakeStockLookupService()
-        ..defaultResultBuilder = StockLookupRetryableFailure.new;
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), 'ITEM-502');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Something went wrong. Please try again.'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('HTTP 503 shows a distinct temporarily-unavailable error', (
-      tester,
-    ) async {
-      final stockLookupService = FakeStockLookupService()
-        ..defaultResultBuilder = StockLookupTemporarilyUnavailable.new;
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), 'ITEM-503');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Temporarily unavailable.'), findsOneWidget);
-    });
-
-    testWidgets('a malformed successful response fails safely', (tester) async {
-      final stockLookupService = FakeStockLookupService()
-        ..defaultResultBuilder = StockLookupUnexpectedFailure.new;
-      await _pumpHomeScreen(
-        tester,
-        390,
-        checkAvailabilityService: stockLookupService,
-      );
-
-      await tester.enterText(find.byType(TextField), 'ITEM-MALFORMED');
-      await tester.tap(find.byIcon(Icons.search_rounded));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Something went wrong. Please try again.'),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets(
-      'retry after a failure sends a new API request and no mock result is '
-      'ever shown',
-      (tester) async {
-        final stockLookupService = FakeStockLookupService()
-          ..defaultResultBuilder = StockLookupRetryableFailure.new;
-        await _pumpHomeScreen(
-          tester,
-          390,
-          checkAvailabilityService: stockLookupService,
-        );
-
-        await tester.enterText(find.byType(TextField), 'ITEM-RETRY');
+        await tester.enterText(find.byType(TextField), '  TEST-ITEM-01  ');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
 
-        expect(stockLookupService.callCount, 1);
+        expect(catalogueSearchService.calls, ['TEST-ITEM-01']);
+      });
+
+      testWidgets('a meaningful internal space is preserved exactly', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService();
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), '  1038 01  ');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        expect(catalogueSearchService.calls, ['1038 01']);
+      });
+
+      testWidgets(
+        'duplicate submissions are prevented while a search is active',
+        (tester) async {
+          final gate = Completer<void>();
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..gate = gate;
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-DUP');
+          await tester.tap(searchButtonFinder);
+          await tester.pump();
+
+          expect(catalogueSearchService.callCount, 1);
+
+          // A further tap while loading (the button now shows a spinner,
+          // onTap: null) must not start a second search.
+          await tester.tap(searchButtonFinder, warnIfMissed: false);
+          await tester.pump();
+
+          expect(catalogueSearchService.callCount, 1);
+
+          gate.complete();
+          await tester.pumpAndSettle();
+        },
+      );
+
+      testWidgets(
+        'keyboard submission and the search button use the same search '
+        'logic',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-KB');
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pumpAndSettle();
+
+          expect(catalogueSearchService.calls, ['ITEM-KB']);
+          expect(
+            find.byKey(const ValueKey('variation-ITEM-KB')),
+            findsOneWidget,
+            reason:
+                'the default exact-match fixture always yields a resolved '
+                'group, whichever code path triggered the search',
+          );
+        },
+      );
+
+      testWidgets('HTTP 401 (session expiry) shows no local error card', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = ItemCatalogueSessionExpired.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-401');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
         expect(
-          find.text('Something went wrong. Please try again.'),
+          find.text('Something went wrong while searching. Please try again.'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('HTTP 502 / a network failure shows a retryable error', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = ItemCatalogueRetryableFailure.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-502');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Something went wrong while searching. Please try again.'),
           findsOneWidget,
         );
-        expect(find.text('320 yd available at Warehouse A.'), findsNothing);
-        expect(find.textContaining('\$1,250.00'), findsNothing);
+      });
 
-        stockLookupService.defaultResultBuilder = (rawCode) =>
-            StockLookupSuccess(
+      testWidgets('HTTP 503 shows a distinct temporarily-unavailable error', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = ItemCatalogueTemporarilyUnavailable.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-503');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Temporarily unavailable.'), findsOneWidget);
+      });
+
+      testWidgets(
+        'retry after a search failure sends a new API request and no mock '
+        'result is ever shown',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = ItemCatalogueRetryableFailure.new;
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-RETRY');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          expect(catalogueSearchService.callCount, 1);
+          expect(
+            find.text(
+              'Something went wrong while searching. Please try again.',
+            ),
+            findsOneWidget,
+          );
+
+          catalogueSearchService.defaultResultBuilder =
+              _singleVariationExactMatch;
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          expect(catalogueSearchService.callCount, 2);
+          expect(
+            find.byKey(const ValueKey('variation-ITEM-RETRY')),
+            findsOneWidget,
+          );
+          expect(
+            find.text(
+              'Something went wrong while searching. Please try again.',
+            ),
+            findsNothing,
+          );
+        },
+      );
+
+      testWidgets(
+        'starting a new search clears a previous selection and result',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final stockLookupService = FakeStockLookupService()
+            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
               rawCode,
               scannedAt: DateTime(2026, 1, 1),
               availabilityByLocation: const [
@@ -656,17 +661,701 @@ void main() {
                 ),
               ],
             );
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-A');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('variation-ITEM-A')),
+          );
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('variation-ITEM-A')));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('variation-ITEM-A')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('available'), findsOneWidget);
+
+          await tester.enterText(find.byType(TextField), 'ITEM-B');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          expect(find.byKey(const ValueKey('variation-ITEM-A')), findsNothing);
+          expect(find.textContaining('available'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('variation-ITEM-B')),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
+        'an exact commonItemNo match shows only that group\'s variations, '
+        'never other groups the search also returned',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = (query) => ItemCatalogueExactMatch(
+              query,
+              const BusinessCentralItemSearchGroup(
+                commonItemNo: '1012',
+                totalInventory: 2523.9,
+                variations: [
+                  BusinessCentralItemVariation(id: 'id-1', itemNo: '1012A01'),
+                  BusinessCentralItemVariation(id: 'id-2', itemNo: '1012A02'),
+                ],
+              ),
+            );
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+          );
+
+          await tester.enterText(find.byType(TextField), '1012');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('variation-1012A01')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('variation-1012A02')),
+            findsOneWidget,
+          );
+          expect(find.text('Catalogue 1012'), findsOneWidget);
+          expect(find.text('Matching catalogues'), findsNothing);
+        },
+      );
+
+      testWidgets('no exact commonItemNo match shows every returned group as a '
+          'suggestion', (tester) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = (query) => ItemCatalogueSuggestions(query, [
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1101',
+              totalInventory: 40,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-1', itemNo: '110120'),
+              ],
+            ),
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1610',
+              totalInventory: 12,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-2', itemNo: '161012'),
+              ],
+            ),
+          ]);
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), '1012');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
 
-        expect(stockLookupService.callCount, 2);
-        expect(find.text('80 MT available at LOC-01.'), findsOneWidget);
+        expect(find.text('Matching catalogues'), findsOneWidget);
+        expect(find.text('Catalogue 1101'), findsOneWidget);
+        expect(find.text('Catalogue 1610'), findsOneWidget);
+        expect(find.byKey(const ValueKey('variation-110120')), findsNothing);
+      });
+    });
+
+    group('variation selection and stock lookup', () {
+      testWidgets('selecting a variation looks up its exact itemNo', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = (query) => ItemCatalogueExactMatch(
+            query,
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1012',
+              totalInventory: 100,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-1', itemNo: '1012A01'),
+                BusinessCentralItemVariation(id: 'id-2', itemNo: '1012B03'),
+              ],
+            ),
+          );
+        final stockLookupService = FakeStockLookupService();
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), '1012');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-1012B03')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-1012B03')));
+        await tester.pumpAndSettle();
+
+        expect(stockLookupService.calls, ['1012B03']);
+      });
+
+      testWidgets('tapping a visible variation row calls the catalogue search '
+          'exactly once (for the original query) and the stock lookup '
+          'exactly once (for the exact itemNo) — never a second catalogue '
+          'search for the itemNo', (tester) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = (query) => ItemCatalogueExactMatch(
+            query,
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1012',
+              totalInventory: 2523.9,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-1', itemNo: '1012A01'),
+                BusinessCentralItemVariation(id: 'id-2', itemNo: '1012A02'),
+              ],
+            ),
+          );
+        final stockLookupService = FakeStockLookupService();
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        // 1-2. Enter "1012" and tap Search.
+        await tester.enterText(find.byType(TextField), '1012');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        // 3-4. The fake catalogue service resolves to the exact 1012
+        // group, and 1012A01 is visible as a variation row.
+        expect(find.byKey(const ValueKey('variation-1012A01')), findsOneWidget);
+
+        // 5. Tap the visible 1012A01 row.
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-1012A01')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-1012A01')));
+        await tester.pumpAndSettle();
+
+        // 6. Catalogue search was called exactly once, with "1012" only.
+        expect(catalogueSearchService.calls, ['1012']);
+        // 7. Stock lookup was called exactly once, with "1012A01".
+        expect(stockLookupService.calls, ['1012A01']);
+        // 8. Catalogue search was never called again — in particular
+        // never with the selected exact itemNo "1012A01".
+        expect(catalogueSearchService.calls, isNot(contains('1012A01')));
+      });
+
+      testWidgets('manually typing the exact itemNo and pressing Search calls '
+          'catalogue search with it — a distinct user action from tapping '
+          'an already-visible variation row', (tester) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = (query) =>
+              ItemCatalogueSuggestions(query, const [
+                BusinessCentralItemSearchGroup(
+                  commonItemNo: '1012',
+                  totalInventory: 2523.9,
+                  variations: [
+                    BusinessCentralItemVariation(id: 'id-1', itemNo: '1012A01'),
+                  ],
+                ),
+              ]);
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), '1012A01');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+
+        expect(catalogueSearchService.calls, ['1012A01']);
+        expect(find.text('Matching catalogues'), findsOneWidget);
+      });
+
+      testWidgets(
+        'tapping the "Catalogue 1012 / N variations" header collapses and '
+        're-expands the variation list without calling catalogue search or '
+        'stock lookup',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = (query) => ItemCatalogueExactMatch(
+              query,
+              const BusinessCentralItemSearchGroup(
+                commonItemNo: '1012',
+                totalInventory: 2523.9,
+                variations: [
+                  BusinessCentralItemVariation(id: 'id-1', itemNo: '1012A01'),
+                  BusinessCentralItemVariation(id: 'id-2', itemNo: '1012A02'),
+                ],
+              ),
+            );
+          final stockLookupService = FakeStockLookupService();
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), '1012');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          // Starts expanded: both variations visible, chevron pointing down.
+          expect(
+            find.byKey(const ValueKey('variation-1012A01')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('variation-1012A02')),
+            findsOneWidget,
+          );
+          expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
+          expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+
+          // Tap the header — collapses the list, chevron flips.
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('catalogue-variations-header')),
+          );
+          await tester.pump();
+          await tester.tap(
+            find.byKey(const ValueKey('catalogue-variations-header')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.byKey(const ValueKey('variation-1012A01')), findsNothing);
+          expect(find.byKey(const ValueKey('variation-1012A02')), findsNothing);
+          expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+          expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
+
+          // Tap it again — re-expands.
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('catalogue-variations-header')),
+          );
+          await tester.pump();
+          await tester.tap(
+            find.byKey(const ValueKey('catalogue-variations-header')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('variation-1012A01')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('variation-1012A02')),
+            findsOneWidget,
+          );
+          expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
+
+          // Neither collapse nor re-expand ever touched catalogue search
+          // (still exactly the one original "1012" call) or stock lookup
+          // (never called at all — no variation was selected).
+          expect(catalogueSearchService.calls, ['1012']);
+          expect(stockLookupService.calls, isEmpty);
+        },
+      );
+
+      testWidgets('multiple locations and different units remain separate, '
+          'never combined into one total', (tester) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = _singleVariationExactMatch;
+        final stockLookupService = FakeStockLookupService()
+          ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
+            rawCode,
+            scannedAt: DateTime(2026, 1, 1),
+            availabilityByLocation: const [
+              StockLocationAvailability(
+                locationCode: 'LOC-01',
+                remainingQuantity: 80,
+                unitOfMeasureCode: 'MT',
+              ),
+              StockLocationAvailability(
+                locationCode: 'LOC-02',
+                remainingQuantity: 15,
+                unitOfMeasureCode: 'YD',
+              ),
+            ],
+          );
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'TEST-ITEM-01');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-TEST-ITEM-01')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('80 MT available at LOC-01.\n15 YD available at LOC-02.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets(
+        'duplicate submissions are prevented while a lookup is active',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final gate = Completer<void>();
+          final stockLookupService = FakeStockLookupService()..gate = gate;
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-DUP');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          final variationFinder = find.byKey(
+            const ValueKey('variation-ITEM-DUP'),
+          );
+          await tester.ensureVisible(variationFinder);
+          await tester.pump();
+          await tester.tap(variationFinder);
+          await tester.pump();
+
+          expect(stockLookupService.callCount, 1);
+
+          // A further tap while the lookup is loading must not start a
+          // second one.
+          await tester.ensureVisible(variationFinder);
+          await tester.pump();
+          await tester.tap(variationFinder);
+          await tester.pump();
+
+          expect(stockLookupService.callCount, 1);
+
+          gate.complete();
+          await tester.pumpAndSettle();
+        },
+      );
+
+      testWidgets('HTTP 401 (session expiry) shows no local error card', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = _singleVariationExactMatch;
+        final stockLookupService = FakeStockLookupService()
+          ..defaultResultBuilder = StockLookupSessionExpired.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-401');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-ITEM-401')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-ITEM-401')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('available'), findsNothing);
         expect(
           find.text('Something went wrong. Please try again.'),
           findsNothing,
         );
-      },
-    );
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('HTTP 502 / a network failure shows a retryable error', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = _singleVariationExactMatch;
+        final stockLookupService = FakeStockLookupService()
+          ..defaultResultBuilder = StockLookupRetryableFailure.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-502');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-ITEM-502')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-ITEM-502')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Something went wrong. Please try again.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('HTTP 503 shows a distinct temporarily-unavailable error', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = _singleVariationExactMatch;
+        final stockLookupService = FakeStockLookupService()
+          ..defaultResultBuilder = StockLookupTemporarilyUnavailable.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-503');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-ITEM-503')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('variation-ITEM-503')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Temporarily unavailable.'), findsOneWidget);
+      });
+
+      testWidgets('a malformed successful response fails safely', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = _singleVariationExactMatch;
+        final stockLookupService = FakeStockLookupService()
+          ..defaultResultBuilder = StockLookupUnexpectedFailure.new;
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+          checkAvailabilityService: stockLookupService,
+        );
+
+        await tester.enterText(find.byType(TextField), 'ITEM-MALFORMED');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('variation-ITEM-MALFORMED')),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('variation-ITEM-MALFORMED')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Something went wrong. Please try again.'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets(
+        'retry (re-tapping the variation) after a failure sends a new API '
+        'request and no mock result is ever shown',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final stockLookupService = FakeStockLookupService()
+            ..defaultResultBuilder = StockLookupRetryableFailure.new;
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-RETRY');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          final variationFinder = find.byKey(
+            const ValueKey('variation-ITEM-RETRY'),
+          );
+          await tester.ensureVisible(variationFinder);
+          await tester.pump();
+          await tester.tap(variationFinder);
+          await tester.pumpAndSettle();
+
+          expect(stockLookupService.callCount, 1);
+          expect(
+            find.text('Something went wrong. Please try again.'),
+            findsOneWidget,
+          );
+          expect(find.text('320 yd available at Warehouse A.'), findsNothing);
+          expect(find.textContaining('\$1,250.00'), findsNothing);
+
+          stockLookupService.defaultResultBuilder = (rawCode) =>
+              StockLookupSuccess(
+                rawCode,
+                scannedAt: DateTime(2026, 1, 1),
+                availabilityByLocation: const [
+                  StockLocationAvailability(
+                    locationCode: 'LOC-01',
+                    remainingQuantity: 80,
+                    unitOfMeasureCode: 'MT',
+                  ),
+                ],
+              );
+          await tester.ensureVisible(variationFinder);
+          await tester.pump();
+          await tester.tap(variationFinder);
+          await tester.pumpAndSettle();
+
+          expect(stockLookupService.callCount, 2);
+          expect(find.text('80 MT available at LOC-01.'), findsOneWidget);
+          expect(
+            find.text('Something went wrong. Please try again.'),
+            findsNothing,
+          );
+        },
+      );
+    });
+
+    group('catalogue suggestions', () {
+      testWidgets(
+        'selecting a suggestion shows its variations, then selecting a '
+        'variation performs the exact stock lookup',
+        (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = (query) => ItemCatalogueSuggestions(
+              query,
+              [
+                const BusinessCentralItemSearchGroup(
+                  commonItemNo: '1101',
+                  totalInventory: 40,
+                  variations: [
+                    BusinessCentralItemVariation(id: 'id-1', itemNo: '110120'),
+                    BusinessCentralItemVariation(id: 'id-2', itemNo: '110121'),
+                  ],
+                ),
+                const BusinessCentralItemSearchGroup(
+                  commonItemNo: '1610',
+                  totalInventory: 12,
+                  variations: [
+                    BusinessCentralItemVariation(id: 'id-3', itemNo: '161012'),
+                  ],
+                ),
+              ],
+            );
+          final stockLookupService = FakeStockLookupService();
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), '1012');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('catalogue-group-1101')),
+          );
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('catalogue-group-1101')));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('variation-110120')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('variation-110121')),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('variation-161012')), findsNothing);
+
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('variation-110121')),
+          );
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('variation-110121')));
+          await tester.pumpAndSettle();
+
+          expect(stockLookupService.calls, ['110121']);
+        },
+      );
+
+      testWidgets('"Matching catalogues" returns from a selected suggestion\'s '
+          'variations to the suggestions list, clearing the selection', (
+        tester,
+      ) async {
+        final catalogueSearchService = FakeItemCatalogueSearchService()
+          ..defaultResultBuilder = (query) => ItemCatalogueSuggestions(query, [
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1101',
+              totalInventory: 40,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-1', itemNo: '110120'),
+              ],
+            ),
+            const BusinessCentralItemSearchGroup(
+              commonItemNo: '1610',
+              totalInventory: 12,
+              variations: [
+                BusinessCentralItemVariation(id: 'id-2', itemNo: '161012'),
+              ],
+            ),
+          ]);
+        await _pumpHomeScreen(
+          tester,
+          390,
+          catalogueSearchService: catalogueSearchService,
+        );
+
+        await tester.enterText(find.byType(TextField), '1012');
+        await tester.tap(find.byIcon(Icons.search_rounded));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('catalogue-group-1101')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('catalogue-group-1101')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('variation-110120')), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Matching catalogues'));
+        await tester.pump();
+        await tester.tap(find.text('Matching catalogues'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Catalogue 1101'), findsOneWidget);
+        expect(find.text('Catalogue 1610'), findsOneWidget);
+        expect(find.byKey(const ValueKey('variation-110120')), findsNothing);
+      });
+    });
   });
 
   testWidgets('Pull-to-refresh reloads the dashboard without errors', (

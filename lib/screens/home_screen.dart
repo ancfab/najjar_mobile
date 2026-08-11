@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/demo_config.dart';
 import '../data/mock_user.dart';
 import '../localization/translations.dart';
+import '../models/business_central/business_central_item_search_group.dart';
 import '../models/business_central/payment_entry.dart';
 import '../models/home_dashboard_data.dart';
 import '../services/api_stock_lookup_service.dart';
@@ -11,6 +12,7 @@ import '../services/current_balance_data_source.dart';
 import '../services/current_balance_service.dart';
 import '../services/demo_current_balance_data_source.dart';
 import '../services/home_dashboard_service.dart';
+import '../services/item_catalogue_search_service.dart';
 import '../services/last_payment_data_source.dart';
 import '../services/stock_lookup_service.dart';
 import '../theme/app_colors.dart';
@@ -57,6 +59,22 @@ enum _CheckAvailabilityUiState {
   temporarilyUnavailable,
 }
 
+/// UI state for the Check Availability *catalogue search* step, derived
+/// from the [ItemCatalogueSearchResult] `ItemCatalogueSearchService`
+/// returns — this is the step ahead of [_CheckAvailabilityUiState], which
+/// now only covers the final stock lookup once a variation is selected. See
+/// `_HomeScreenState.searchFabricAvailabilityByCatalogueCode`.
+enum _CatalogueSearchUiState {
+  idle,
+  loading,
+  invalidInput,
+  noResults,
+  error,
+  temporarilyUnavailable,
+  exactMatch,
+  suggestions,
+}
+
 /// UI state for the Last Payment row, tracked independently of the rest of
 /// the dashboard (balance/orders/invoices) so a Payments API failure never
 /// blanks out those mock-backed sections, and vice versa — mirrors
@@ -96,6 +114,7 @@ class HomeScreen extends StatefulWidget {
     this.lastPaymentSource,
     this.currentBalanceSource,
     this.checkAvailabilityService,
+    this.catalogueSearchService,
   });
 
   /// Last Payment data seam. Defaults (lazily, in State) to
@@ -125,6 +144,14 @@ class HomeScreen extends StatefulWidget {
   /// making a real network call.
   final StockLookupService? checkAvailabilityService;
 
+  /// Check Availability card's catalogue-search seam, called first once the
+  /// user searches — resolves to an exact `commonItemNo` match or a set of
+  /// catalogue suggestions before any variation is looked up via
+  /// [checkAvailabilityService]. Left `null` here and resolved lazily in
+  /// [_HomeScreenState.initState], mirroring [checkAvailabilityService]'s
+  /// exact ownership-disposal pattern.
+  final ItemCatalogueSearchService? catalogueSearchService;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -149,6 +176,17 @@ class _HomeScreenState extends State<HomeScreen> {
   /// instance this screen ever closes; a caller-injected [StockLookupService]
   /// is left alone since this screen doesn't own it.
   ApiStockLookupService? _ownedCheckAvailabilityService;
+
+  /// Check Availability's catalogue-search seam actually used by
+  /// [searchFabricAvailabilityByCatalogueCode] — resolved in [initState],
+  /// mirroring [_checkAvailabilityService]'s exact pattern; see
+  /// [HomeScreen.catalogueSearchService]'s doc comment for why.
+  late final ItemCatalogueSearchService _catalogueSearchService;
+
+  /// Set only when this State created its own [ApiItemCatalogueSearchService]
+  /// (no [HomeScreen.catalogueSearchService] was injected) — the only
+  /// instance this screen ever closes.
+  ApiItemCatalogueSearchService? _ownedCatalogueSearchService;
 
   int _selectedNavIndex = _navIndexHome;
 
@@ -193,8 +231,52 @@ class _HomeScreenState extends State<HomeScreen> {
   /// superseded and discard its result instead of corrupting fresher state.
   int _lastPaymentRequestId = 0;
 
-  // Check Availability card state — loaded live from the Payments/Inventory
-  // API via the shared StockLookupService.
+  // Check Availability card state. Two steps: catalogue search (this
+  // screen's own ItemCatalogueSearchService) resolves the entered code to an
+  // exact commonItemNo group or a set of suggested groups; picking a
+  // variation from that group then runs the existing exact-itemNo stock
+  // lookup below via the shared StockLookupService — unchanged from before
+  // this feature, and identical to ScanStockScreen's lookup contract.
+  _CatalogueSearchUiState _catalogueSearchState = _CatalogueSearchUiState.idle;
+
+  /// The raw (untrimmed) search text the most recent catalogue search was
+  /// performed for — used only to render "{code}" in no-match copy.
+  String _catalogueSearchQuery = '';
+
+  /// The groups behind the current [_catalogueSearchState]: the single
+  /// exact match (as a one-element list) when
+  /// [_CatalogueSearchUiState.exactMatch], or every suggested group when
+  /// [_CatalogueSearchUiState.suggestions]. Empty otherwise.
+  List<BusinessCentralItemSearchGroup> _catalogueGroups = const [];
+
+  /// The catalogue group whose variations are currently shown — set
+  /// automatically on an exact match, or when the user taps a suggestion.
+  /// `null` means no group's variations are shown yet (idle, loading, an
+  /// error/no-results state, or unresolved suggestions).
+  BusinessCentralItemSearchGroup? _selectedCatalogueGroup;
+
+  /// True while a catalogue search is in flight — guards against a second
+  /// search starting concurrently (e.g. a rapid double-tap of the search
+  /// button).
+  bool _isCatalogueSearching = false;
+
+  /// Bumped at the start of every [searchFabricAvailabilityByCatalogueCode]
+  /// call, so a catalogue search that resolves after a newer one has
+  /// already started (or after dispose) can recognize itself as stale and
+  /// discard its result instead of corrupting fresher state.
+  int _catalogueSearchGeneration = 0;
+
+  /// The variation the user picked from [_selectedCatalogueGroup] — its
+  /// `itemNo` is what was actually sent to [_checkAvailabilityService]. Also
+  /// the value cleared whenever a new catalogue search starts or a
+  /// different group is selected, so a stale availability result is never
+  /// left showing.
+  BusinessCentralItemVariation? _selectedVariation;
+
+  // Final stock-availability state (once a variation has been selected) —
+  // loaded live from the Inventory API via the shared StockLookupService.
+  // Unchanged from before this feature except that the code it looks up is
+  // now always a variation's confirmed itemNo, never raw search text.
   _CheckAvailabilityUiState _checkAvailabilityState =
       _CheckAvailabilityUiState.idle;
 
@@ -203,13 +285,14 @@ class _HomeScreenState extends State<HomeScreen> {
   StockLookupResult? _checkAvailabilityResult;
 
   /// True while a lookup is in flight — guards against a second lookup
-  /// starting concurrently (e.g. a rapid double-tap of the search button).
+  /// starting concurrently (e.g. a rapid double-tap on a variation row).
   bool _isCheckingAvailability = false;
 
-  /// Bumped at the start of every [searchFabricAvailabilityByCatalogueCode]
-  /// call, so a lookup that resolves after a newer one has already started
-  /// (or after dispose) can recognize itself as stale and discard its
-  /// result instead of corrupting fresher state.
+  /// Bumped at the start of every [_selectVariation] call (and whenever a
+  /// new catalogue search supersedes the current selection), so a lookup
+  /// that resolves after a newer one has already started (or after
+  /// dispose) can recognize itself as stale and discard its result instead
+  /// of corrupting fresher state.
   int _checkAvailabilityGeneration = 0;
 
   @override
@@ -226,17 +309,27 @@ class _HomeScreenState extends State<HomeScreen> {
       _ownedCheckAvailabilityService = owned;
       _checkAvailabilityService = owned;
     }
+    final injectedCatalogueSearchService = widget.catalogueSearchService;
+    if (injectedCatalogueSearchService != null) {
+      _catalogueSearchService = injectedCatalogueSearchService;
+    } else {
+      final owned = ApiItemCatalogueSearchService();
+      _ownedCatalogueSearchService = owned;
+      _catalogueSearchService = owned;
+    }
   }
 
   @override
   void dispose() {
     _catalogueCodeController.dispose();
-    // Bumping the generation here means an in-flight lookup's continuation
-    // recognizes itself as stale (see
-    // [searchFabricAvailabilityByCatalogueCode]) and never calls setState
-    // after dispose.
+    // Bumping both generations here means an in-flight catalogue search or
+    // stock lookup's continuation recognizes itself as stale (see
+    // [searchFabricAvailabilityByCatalogueCode]/[_selectVariation]) and
+    // never calls setState after dispose.
+    _catalogueSearchGeneration++;
     _checkAvailabilityGeneration++;
     _ownedCheckAvailabilityService?.close();
+    _ownedCatalogueSearchService?.close();
     super.dispose();
   }
 
@@ -441,51 +534,207 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Looks up fabric availability from the Home screen using the entered
   /// catalogue code — the single entry point both the search button and
-  /// keyboard submission call (see `AvailabilitySearchCard.onSubmitted`), so
-  /// every Check Availability lookup goes through exactly one implementation.
+  /// keyboard submission call (see `AvailabilitySearchCard.onSubmitted`).
   ///
-  /// The code maps directly to Business Central `itemNo` (see
-  /// `stock_lookup_service.dart`'s library doc comment) and is resolved
-  /// through the same shared [StockLookupService] `ScanStockScreen` uses —
-  /// never a second, duplicated inventory-fetch/filter/aggregate path, and
-  /// never `ItemsService` (this card already knows the code is an `itemNo`,
-  /// so there is nothing for `ItemsService` to reinterpret).
+  /// Unlike before this feature, the entered text is no longer treated as
+  /// an exact `itemNo`: it is first resolved to a catalogue group via
+  /// [_catalogueSearchService] (`GET /items?search=...`). An exact
+  /// `commonItemNo` match shows that group's variations directly; anything
+  /// else shows every returned group as a suggestion. Only once the user
+  /// picks a concrete variation does [_selectVariation] call the existing,
+  /// unchanged [StockLookupService] exact-`itemNo` lookup — see that
+  /// method.
+  ///
+  /// Starting a new search always clears any selection/result left over
+  /// from a previous one (never leaves a stale variation or availability
+  /// result showing), and bumps both [_catalogueSearchGeneration] and
+  /// [_checkAvailabilityGeneration] so a slow in-flight request from the
+  /// previous query can never land after this one starts.
   Future<void> searchFabricAvailabilityByCatalogueCode() async {
     final rawInput = _catalogueCodeController.text;
     final trimmedCode = rawInput.trim();
+
     if (trimmedCode.isEmpty) {
+      _catalogueSearchGeneration++;
+      _checkAvailabilityGeneration++;
       setState(() {
-        _checkAvailabilityState = _CheckAvailabilityUiState.invalidInput;
+        _catalogueSearchState = _CatalogueSearchUiState.invalidInput;
+        _catalogueGroups = const [];
+        _selectedCatalogueGroup = null;
+        _selectedVariation = null;
+        _checkAvailabilityState = _CheckAvailabilityUiState.idle;
         _checkAvailabilityResult = null;
       });
       return;
     }
 
-    // Duplicate-submission guard: ignored while a lookup is already in
+    // Duplicate-submission guard: ignored while a search is already in
     // flight, whether triggered again by the button or the keyboard.
+    if (_isCatalogueSearching) return;
+    _isCatalogueSearching = true;
+    // Supersede any in-flight variation lookup from a previous query too —
+    // its continuation (see [_selectVariation]) will recognize itself as
+    // stale and never overwrite this fresh search's state.
+    _checkAvailabilityGeneration++;
+    final requestId = ++_catalogueSearchGeneration;
+
+    setState(() {
+      _catalogueSearchState = _CatalogueSearchUiState.loading;
+      _catalogueGroups = const [];
+      _selectedCatalogueGroup = null;
+      _selectedVariation = null;
+      _checkAvailabilityState = _CheckAvailabilityUiState.idle;
+      _checkAvailabilityResult = null;
+    });
+
+    ItemCatalogueSearchResult result;
+    try {
+      result = await _catalogueSearchService.search(trimmedCode);
+    } catch (error) {
+      // A truly unexpected exception (an implementation bug) must not crash
+      // the screen; treat it like any other unexpected failure.
+      debugPrint('Catalogue search threw unexpectedly: $error');
+      result = ItemCatalogueRetryableFailure(trimmedCode);
+    }
+
+    _isCatalogueSearching = false;
+    // Discards a response that arrived after a newer search started (or
+    // after dispose bumped the generation) rather than overwriting fresher
+    // state with stale data.
+    if (!mounted || requestId != _catalogueSearchGeneration) return;
+
+    if (result is ItemCatalogueSessionExpired) {
+      // A real adapter hands off to the session coordinator (which
+      // navigates to Login) before ever returning this — matching
+      // SessionExpiredException elsewhere in the app, there is nothing
+      // controlled to show here.
+      setState(() {
+        _catalogueSearchState = _CatalogueSearchUiState.idle;
+        _catalogueGroups = const [];
+      });
+      return;
+    }
+
+    setState(() {
+      _catalogueSearchQuery = result.rawQuery;
+      switch (result) {
+        case ItemCatalogueExactMatch(:final group):
+          _catalogueSearchState = _CatalogueSearchUiState.exactMatch;
+          _catalogueGroups = [group];
+          _selectedCatalogueGroup = group;
+        case ItemCatalogueSuggestions(:final groups):
+          _catalogueSearchState = _CatalogueSearchUiState.suggestions;
+          _catalogueGroups = groups;
+        case ItemCatalogueNoResults():
+          _catalogueSearchState = _CatalogueSearchUiState.noResults;
+          _catalogueGroups = const [];
+        case ItemCatalogueInvalidQuery():
+          _catalogueSearchState = _CatalogueSearchUiState.invalidInput;
+          _catalogueGroups = const [];
+        case ItemCatalogueRetryableFailure():
+          _catalogueSearchState = _CatalogueSearchUiState.error;
+          _catalogueGroups = const [];
+        case ItemCatalogueTemporarilyUnavailable():
+          _catalogueSearchState =
+              _CatalogueSearchUiState.temporarilyUnavailable;
+          _catalogueGroups = const [];
+        case ItemCatalogueSessionExpired():
+          break; // unreachable — handled above
+      }
+    });
+  }
+
+  /// Error text shown below the helper text for the catalogue-search
+  /// invalid-input/error/unavailable states — `null` for every other state,
+  /// per `AvailabilitySearchCard`'s errorText/resultText mutual-exclusivity.
+  String? _catalogueSearchErrorText() {
+    return switch (_catalogueSearchState) {
+      _CatalogueSearchUiState.invalidInput => context.t(
+        'home.enterCatalogueCodeValidation',
+      ),
+      _CatalogueSearchUiState.error => context.t('home.catalogueSearchError'),
+      _CatalogueSearchUiState.temporarilyUnavailable => context.t(
+        'home.catalogueSearchUnavailable',
+      ),
+      _ => null,
+    };
+  }
+
+  /// Result text shown below the helper text for the catalogue no-results
+  /// state — `null` for every other state.
+  String? _catalogueSearchResultText() {
+    if (_catalogueSearchState != _CatalogueSearchUiState.noResults) {
+      return null;
+    }
+    return context.t(
+      'home.catalogueNoMatchFound',
+      params: {'code': _catalogueSearchQuery},
+    );
+  }
+
+  /// Selects a suggested catalogue group (the user tapped it from the
+  /// [_CatalogueSearchUiState.suggestions] list), showing its variations.
+  /// Clears any previously selected variation/availability result — never
+  /// leaves a stale one visible under the newly selected group.
+  void _selectCatalogueGroup(BusinessCentralItemSearchGroup group) {
+    _checkAvailabilityGeneration++;
+    setState(() {
+      _selectedCatalogueGroup = group;
+      _selectedVariation = null;
+      _checkAvailabilityState = _CheckAvailabilityUiState.idle;
+      _checkAvailabilityResult = null;
+    });
+  }
+
+  /// Returns from a selected suggestion's variations back to the
+  /// suggestions list — only reachable when [_catalogueSearchState] is
+  /// [_CatalogueSearchUiState.suggestions] (an exact match has no
+  /// suggestions list to return to).
+  void _clearSelectedCatalogueGroup() {
+    _checkAvailabilityGeneration++;
+    setState(() {
+      _selectedCatalogueGroup = null;
+      _selectedVariation = null;
+      _checkAvailabilityState = _CheckAvailabilityUiState.idle;
+      _checkAvailabilityResult = null;
+    });
+  }
+
+  /// Runs the final, unchanged exact-`itemNo` stock lookup for a variation
+  /// the user picked from [_selectedCatalogueGroup] — the same
+  /// [StockLookupService] contract `ScanStockScreen` uses, never a second,
+  /// duplicated inventory-fetch/filter/aggregate path.
+  Future<void> _selectVariation(BusinessCentralItemVariation variation) async {
+    // Duplicate-submission guard: ignored while a lookup is already in
+    // flight, whether triggered again by the same or a different variation.
     if (_isCheckingAvailability) return;
     _isCheckingAvailability = true;
     final requestId = ++_checkAvailabilityGeneration;
 
+
     setState(() {
+      _selectedVariation = variation;
       _checkAvailabilityState = _CheckAvailabilityUiState.loading;
       _checkAvailabilityResult = null;
     });
 
     StockLookupResult result;
     try {
-      result = await _checkAvailabilityService.lookup(trimmedCode);
+      // TEMPORARY DIAGNOSTIC — see above. Logged immediately before the
+      // call so it is unambiguous that this is the exact-itemNo inventory
+      // lookup, never a second catalogue search.
+      result = await _checkAvailabilityService.lookup(variation.itemNo);
     } catch (error) {
       // A truly unexpected exception (an implementation bug) must not crash
       // the screen; treat it like any other unexpected failure.
       debugPrint('Check Availability lookup threw unexpectedly: $error');
-      result = StockLookupUnexpectedFailure(trimmedCode);
+      result = StockLookupUnexpectedFailure(variation.itemNo);
     }
 
     _isCheckingAvailability = false;
-    // Discards a response that arrived after a newer lookup started (or
-    // after dispose bumped the generation) rather than overwriting fresher
-    // state with stale data.
+    // Discards a response that arrived after a newer lookup/search started
+    // (or after dispose bumped the generation) rather than overwriting
+    // fresher state with stale data.
     if (!mounted || requestId != _checkAvailabilityGeneration) return;
 
     if (result is StockLookupSessionExpired) {
@@ -728,11 +977,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           controller: _catalogueCodeController,
                           onSearch: searchFabricAvailabilityByCatalogueCode,
                           isLoading:
-                              _checkAvailabilityState ==
-                              _CheckAvailabilityUiState.loading,
-                          errorText: _checkAvailabilityErrorText(),
-                          resultText: _checkAvailabilityResultText(),
+                              _catalogueSearchState ==
+                              _CatalogueSearchUiState.loading,
+                          errorText: _catalogueSearchErrorText(),
+                          resultText: _catalogueSearchResultText(),
                         ),
+                        _buildCatalogueSelectionSection(),
                       ],
                     ),
                   ),
@@ -749,6 +999,42 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // Builds whatever belongs below the catalogue search box: nothing while
+  // idle/loading/invalidInput/noResults/error/temporarilyUnavailable (those
+  // states are already fully expressed by AvailabilitySearchCard's own
+  // errorText/resultText); the suggestions list when a search returned
+  // multiple groups and none is selected yet; otherwise the selected
+  // group's variations (an exact match, or a suggestion the user tapped),
+  // including the final stock-availability status once a variation is
+  // picked.
+  Widget _buildCatalogueSelectionSection() {
+    final selectedGroup = _selectedCatalogueGroup;
+    if (selectedGroup == null) {
+      if (_catalogueSearchState == _CatalogueSearchUiState.suggestions) {
+        return _CatalogueSuggestionsCard(
+          key: const ValueKey('catalogue-suggestions'),
+          groups: _catalogueGroups,
+          onSelectGroup: _selectCatalogueGroup,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    return _CatalogueVariationsCard(
+      key: const ValueKey('catalogue-variations'),
+      group: selectedGroup,
+      showBackToSuggestions:
+          _catalogueSearchState == _CatalogueSearchUiState.suggestions,
+      onBack: _clearSelectedCatalogueGroup,
+      selectedVariation: _selectedVariation,
+      onSelectVariation: _selectVariation,
+      isAvailabilityLoading:
+          _checkAvailabilityState == _CheckAvailabilityUiState.loading,
+      availabilityErrorText: _checkAvailabilityErrorText(),
+      availabilityResultText: _checkAvailabilityResultText(),
     );
   }
 
@@ -937,6 +1223,362 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(context.t('common.retry')),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Catalogue search "no exact commonItemNo match" result: every group the
+/// search returned, shown as a tappable suggestion so the user can pick one
+/// to see its variations. Reuses [AvailabilitySearchCard]'s outer chrome
+/// (surface color, border, radius, shadow) so this reads as part of the
+/// same Check Availability card group rather than a visually unrelated
+/// block.
+class _CatalogueSuggestionsCard extends StatelessWidget {
+  const _CatalogueSuggestionsCard({
+    super.key,
+    required this.groups,
+    required this.onSelectGroup,
+  });
+
+  final List<BusinessCentralItemSearchGroup> groups;
+  final ValueChanged<BusinessCentralItemSearchGroup> onSelectGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: AppSpacing.pageHorizontal),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.smallAll,
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.standardCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.t('home.catalogueMatchingTitle'),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final group in groups)
+            Material(
+              key: ValueKey('catalogue-group-${group.commonItemNo}'),
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onSelectGroup(group),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.t(
+                                'home.catalogueGroupLabel',
+                                params: {'code': group.commonItemNo},
+                              ),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            Text(
+                              context.t(
+                                'home.catalogueVariationCount',
+                                params: {'count': '${group.variations.length}'},
+                              ),
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.grayText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.grayText,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A resolved catalogue group's variations — reached either from an exact
+/// `commonItemNo` match or after the user taps a suggestion. Lets the user
+/// pick one exact variation, then shows the final stock-availability status
+/// (loading/success/not-found/error) for that variation, sourced from the
+/// existing, unchanged [StockLookupService] contract — never from this
+/// group's own [BusinessCentralItemSearchGroup.totalInventory], which is
+/// only ever shown labeled as a group-level total.
+class _CatalogueVariationsCard extends StatefulWidget {
+  const _CatalogueVariationsCard({
+    super.key,
+    required this.group,
+    required this.showBackToSuggestions,
+    required this.onBack,
+    required this.selectedVariation,
+    required this.onSelectVariation,
+    required this.isAvailabilityLoading,
+    required this.availabilityErrorText,
+    required this.availabilityResultText,
+  });
+
+  final BusinessCentralItemSearchGroup group;
+  final bool showBackToSuggestions;
+  final VoidCallback onBack;
+  final BusinessCentralItemVariation? selectedVariation;
+  final ValueChanged<BusinessCentralItemVariation> onSelectVariation;
+  final bool isAvailabilityLoading;
+  final String? availabilityErrorText;
+  final String? availabilityResultText;
+
+  @override
+  State<_CatalogueVariationsCard> createState() =>
+      _CatalogueVariationsCardState();
+}
+
+class _CatalogueVariationsCardState extends State<_CatalogueVariationsCard> {
+  /// Whether the variation list (and the selected variation's availability
+  /// status) is shown below the "Catalogue {code} / N variations" header.
+  /// Purely a local visual toggle — tapping the header never touches
+  /// catalogue search, stock lookup, or [widget.selectedVariation]; see
+  /// [_toggleExpanded].
+  bool _expanded = true;
+
+  void _toggleExpanded() => setState(() => _expanded = !_expanded);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: AppSpacing.pageHorizontal),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.smallAll,
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.standardCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showBackToSuggestions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: InkWell(
+                onTap: widget.onBack,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.chevron_left_rounded,
+                      size: 18,
+                      color: AppColors.primaryNavy,
+                    ),
+                    Text(
+                      context.t('home.catalogueMatchingTitle'),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryNavy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // The only tap target that toggles [_expanded] — deliberately does
+          // not call onSelectVariation, onBack, or any catalogue-search/
+          // stock-lookup seam. Purely a local UI affordance.
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const ValueKey('catalogue-variations-header'),
+              onTap: _toggleExpanded,
+              borderRadius: AppRadius.smallAll,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.t(
+                            'home.catalogueGroupLabel',
+                            params: {'code': widget.group.commonItemNo},
+                          ),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                        ),
+                        Text(
+                          context.t(
+                            'home.catalogueVariationCount',
+                            params: {
+                              'count': '${widget.group.variations.length}',
+                            },
+                          ),
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.grayText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_more_rounded
+                        : Icons.chevron_right_rounded,
+                    color: AppColors.grayText,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.t('home.catalogueSelectVariation', params: {}),
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final variation in widget.group.variations)
+              _VariationRow(
+                key: ValueKey('variation-${variation.itemNo}'),
+                variation: variation,
+                selected: widget.selectedVariation?.itemNo == variation.itemNo,
+                onTap: () => widget.onSelectVariation(variation),
+              ),
+            if (widget.selectedVariation != null) ...[
+              const SizedBox(height: 8),
+              if (widget.isAvailabilityLoading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (widget.availabilityErrorText != null)
+                Text(
+                  widget.availabilityErrorText!,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.dangerRed,
+                  ),
+                )
+              else if (widget.availabilityResultText != null)
+                Text(
+                  widget.availabilityResultText!,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.darkTeal,
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One tappable variation row inside [_CatalogueVariationsCard] — shows the
+/// exact `itemNo` the final stock lookup will be sent, plus whatever
+/// optional descriptive fields the grouped response actually returned (see
+/// [BusinessCentralItemVariation]'s doc comment for why those are
+/// optional). Highlighted when [selected].
+class _VariationRow extends StatelessWidget {
+  const _VariationRow({
+    super.key,
+    required this.variation,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final BusinessCentralItemVariation variation;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = variation.description;
+    final unit = variation.baseUnitOfMeasure;
+    final subtitleParts = [
+      if (description != null && description.isNotEmpty) description,
+      if (unit != null && unit.isNotEmpty) unit,
+    ];
+
+    return Material(
+      color: selected
+          ? AppColors.primaryNavy.withValues(alpha: 0.06)
+          : Colors.transparent,
+      borderRadius: AppRadius.smallAll,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.smallAll,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      variation.itemNo,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: const Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    if (subtitleParts.isNotEmpty)
+                      Text(
+                        subtitleParts.join(' · '),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.grayText,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.primaryNavy,
+                  size: 18,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

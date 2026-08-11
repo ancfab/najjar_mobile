@@ -47,7 +47,15 @@
     "enterCatalogueCode": "Saisissez le code du catalogue",
     "checkAvailabilityHelper": "Vérifiez rapidement la disponibilité dans tous les entrepôts.",
     "activeOrders": "Commandes actives",
-    "overdueInvoices": "Factures en retard"
+    "overdueInvoices": "Factures en retard",
+    "catalogueSearchError": "Une erreur s'est produite lors de la recherche. Veuillez réessayer.",
+    "catalogueSearchUnavailable": "Temporairement indisponible.",
+    "catalogueNoMatchFound": "Aucun catalogue trouvé pour « {code} ».",
+    "catalogueMatchingTitle": "Catalogues correspondants",
+    "catalogueGroupLabel": "Catalogue {code}",
+    "catalogueVariationCount": "{count} variantes",
+    "catalogueGroupTotalInventory": "Total du groupe : {amount}",
+    "catalogueSelectVariation": "Sélectionnez une variante"
   },
   "balanceCard": {
     "label": "SOLDE ACTUEL",
