@@ -5,6 +5,20 @@ import '../localization/translations.dart';
 import '../models/country_code.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
+import 'syria_flag.dart';
+
+/// Renders [country]'s flag at the given [fontSize], matching how other
+/// countries render their Unicode flag emoji inline with text.
+///
+/// Syria is special-cased to a locally painted [SyriaFlag] instead of the
+/// 🇸🇾 emoji glyph, since that glyph is platform/font-supplied and can still
+/// show the outdated pre-2024 Syrian flag design on some devices.
+Widget _buildCountryFlag(CountryCode country, double fontSize) {
+  if (country.isoCode == 'SY') {
+    return SyriaFlag(size: fontSize);
+  }
+  return Text(country.flag, style: TextStyle(fontSize: fontSize));
+}
 
 /// Reusable, searchable country dial-code picker.
 ///
@@ -67,10 +81,7 @@ class CountryCodePicker extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Text(
-                      selectedCountry.flag,
-                      style: const TextStyle(fontSize: 20),
-                    ),
+                    _buildCountryFlag(selectedCountry, 20),
                     const SizedBox(width: 10),
                     Text(
                       selectedCountry.dialCode,
@@ -237,10 +248,7 @@ class _CountryCodeSearchSheetState extends State<_CountryCodeSearchSheet> {
                             final country = _results[index];
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: Text(
-                                country.flag,
-                                style: const TextStyle(fontSize: 22),
-                              ),
+                              leading: _buildCountryFlag(country, 22),
                               title: Text(
                                 country.name,
                                 style: const TextStyle(

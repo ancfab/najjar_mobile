@@ -27,6 +27,7 @@ import 'package:anc_fabrics/services/session_messages.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 import 'package:anc_fabrics/services/session_storage_keys.dart';
 import 'package:anc_fabrics/widgets/login/primary_login_button.dart';
+import 'package:anc_fabrics/widgets/syria_flag.dart';
 
 import 'helpers/fake_auth_session_store.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -185,6 +186,20 @@ void main() {
       expect(find.text('Lebanon'), findsOneWidget);
       expect(find.text('Oman'), findsOneWidget);
     });
+
+    testWidgets(
+      'renders Syria with the custom SyriaFlag widget, not the 🇸🇾 emoji '
+      'glyph (which can still render the outdated pre-2024 flag design on '
+      'some platforms)',
+      (tester) async {
+        await _pumpLoginScreen(tester);
+        await tester.tap(find.text('+971'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(SyriaFlag), findsOneWidget);
+        expect(find.text('🇸🇾'), findsNothing);
+      },
+    );
   });
 
   group('login request construction and input mapping', () {
