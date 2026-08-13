@@ -605,14 +605,15 @@ void main() {
     // and resolveDefaultInvoiceLookupDataSource (the pure resolvers
     // OrderDetailScreen falls back to when no source is injected) for both
     // DemoConfig.useDemoOrders branches, regardless of the flag's current
-    // compiled-in value, plus the actual default-injection behavior at the
-    // flag's current value — mirroring OrdersScreen's "Orders demo mode"
-    // group.
-    test('useDemo: true resolves order-detail fetch to '
-        'DemoOrderDetailDataSource, never the live sales-orders integration', () {
-      final source = resolveDefaultOrderDetailDataSource(useDemo: true);
-      expect(source, isA<DemoOrderDetailDataSource>());
-    });
+    // compiled-in value — mirroring OrdersScreen's "Orders demo mode" group.
+    test(
+      'useDemo: true resolves order-detail fetch to '
+      'DemoOrderDetailDataSource, never the live sales-orders integration',
+      () {
+        final source = resolveDefaultOrderDetailDataSource(useDemo: true);
+        expect(source, isA<DemoOrderDetailDataSource>());
+      },
+    );
 
     test('useDemo: false resolves order-detail fetch to '
         'LiveOrderDetailDataSource, leaving the live integration fully '
@@ -635,15 +636,49 @@ void main() {
     });
 
     testWidgets(
-      'REGRESSION: with no sources injected, a demo Document_No from '
-      'OrdersScreen loads coherent demo order-detail data instead of '
-      'hitting the live sales-orders endpoint and showing Order Not Found',
+      'With DemoConfig.useDemoOrders false, OrderDetailScreen resolves its '
+      'default OrderDetailDataSource/InvoiceLookupDataSource to Live — so '
+      'widget tests must always inject both sources to avoid real '
+      'HTTP/secure storage, and whatever those injected sources return is '
+      'what the screen shows (never DemoOrderDetailDataSource\'s mock '
+      'lines)',
       (tester) async {
-        // No orderDetailSource/invoiceLookupSource injected: OrderDetailScreen
-        // resolves its own real defaults. This only ever completes in this
-        // widget-test sandbox (no real HTTP/secure storage available) if the
-        // demo path was actually taken — pumpAndSettle completing at all,
-        // and the demo order's own line data appearing, is the proof.
+        // Distinct from DemoSalesOrderLinesDataSource.mockLines on purpose:
+        // if OrderDetailScreen ever silently fell back to the demo source
+        // instead of the injected one, this assertion would catch it.
+        final liveStyleLine = sampleSalesOrderLine(
+          documentNo: 'SO-90001',
+          description: 'Live Integration Sample Fabric',
+          sellToCustomerName: 'Live Integration Customer',
+          sellToCustomerNo: 'C-90001',
+        );
+
+        await _pumpOrderDetailScreen(
+          tester,
+          documentNo: 'SO-90001',
+          orderDetailSource: FakeOrderDetailDataSource(lines: [liveStyleLine]),
+        );
+
+        expect(
+          find.byKey(const ValueKey('order-detail-not-found')),
+          findsNothing,
+        );
+        expect(find.text('Live Integration Sample Fabric'), findsOneWidget);
+        expect(find.text('Premium Cotton Twill - Ivory White'), findsNothing);
+      },
+    );
+
+    // The two tests below exercise DemoOrderDetailDataSource/
+    // DemoInvoiceLookupDataSource directly (explicitly injected, not via
+    // the compiled DemoConfig.useDemoOrders flag) — this still proves the
+    // demo dataset itself stays internally coherent (order lines <->
+    // matching invoice, or correctly no invoice) whenever a future demo
+    // needs it again, without depending on which data source OrderDetailScreen
+    // defaults to.
+    testWidgets(
+      'demo order-detail + invoice-lookup sources resolve a coherent demo '
+      'invoice for a demo order that has one',
+      (tester) async {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
@@ -653,7 +688,11 @@ void main() {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: OrderDetailScreen(documentNo: 'SO-100234'),
+            home: OrderDetailScreen(
+              documentNo: 'SO-100234',
+              orderDetailSource: const DemoOrderDetailDataSource(),
+              invoiceLookupSource: const DemoInvoiceLookupDataSource(),
+            ),
           ),
         );
         await tester.pump();
@@ -663,35 +702,8 @@ void main() {
           find.byKey(const ValueKey('order-detail-not-found')),
           findsNothing,
         );
-        expect(
-          find.text('Premium Cotton Twill - Ivory White'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('ANC Textiles Trading LLC (C-10045)'),
-          findsOneWidget,
-        );
-      },
-    );
-
-    testWidgets(
-      'REGRESSION: the Invoice button for a demo order resolves a coherent '
-      'demo invoice without reaching the live invoices endpoint',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: const [
-              AppTranslationsDelegate(),
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: OrderDetailScreen(documentNo: 'SO-100234'),
-          ),
-        );
-        await tester.pump();
-        await tester.pumpAndSettle();
+        expect(find.text('Premium Cotton Twill - Ivory White'), findsOneWidget);
+        expect(find.text('ANC Textiles Trading LLC (C-10045)'), findsOneWidget);
 
         // SO-100234 has two order lines, pushing the Invoice button below
         // the fold — scroll it into view before tapping.
@@ -713,37 +725,40 @@ void main() {
       },
     );
 
-    testWidgets(
-      'REGRESSION: a demo order with no invoice (SO-100237) shows the '
-      'neutral no-invoice message rather than a live lookup failure',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: const [
-              AppTranslationsDelegate(),
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: OrderDetailScreen(documentNo: 'SO-100237'),
+    testWidgets('demo order-detail + invoice-lookup sources show the neutral '
+        'no-invoice message for a demo order that has none (SO-100237)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: OrderDetailScreen(
+            documentNo: 'SO-100237',
+            orderDetailSource: const DemoOrderDetailDataSource(),
+            invoiceLookupSource: const DemoInvoiceLookupDataSource(),
           ),
-        );
-        await tester.pump();
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-        await tester.tap(
-          find.byKey(const ValueKey('order-detail-invoice-button')),
-        );
-        await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('order-detail-invoice-button')),
+      );
+      await tester.pump();
 
-        expect(
-          find.text('No invoice is available for this order.'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(
+        find.text('No invoice is available for this order.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('Responsive layout', () {

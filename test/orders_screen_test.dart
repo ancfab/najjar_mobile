@@ -933,8 +933,7 @@ void main() {
     // resolveDefaultSalesOrderLinesDataSource (the pure resolver
     // OrdersScreen falls back to when no salesOrderLinesSource is injected)
     // for both DemoConfig.useDemoOrders branches, regardless of the flag's
-    // current compiled-in value, plus the actual default-injection behavior
-    // at the flag's current value.
+    // current compiled-in value.
     test('useDemo: true resolves to DemoSalesOrderLinesDataSource, never the '
         'live sales-orders integration', () {
       final source = resolveDefaultSalesOrderLinesDataSource(useDemo: true);
@@ -948,87 +947,29 @@ void main() {
     });
 
     testWidgets(
-      'With no salesOrderLinesSource injected, the demo flag shows the mock '
-      'order lines without reaching the live sales-orders endpoint',
+      'With DemoConfig.useDemoOrders false, OrdersScreen resolves its '
+      'default SalesOrderLinesDataSource to Live — so widget tests must '
+      'always inject a salesOrderLinesSource to avoid real HTTP/secure '
+      'storage, and whatever that injected source returns is what the list '
+      'shows (never DemoSalesOrderLinesDataSource.mockLines)',
       (tester) async {
-        tester.view.physicalSize = const Size(390, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        // Distinct from DemoSalesOrderLinesDataSource.mockLines on purpose:
+        // if OrdersScreen ever silently fell back to the demo source instead
+        // of the injected one, this assertion would catch it.
+        final liveStyleLine = sampleSalesOrderLine(
+          documentNo: 'SO-90001',
+          description: 'Live Integration Sample Fabric',
+        );
 
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: const [
-              AppTranslationsDelegate(),
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: const OrdersScreen(),
+        await _pumpOrdersScreen(
+          tester,
+          salesOrderLinesSource: FakeSalesOrderLinesDataSource(
+            page: samplePage(rows: [liveStyleLine]),
           ),
         );
-        await tester.pump();
-        // With DemoConfig.useDemoOrders false, this would instead fall back
-        // to LiveSalesOrderLinesDataSource (real HTTP/secure storage), which
-        // never resolves in this widget-test sandbox and would leave the
-        // loading skeleton showing forever — pumpAndSettle completing at all
-        // is itself evidence the demo path, not the live one, was taken.
-        await tester.pumpAndSettle();
 
-        expect(find.text('Premium Cotton Twill - Ivory White'), findsOneWidget);
-        expect(find.byType(SalesOrderLineCard), findsWidgets);
-      },
-    );
-
-    testWidgets(
-      'REGRESSION: tapping a demo order opens a working Order Detail — '
-      'never the Order Not Found state a demo Document_No would hit against '
-      'the live sales-orders endpoint',
-      (tester) async {
-        tester.view.physicalSize = const Size(390, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        // No salesOrderLinesSource, orderDetailSource, or
-        // invoiceLookupSource is injected anywhere below — both OrdersScreen
-        // and the OrderDetailScreen it pushes resolve their real defaults,
-        // which only ever complete in this widget-test sandbox (no real
-        // HTTP/secure storage available) if the demo path was actually
-        // taken on both sides of the navigation.
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: const [
-              AppTranslationsDelegate(),
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: const OrdersScreen(),
-          ),
-        );
-        await tester.pump();
-        await tester.pumpAndSettle();
-
-        expect(find.text('SO-100234'), findsWidgets);
-
-        await tester.tap(find.byType(SalesOrderLineCard).first);
-        await tester.pump();
-        await tester.pump();
-        await tester.pumpAndSettle();
-
-        expect(find.byType(OrderDetailScreen), findsOneWidget);
-        expect(
-          find.byKey(const ValueKey('order-detail-not-found')),
-          findsNothing,
-        );
-        expect(
-          find.text('Premium Cotton Twill - Ivory White'),
-          findsOneWidget,
-        );
-        expect(find.text('ANC Textiles Trading LLC (C-10045)'), findsOneWidget);
+        expect(find.text('Live Integration Sample Fabric'), findsOneWidget);
+        expect(find.text('Premium Cotton Twill - Ivory White'), findsNothing);
       },
     );
   });

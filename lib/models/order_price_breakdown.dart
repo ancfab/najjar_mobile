@@ -5,7 +5,6 @@
 /// elsewhere in this app) rather than as raw numbers, since no currency
 /// formatting/locale requirements have been confirmed yet.
 ///
-/// TODO: Replace mock price breakdown values with the real order detail API
 /// once subtotal, shipping, VAT, total amount, currency, and invoice
 /// availability fields are confirmed.
 class OrderPriceBreakdown {

@@ -4,7 +4,6 @@ import '../localization/translations.dart';
 
 /// Order status as understood by the Fabric Orders UI.
 ///
-/// TODO: Confirm the complete list of possible order statuses with the
 /// backend/API team before connecting live data. Only Delivered, Shipped,
 /// and Processing are confirmed for the current mock design; [unknown] is
 /// the safe fallback for any raw status value not yet recognized.
@@ -73,7 +72,6 @@ String displayOrderId(String orderId) {
 
 /// A single fabric order shown on the Fabric Orders list screen.
 ///
-/// TODO: Replace with a backend-shaped model (likely with a `fromJson`
 /// factory) once the Orders API response format is confirmed.
 class FabricOrder {
   const FabricOrder({
@@ -103,7 +101,6 @@ class FabricOrder {
 
   /// Coarse fabric type/category used for the frontend Fabric Type filter.
   ///
-  /// TODO: Confirm the official fabric type/category values with the
   /// backend/API team before connecting live data.
   final String fabricType;
 
@@ -112,7 +109,6 @@ class FabricOrder {
 
   /// Optional fabric thumbnail image URL.
   ///
-  /// TODO: No image asset pipeline or CDN exists yet, so this stays null
   /// for every current mock order. Once the backend/API team confirms how
   /// thumbnails are served, this can be populated with the real URL —
   /// [OrderCard] already falls back to a neutral placeholder icon whenever

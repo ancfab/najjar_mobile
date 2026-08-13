@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../config/api_config.dart';
 import '../models/business_central/sales_order_line.dart';
 import 'anc_api_client.dart';
@@ -82,6 +84,7 @@ class OrderDetailService {
   Future<List<BusinessCentralSalesOrderLine>> fetchOrder({
     required String documentNo,
   }) async {
+    debugPrint('[ORDER DETAIL] document_no: $documentNo');
     final token = await _requireToken();
 
     final seenIdentities = <String>{};
@@ -96,12 +99,15 @@ class OrderDetailService {
             BusinessCentralProtocolFailure(),
           );
         }
+        debugPrint('[ORDER DETAIL] page request: $page');
         final response = await _apiClient.fetchSalesOrders(
           token: token,
           page: page,
           perPage: _perPage,
           documentNo: documentNo,
         );
+        debugPrint('[ORDER DETAIL] HTTP status: 200');
+        debugPrint('[ORDER DETAIL] raw rows: ${response.data.length}');
         lastPage = response.lastPage;
         for (final line in response.data) {
           if (line.documentNo != documentNo) continue;
@@ -110,9 +116,13 @@ class OrderDetailService {
         page = response.currentPage + 1;
       } while (page <= lastPage);
     } on AncApiException catch (error) {
+      if (error is AncHttpException) {
+        debugPrint('[ORDER DETAIL] HTTP status: ${error.statusCode}');
+      }
       await _handleFailure(error);
     }
 
+    debugPrint('[ORDER DETAIL] deduplicated rows: ${lines.length}');
     return lines;
   }
 

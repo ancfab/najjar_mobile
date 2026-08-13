@@ -35,10 +35,9 @@ enum OrderStatusFilter { all, active }
 /// type field; the endpoint accepts only `page`/`per_page`), so keeping that
 /// UI would mean either silently doing nothing or filtering only the
 /// current page's up-to-100 rows while claiming completeness across all
-/// unseen pages. Both are unacceptable; see `MockOrdersService`/
-/// `FabricOrder`/`OrderFilterSheet`, which remain in the codebase unused by
-/// this screen in case a future confirmed contract supports server-side
-/// filtering.
+/// unseen pages. Both are unacceptable; see `FabricOrder`/`OrderFilterSheet`,
+/// which remain in the codebase unused by this screen in case a future
+/// confirmed contract supports server-side filtering.
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({
     super.key,

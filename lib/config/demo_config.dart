@@ -26,5 +26,5 @@ class DemoConfig {
 
   // TEMPORARY CLIENT DEMO MODE.
   // Set to false to restore the live Business Central Orders integration.
-  static const bool useDemoOrders = true;
+  static const bool useDemoOrders = false;
 }

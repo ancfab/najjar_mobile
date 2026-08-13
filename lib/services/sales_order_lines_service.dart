@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../config/api_config.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/sales_order_line.dart';
@@ -52,14 +54,26 @@ class SalesOrderLinesService {
     required int page,
     int perPage = ApiConfig.businessCentralDefaultPerPage,
   }) async {
+    debugPrint('[SALES ORDERS] load started');
+    debugPrint('[SALES ORDERS] page request: $page');
     final token = await _requireToken();
     try {
-      return await _apiClient.fetchSalesOrders(
+      final result = await _apiClient.fetchSalesOrders(
         token: token,
         page: page,
         perPage: perPage,
       );
+      debugPrint('[SALES ORDERS] HTTP status: 200');
+      debugPrint('[SALES ORDERS] raw rows: ${result.data.length}');
+      debugPrint(
+        '[SALES ORDERS] parsed page: ${result.currentPage}/${result.lastPage}',
+      );
+      debugPrint('[SALES ORDERS] total: ${result.total}');
+      return result;
     } on AncApiException catch (error) {
+      if (error is AncHttpException) {
+        debugPrint('[SALES ORDERS] HTTP status: ${error.statusCode}');
+      }
       final outcome = mapBusinessCentralError(error);
       if (outcome is BusinessCentralUnauthorized) {
         await _coordinator.handleUnauthorized();
