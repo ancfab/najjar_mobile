@@ -469,6 +469,101 @@ void main() {
       expect(fakeHttp.requestCount, 3);
     });
 
+    test('reproduces the reported production bug: page 1 reports '
+        'next_page_url "/?page=2" (a bare, path-dropping URL) and pagination '
+        'still succeeds across all 4 pages by requesting page numbers '
+        'directly, never throwing ArgumentError', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [_entryJson(1, remainingAmount: 10.0)],
+            currentPage: 1,
+            lastPage: 4,
+            nextPageUrl: '/?page=2',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [_entryJson(2, remainingAmount: 20.0)],
+            currentPage: 2,
+            lastPage: 4,
+            nextPageUrl: '/?page=3',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [_entryJson(3, remainingAmount: 30.0)],
+            currentPage: 3,
+            lastPage: 4,
+            nextPageUrl: '/?page=4',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [_entryJson(4, remainingAmount: 40.0)],
+            currentPage: 4,
+            lastPage: 4,
+          ),
+          request: req,
+        ),
+      ]);
+      final service = _serviceWith(fakeHttp);
+
+      final result = await service.fetchCurrentBalance();
+
+      expect(fakeHttp.requestCount, 4);
+      expect(result.amount, 100.0);
+      for (final url in fakeHttp.requestedUrls) {
+        expect(url.host, 'api.ancfab.com');
+        expect(url.path, '/api/business-central/ledger-entries');
+      }
+      expect(fakeHttp.requestedUrls[0].queryParameters['page'], '1');
+      expect(fakeHttp.requestedUrls[1].queryParameters['page'], '2');
+      expect(fakeHttp.requestedUrls[2].queryParameters['page'], '3');
+      expect(fakeHttp.requestedUrls[3].queryParameters['page'], '4');
+    });
+
+    test('a malformed (non-advancing) page partway through pagination never '
+        'returns a partial balance', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [_entryJson(1, remainingAmount: 10.0)],
+            lastPage: 3,
+            nextPageUrl: '/?page=2',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          // Malformed: still reports current_page 1 despite page=2 being
+          // requested — must not be summed into the balance.
+          _envelope(
+            rows: [_entryJson(2, remainingAmount: 99999.0)],
+            currentPage: 1,
+            lastPage: 3,
+          ),
+          request: req,
+        ),
+      ]);
+      final service = _serviceWith(fakeHttp);
+
+      try {
+        await service.fetchCurrentBalance();
+        fail('Expected a BusinessCentralFailureException');
+      } on BusinessCentralFailureException catch (error) {
+        expect(error.outcome, isA<BusinessCentralProtocolFailure>());
+      }
+    });
+
     test('401 hands off to the coordinator exactly once and throws '
         'SessionExpiredException', () async {
       final fakeHttp = _ScriptedHttpClient([

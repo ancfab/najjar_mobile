@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/business_central/ledger_entry.dart';
+import '../models/business_central/paginated_response.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
@@ -14,6 +17,14 @@ import 'session_expiry_coordinator.dart';
 /// Responsibilities:
 /// - Load the first page, load the next page, and refresh (restart from
 ///   page 1), always at a fixed page size of 25.
+/// - Advance pagination only by requesting `page: currentPage + 1` against
+///   the fixed ledger-entries endpoint with the original `perPage` — never
+///   by following a backend-provided `next_page_url`, since it has been
+///   observed to drop the endpoint path for this API (e.g. resolving to a
+///   bare `/?page=2`), which [AncApiClient] correctly refuses to send the
+///   bearer token to. Stops once `currentPage >= lastPage`, per the
+///   backend's reported page numbers — matching [PaymentsService]'s
+///   pagination strategy.
 /// - Prevent two concurrent requests of the same kind (first-page vs.
 ///   load-more) from running at once.
 /// - Guard against a stale in-flight response (e.g. a slow load-more that
@@ -26,6 +37,10 @@ import 'session_expiry_coordinator.dart';
 /// - On HTTP 401, hand off to [SessionExpiryCoordinator] exactly once and
 ///   throw [SessionExpiredException]; every other failure throws
 ///   [BusinessCentralFailureException] with already-loaded rows untouched.
+/// - Reject pagination metadata that cannot terminate the paging loop (a
+///   reported `current_page` that does not advance, or an invalid
+///   `last_page`) as [AncProtocolException] — mapped the same as any other
+///   malformed response, never a raw [ArgumentError] escaping to the caller.
 ///
 /// Must not:
 /// - Perform Flutter navigation or show UI itself.
@@ -48,7 +63,11 @@ class LedgerEntriesService {
   List<LedgerEntry> _entries = const [];
   int _currentPage = 1;
   int _lastPage = 1;
-  String? _nextPageUrl;
+
+  /// The fixed `per_page` size sent on every request — page 1 and every
+  /// subsequent `loadNextPage()` call alike — so the effective page size
+  /// never drifts across a paging session.
+  static const int _perPage = 25;
 
   bool _isLoadingFirstPage = false;
   bool _isLoadingMore = false;
@@ -64,10 +83,10 @@ class LedgerEntriesService {
   /// never see a partially-updated list.
   List<LedgerEntry> get entries => _entries;
 
-  /// Whether a subsequent page exists, per the backend's `next_page_url` —
-  /// the source of truth for whether to keep paging (see
-  /// `PaginatedResponse.hasNextPage`).
-  bool get hasNextPage => _nextPageUrl != null;
+  /// Whether a subsequent page exists, per the backend's reported
+  /// `current_page`/`last_page` numbers — never a `next_page_url`. See the
+  /// class-level doc comment for why.
+  bool get hasNextPage => _currentPage < _lastPage;
 
   /// The most recently loaded page number, per the backend's response.
   int get currentPage => _currentPage;
@@ -94,56 +113,136 @@ class LedgerEntriesService {
     _isLoadingFirstPage = true;
     final myGeneration = ++_generation;
 
+    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+    // diagnosed.
+    debugPrint('[CURRENT BALANCE] page request: 1');
+
     try {
       final token = await _requireToken();
       final page = await _apiClient.fetchLedgerEntries(
         token: token,
         page: 1,
-        perPage: 25,
+        perPage: _perPage,
       );
       if (myGeneration != _generation) return; // superseded by a newer call
+
+      _validatePagination(page, previousCurrentPage: 0);
+
+      debugPrint('[CURRENT BALANCE] HTTP status: 200 (page 1)');
+      debugPrint('[CURRENT BALANCE] raw rows: ${page.data.length}');
+      debugPrint(
+        '[CURRENT BALANCE] page parsed successfully: '
+        'page ${page.currentPage}/${page.lastPage}, '
+        'hasNextPage: ${page.currentPage < page.lastPage}',
+      );
+      // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+      // diagnosed. next_page_url is a server-generated pagination link
+      // (never contains the bearer token or customer data) — safe to log.
+      // Logged only; never used to construct the next request (see the
+      // class-level doc comment).
+      debugPrint('[CURRENT BALANCE] next_page_url: ${page.nextPageUrl}');
 
       _entries = _deduplicated(page.data, against: const []);
       _currentPage = page.currentPage;
       _lastPage = page.lastPage;
-      _nextPageUrl = page.nextPageUrl;
     } on AncApiException catch (error) {
       if (myGeneration != _generation) return; // stale failure, ignore
+      _logDiagnosticFailure(page: 1, error: error);
       await _handleFailure(error);
     } finally {
       _isLoadingFirstPage = false;
     }
   }
 
-  /// Loads the next page (per [hasNextPage]) and appends it to [entries].
-  /// Ignored while a first-page load or another load-more is already in
-  /// flight, and when no next page exists. On failure, [entries] is left
-  /// exactly as it was.
+  /// Loads the next page (per [hasNextPage]) and appends it to [entries],
+  /// requesting `page: currentPage + 1` at the fixed [_perPage] — never a
+  /// backend-provided URL. Ignored while a first-page load or another
+  /// load-more is already in flight, and when no next page exists. On
+  /// failure, [entries] is left exactly as it was.
   Future<void> loadNextPage() async {
     if (_isLoadingFirstPage || _isLoadingMore) return;
-    final url = _nextPageUrl;
-    if (url == null) return;
+    if (!hasNextPage) return;
 
     _isLoadingMore = true;
     final myGeneration = _generation;
+    final requestedPage = _currentPage + 1;
+
+    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+    // diagnosed.
+    debugPrint('[CURRENT BALANCE] page request: $requestedPage');
 
     try {
       final token = await _requireToken();
-      final page = await _apiClient.fetchLedgerEntriesPage(
+      final page = await _apiClient.fetchLedgerEntries(
         token: token,
-        nextPageUrl: Uri.parse(url),
+        page: requestedPage,
+        perPage: _perPage,
       );
       if (myGeneration != _generation) return; // a refresh started meanwhile
+
+      _validatePagination(page, previousCurrentPage: _currentPage);
+
+      debugPrint(
+        '[CURRENT BALANCE] HTTP status: 200 (page ${page.currentPage})',
+      );
+      debugPrint('[CURRENT BALANCE] raw rows: ${page.data.length}');
+      debugPrint(
+        '[CURRENT BALANCE] page parsed successfully: '
+        'page ${page.currentPage}/${page.lastPage}, '
+        'hasNextPage: ${page.currentPage < page.lastPage}',
+      );
 
       _entries = [..._entries, ..._deduplicated(page.data, against: _entries)];
       _currentPage = page.currentPage;
       _lastPage = page.lastPage;
-      _nextPageUrl = page.nextPageUrl;
     } on AncApiException catch (error) {
       if (myGeneration != _generation) return;
+      _logDiagnosticFailure(page: requestedPage, error: error);
       await _handleFailure(error); // _entries is untouched above on failure
     } finally {
       _isLoadingMore = false;
+    }
+  }
+
+  /// Rejects pagination metadata that could otherwise stall or loop paging
+  /// forever: a `last_page`/`current_page` outside `[1, ...]`, a
+  /// `current_page` past `last_page`, or — for a load-more response — a
+  /// `current_page` that does not strictly advance past
+  /// [previousCurrentPage]. Thrown as [AncProtocolException] so it flows
+  /// through the same [AncApiException] handling as any other malformed
+  /// response (mapped to [BusinessCentralProtocolFailure]) rather than
+  /// escaping as a raw, unclassified error.
+  void _validatePagination(
+    PaginatedResponse<LedgerEntry> page, {
+    required int previousCurrentPage,
+  }) {
+    if (page.currentPage < 1 ||
+        page.lastPage < 1 ||
+        page.currentPage > page.lastPage ||
+        page.currentPage <= previousCurrentPage) {
+      throw AncProtocolException(
+        'Malformed ledger-entries pagination metadata: '
+        'current_page=${page.currentPage}, last_page=${page.lastPage}, '
+        'previous current_page=$previousCurrentPage',
+      );
+    }
+  }
+
+  /// TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+  /// diagnosed. Logs only developer-facing, non-sensitive fields: the
+  /// requested page number, the exception's runtime type, its [message]
+  /// (already scrubbed of response bodies/tokens by [AncApiClient] — see
+  /// `_decodeLedgerEntriesResponse`), and the HTTP status code when present.
+  /// Never logs the bearer token, response body, or customer data.
+  void _logDiagnosticFailure({
+    required int page,
+    required AncApiException error,
+  }) {
+    debugPrint('[CURRENT BALANCE] failure stage: HTTP/parsing (page $page)');
+    debugPrint('[CURRENT BALANCE] exception type: ${error.runtimeType}');
+    debugPrint('[CURRENT BALANCE] exception message: ${error.message}');
+    if (error is AncHttpException) {
+      debugPrint('[CURRENT BALANCE] HTTP status: ${error.statusCode}');
     }
   }
 
@@ -174,6 +273,9 @@ class LedgerEntriesService {
 
   Future<void> _handleFailure(AncApiException error) async {
     final outcome = mapBusinessCentralError(error);
+    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+    // diagnosed.
+    debugPrint('[CURRENT BALANCE] mapped failure: ${outcome.runtimeType}');
     if (outcome is BusinessCentralUnauthorized) {
       await _coordinator.handleUnauthorized();
       throw const SessionExpiredException();

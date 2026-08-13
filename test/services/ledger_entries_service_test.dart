@@ -1,8 +1,10 @@
-// Unit tests for LedgerEntriesService: first-page load, load-more append,
-// duplicate-request guards, fixed page size, stopping on the last page,
-// load-more-failure row preservation, refresh reset, the stale-response
-// generation guard, Entry_No dedupe, and 401 handoff to the session
-// coordinator.
+// Unit tests for LedgerEntriesService: first-page load, load-more append via
+// currentPage + 1 (never a next_page_url — see the "never follows
+// next_page_url" test below for the exact production bug this guards
+// against), fixed page size, duplicate-request guards, stopping on the last
+// page, load-more-failure row preservation, refresh reset, the
+// stale-response generation guard, Entry_No dedupe, malformed-pagination
+// rejection, and 401 handoff to the session coordinator.
 //
 // All identifiers below (token) are synthetic fixtures.
 
@@ -47,27 +49,33 @@ Map<String, dynamic> _entryJson(int entryNo) => {
   'Open': true,
 };
 
+/// Defaults `next_page_url` to the unsafe/incomplete shape observed from the
+/// real backend — a bare `/?page=N` that drops the endpoint path — whenever
+/// a next page exists, to prove LedgerEntriesService never reads or follows
+/// it. Individual tests may still override [nextPageUrl] explicitly.
 Map<String, dynamic> _envelope({
   required List<int> entryNumbers,
   int currentPage = 1,
   int lastPage = 1,
-  String? nextPageUrl,
+  Object? nextPageUrl = _unset,
 }) => {
   'current_page': currentPage,
   'data': [for (final n in entryNumbers) _entryJson(n)],
-  'first_page_url':
-      'https://api.ancfab.com/api/business-central/ledger-entries?page=1',
+  'first_page_url': '/?page=1',
   'from': entryNumbers.isEmpty ? null : 1,
   'last_page': lastPage,
-  'last_page_url':
-      'https://api.ancfab.com/api/business-central/ledger-entries?page=$lastPage',
-  'next_page_url': nextPageUrl,
-  'path': 'https://api.ancfab.com/api/business-central/ledger-entries',
+  'last_page_url': '/?page=$lastPage',
+  'next_page_url': identical(nextPageUrl, _unset)
+      ? (currentPage < lastPage ? '/?page=${currentPage + 1}' : null)
+      : nextPageUrl,
+  'path': '/',
   'per_page': 25,
   'prev_page_url': null,
   'to': entryNumbers.isEmpty ? null : entryNumbers.length,
   'total': entryNumbers.length,
 };
+
+const _unset = Object();
 
 http.StreamedResponse _jsonResponse(
   int statusCode,
@@ -127,25 +135,32 @@ void main() {
       expect(fakeHttp.requestCount, 1);
     });
 
-    test('requests a fixed page size of 25', () async {
-      final fakeHttp = _ScriptedHttpClient([
-        (req) async =>
-            _jsonResponse(200, _envelope(entryNumbers: [1001]), request: req),
-      ]);
-      final service = LedgerEntriesService(
-        apiClient: AncApiClient(httpClient: fakeHttp),
-        sessionStore: FakeAuthSessionStore()..seed(_session()),
-        coordinator: FakeSessionExpiryCoordinator(),
-      );
+    test(
+      'requests the ledger-entries endpoint with page=1 and per_page=25',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async =>
+              _jsonResponse(200, _envelope(entryNumbers: [1001]), request: req),
+        ]);
+        final service = LedgerEntriesService(
+          apiClient: AncApiClient(httpClient: fakeHttp),
+          sessionStore: FakeAuthSessionStore()..seed(_session()),
+          coordinator: FakeSessionExpiryCoordinator(),
+        );
 
-      await service.loadFirstPage();
+        await service.loadFirstPage();
 
-      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
-      expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
-    });
+        expect(
+          fakeHttp.requestedUrls.single.path,
+          '/api/business-central/ledger-entries',
+        );
+        expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
+        expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
+      },
+    );
 
     test(
-      'hasNextPage is false when next_page_url is null (stops paging)',
+      'hasNextPage is false when currentPage >= lastPage (stops paging)',
       () async {
         final fakeHttp = _ScriptedHttpClient([
           (req) async =>
@@ -199,11 +214,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) async => _jsonResponse(
@@ -226,16 +237,102 @@ void main() {
       expect(service.hasNextPage, isFalse);
     });
 
+    test('requests page = currentPage + 1 against the fixed ledger-entries '
+        'endpoint, never a next_page_url — reproduces the production bug '
+        'where next_page_url resolves to a bare /?page=2 and must not throw '
+        'ArgumentError', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          // Exactly the shape observed from the live backend: a relative
+          // URL that would fail AncApiClient's trusted-host guard if
+          // followed directly.
+          _envelope(entryNumbers: [1001], lastPage: 4, nextPageUrl: '/?page=2'),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            entryNumbers: [1002],
+            currentPage: 2,
+            lastPage: 4,
+            nextPageUrl: '/?page=3',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            entryNumbers: [1003],
+            currentPage: 3,
+            lastPage: 4,
+            nextPageUrl: '/?page=4',
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1004], currentPage: 4, lastPage: 4),
+          request: req,
+        ),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadFirstPage();
+      await service.loadNextPage(); // page 2 — the request that used to throw
+      await service.loadNextPage(); // page 3
+      await service.loadNextPage(); // page 4
+
+      expect(fakeHttp.requestCount, 4);
+      expect(service.entries.map((e) => e.entryNo), [1001, 1002, 1003, 1004]);
+      expect(service.hasNextPage, isFalse);
+
+      for (final url in fakeHttp.requestedUrls) {
+        expect(url.host, 'api.ancfab.com');
+        expect(url.path, '/api/business-central/ledger-entries');
+      }
+      expect(fakeHttp.requestedUrls[0].queryParameters['page'], '1');
+      expect(fakeHttp.requestedUrls[1].queryParameters['page'], '2');
+      expect(fakeHttp.requestedUrls[2].queryParameters['page'], '3');
+      expect(fakeHttp.requestedUrls[3].queryParameters['page'], '4');
+    });
+
+    test('preserves the original per_page on the load-more request', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1001], lastPage: 2),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1002], currentPage: 2, lastPage: 2),
+          request: req,
+        ),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadFirstPage();
+      await service.loadNextPage();
+
+      expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '25');
+      expect(fakeHttp.requestedUrls[1].queryParameters['per_page'], '25');
+    });
+
     test('cannot run twice concurrently', () async {
       final completer = Completer<http.StreamedResponse>();
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) => completer.future,
@@ -272,11 +369,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) async => _jsonResponse(502, const {}, request: req),
@@ -300,11 +393,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) async => _jsonResponse(502, const {}, request: req),
@@ -334,11 +423,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001, 1002],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001, 1002], lastPage: 2),
           request: req,
         ),
         (req) async => _jsonResponse(
@@ -358,6 +443,66 @@ void main() {
 
       expect(service.entries.map((e) => e.entryNo), [1001, 1002, 1003]);
     });
+
+    test('a non-advancing current_page on a load-more response maps to '
+        'BusinessCentralProtocolFailure and preserves existing rows, '
+        'instead of looping forever', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1001], lastPage: 4),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          // Malformed: still reports current_page 1 despite page=2 having
+          // been requested.
+          _envelope(entryNumbers: [1002], currentPage: 1, lastPage: 4),
+          request: req,
+        ),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+      await service.loadFirstPage();
+
+      try {
+        await service.loadNextPage();
+        fail('Expected a BusinessCentralFailureException');
+      } on BusinessCentralFailureException catch (error) {
+        expect(error.outcome, isA<BusinessCentralProtocolFailure>());
+      }
+
+      expect(service.entries.map((e) => e.entryNo), [1001]);
+      expect(fakeHttp.requestCount, 2, reason: 'must not retry in a loop');
+    });
+
+    test('an invalid last_page (0) on the first page maps to '
+        'BusinessCentralProtocolFailure', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1001], currentPage: 1, lastPage: 0),
+          request: req,
+        ),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      try {
+        await service.loadFirstPage();
+        fail('Expected a BusinessCentralFailureException');
+      } on BusinessCentralFailureException catch (error) {
+        expect(error.outcome, isA<BusinessCentralProtocolFailure>());
+      }
+
+      expect(service.entries, isEmpty);
+    });
   });
 
   group('LedgerEntriesService.refresh', () {
@@ -365,11 +510,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) async =>
@@ -394,11 +535,7 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async => _jsonResponse(
           200,
-          _envelope(
-            entryNumbers: [1001],
-            lastPage: 2,
-            nextPageUrl: 'https://api.ancfab.com/x?page=2',
-          ),
+          _envelope(entryNumbers: [1001], lastPage: 2),
           request: req,
         ),
         (req) => loadMoreCompleter.future, // load-more: stays pending
