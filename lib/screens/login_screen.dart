@@ -16,6 +16,7 @@ import '../widgets/login/login_text_field.dart';
 import '../widgets/login/password_field.dart';
 import '../widgets/login/primary_login_button.dart';
 import '../widgets/login/secondary_back_button.dart';
+import 'contact_us_screen.dart';
 import 'home_screen.dart';
 
 /// Purpose: The Login screen's form state and presentation.
@@ -204,10 +205,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleContactUs() {
-    // TODO: Navigate to the Contact Us screen once it exists.
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ContactUsScreen()));
   }
 
   void _handlePrivacyPolicy() {
+
     // TODO: Navigate to the Privacy Policy screen once it exists.
   }
 

@@ -19,6 +19,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/config/api_config.dart';
+import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
@@ -616,6 +617,21 @@ void main() {
       await tester.pump();
 
       expect(find.text(message), findsOneWidget);
+    });
+  });
+
+  group('informational links', () {
+    testWidgets('Contact Us link navigates to ContactUsScreen', (tester) async {
+      await _pumpLoginScreen(tester);
+
+      final finder = find.text('Need help? Contact Us');
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ContactUsScreen), findsOneWidget);
+      expect(find.byType(LoginScreen), findsNothing);
     });
   });
 }

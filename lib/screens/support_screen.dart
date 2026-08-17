@@ -14,7 +14,6 @@ import '../widgets/support_action_card.dart';
 import '../widgets/support_hours_card.dart';
 import '../widgets/support_info_card.dart';
 import '../widgets/support_region_selector.dart';
-import '../widgets/support_textile_visual.dart';
 import 'contact_us_screen.dart';
 
 /// Support landing screen: intro copy, a region selector, and region-scoped
@@ -234,8 +233,6 @@ class _SupportScreenState extends State<SupportScreen> {
                           onChatOnWhatsApp: _onChatOnWhatsApp,
                           onEmailSupport: _onEmailSupport,
                         ),
-                        const SizedBox(height: 20),
-                        const SupportTextileVisual(),
                         const SizedBox(height: 20),
                         SupportInfoCard(
                           key: const ValueKey('support-corporate-office-card'),

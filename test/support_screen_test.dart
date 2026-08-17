@@ -69,6 +69,21 @@ void main() {
     expect(find.text('SUPPORT HOURS'), findsOneWidget);
   });
 
+  testWidgets(
+    'Does not render the removed "24/7 Precision" textile visual section',
+    (tester) async {
+      await pumpSupport(tester);
+
+      expect(find.text('24/7 Precision'), findsNothing);
+
+      // Other Support content stays intact.
+      expect(find.text('SUPPORT CENTER'), findsOneWidget);
+      expect(find.byType(SupportActionCard), findsOneWidget);
+      expect(find.byType(SupportInfoCard), findsNWidgets(2));
+      expect(find.byType(SupportHoursCard), findsOneWidget);
+    },
+  );
+
   testWidgets('UAE region pill is selected initially', (tester) async {
     await pumpSupport(tester);
 
