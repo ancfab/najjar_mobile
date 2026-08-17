@@ -829,25 +829,47 @@ class _HomeScreenState extends State<HomeScreen> {
   /// locations, and different units of measure at the same location, are
   /// always shown as separate lines, never combined into one total. `null`
   /// when there is nothing to show (see [_checkAvailabilityResultText]).
+  ///
+  /// A meters entry at or below the low-stock threshold
+  /// (`StockLocationAvailability.isLowStockInMeters`) shows the location
+  /// followed by the localized "contact support" line instead of the
+  /// quantity sentence — the location stays visible, but the real quantity
+  /// must never appear anywhere on that line.
   String? _formatCheckAvailabilityResult(StockLookupSuccess result) {
     final description = result.description;
     final lines = <String>[
       if (description != null && description.isNotEmpty) description,
       for (final availability in result.availabilityByLocation)
-        context.t(
-          'home.availableAtLocation',
-          params: {
-            'quantity': _formatAvailabilityQuantity(
-              availability.remainingQuantity,
-            ),
-            'unit': availability.unitOfMeasureCode,
-            'location': availability.locationCode.isEmpty
-                ? context.t('home.unknownLocation')
-                : availability.locationCode,
-          },
-        ),
+        ..._formatAvailabilityLines(availability),
     ];
     return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  /// One or two display lines for a single [availability] entry: the
+  /// quantity sentence normally, or the location followed by the localized
+  /// "contact support" line when [StockLocationAvailability.isLowStockInMeters]
+  /// — see [_formatCheckAvailabilityResult].
+  List<String> _formatAvailabilityLines(
+    StockLocationAvailability availability,
+  ) {
+    final locationLabel = availability.locationCode.isEmpty
+        ? context.t('home.unknownLocation')
+        : availability.locationCode;
+    if (availability.isLowStockInMeters) {
+      return [locationLabel, context.t('common.contactSupportForInquiries')];
+    }
+    return [
+      context.t(
+        'home.availableAtLocation',
+        params: {
+          'quantity': _formatAvailabilityQuantity(
+            availability.remainingQuantity,
+          ),
+          'unit': availability.unitOfMeasureCode,
+          'location': locationLabel,
+        },
+      ),
+    ];
   }
 
   /// Renders a whole-number quantity without a trailing ".0" while still

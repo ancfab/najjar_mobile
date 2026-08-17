@@ -12,7 +12,8 @@
     "search": "بحث",
     "clear": "مسح",
     "selectDate": "اختر التاريخ",
-    "errorGeneric": "حدث خطأ ما. يرجى المحاولة مرة أخرى."
+    "errorGeneric": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+    "contactSupportForInquiries": "يرجى التواصل مع الدعم للاستفسار"
   },
   "language": {
     "selectorTitle": "اختر اللغة",

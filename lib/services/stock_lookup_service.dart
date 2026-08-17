@@ -43,6 +43,29 @@ final class StockLocationAvailability {
   final num remainingQuantity;
   final String unitOfMeasureCode;
 
+  /// The only Business Central [unitOfMeasureCode] value confirmed (across
+  /// every fixture/tested payload) to represent meters — see this class's
+  /// doc comment. No other observed code (e.g. `YD`, `PCS`) is meters, so
+  /// [isLowStockInMeters] must never fire for them.
+  static const String _metersUnitOfMeasureCode = 'MT';
+
+  /// The low-stock threshold, in meters: at or below this quantity, the
+  /// exact figure must not be shown to the user (see [isLowStockInMeters]).
+  /// CONFIRMED business rule: `quantity > 50` is "Available" with the real
+  /// quantity shown; `quantity <= 50` hides the quantity entirely.
+  static const num lowStockThresholdMeters = 50;
+
+  /// True when this entry is measured in meters and [remainingQuantity] is
+  /// at or below [lowStockThresholdMeters] — the single source of truth
+  /// every screen displaying per-location availability (`ScanStockScreen`,
+  /// the Home screen's Check Availability card) must branch on instead of
+  /// duplicating the `> 50` comparison. Always `false` for a non-meters
+  /// [unitOfMeasureCode] — this rule is meters-specific and must not affect
+  /// other units of measure (e.g. yards, pieces).
+  bool get isLowStockInMeters =>
+      unitOfMeasureCode == _metersUnitOfMeasureCode &&
+      remainingQuantity <= lowStockThresholdMeters;
+
   @override
   bool operator ==(Object other) =>
       other is StockLocationAvailability &&

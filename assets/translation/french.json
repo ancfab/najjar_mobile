@@ -12,7 +12,8 @@
     "search": "Rechercher",
     "clear": "Effacer",
     "selectDate": "Sélectionner une date",
-    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
+    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
+    "contactSupportForInquiries": "Contactez le support pour toute demande"
   },
   "language": {
     "selectorTitle": "Choisir la langue",

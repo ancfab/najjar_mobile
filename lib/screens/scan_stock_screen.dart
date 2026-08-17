@@ -1086,13 +1086,15 @@ class _LocationAvailabilityRow extends StatelessWidget {
     final locationLabel = hasLocationCode
         ? locationCode
         : context.t('scanStock.unknownLocationLabel');
-    final availableText = context.t(
-      'scanStock.availableQuantityLabel',
-      params: {
-        'quantity': _formatQuantity(availability.remainingQuantity),
-        'unit': availability.unitOfMeasureCode,
-      },
-    );
+    final availableText = availability.isLowStockInMeters
+        ? context.t('common.contactSupportForInquiries')
+        : context.t(
+            'scanStock.availableQuantityLabel',
+            params: {
+              'quantity': _formatQuantity(availability.remainingQuantity),
+              'unit': availability.unitOfMeasureCode,
+            },
+          );
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

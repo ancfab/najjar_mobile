@@ -12,7 +12,8 @@
     "search": "Search",
     "clear": "Clear",
     "selectDate": "Select date",
-    "errorGeneric": "Something went wrong. Please try again."
+    "errorGeneric": "Something went wrong. Please try again.",
+    "contactSupportForInquiries": "Contact Support for inquiries"
   },
   "language": {
     "selectorTitle": "Select Language",

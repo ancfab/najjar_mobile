@@ -650,7 +650,10 @@ void main() {
       expect(find.text('BEIRUT'), findsOneWidget);
       expect(find.text('80 MT available'), findsOneWidget);
       expect(find.text('TRIPOLI'), findsOneWidget);
-      expect(find.text('20 MT available'), findsOneWidget);
+      // TRIPOLI's 20 MT is at/below the 50 m low-stock threshold: the exact
+      // quantity must not be shown, only the localized contact-support copy.
+      expect(find.text('20 MT available'), findsNothing);
+      expect(find.text('Contact Support for inquiries'), findsOneWidget);
     });
 
     testWidgets('Success with optional fields missing hides those rows', (
@@ -682,6 +685,104 @@ void main() {
         find.byKey(const ValueKey('scan-stock-availability-section')),
         findsNothing,
       );
+    });
+
+    group('Low-stock (<= 50 m) hides the quantity', () {
+      Future<void> pumpWithQuantity(
+        WidgetTester tester,
+        num remainingQuantity,
+      ) async {
+        final scanner = FakeBarcodeScannerController();
+        final lookup = FakeStockLookupService()
+          ..defaultResultBuilder = (code) => StockLookupSuccess(
+            code,
+            scannedAt: DateTime.utc(2026, 1, 1),
+            itemNo: 'ITEM-THRESHOLD',
+            availabilityByLocation: [
+              StockLocationAvailability(
+                locationCode: 'BEIRUT',
+                remainingQuantity: remainingQuantity,
+                unitOfMeasureCode: 'MT',
+              ),
+            ],
+          );
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+        );
+        scanner.emit('ITEM-THRESHOLD');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+      }
+
+      testWidgets('49 m shows Contact Support, not the quantity', (
+        tester,
+      ) async {
+        await pumpWithQuantity(tester, 49);
+
+        expect(find.text('Contact Support for inquiries'), findsOneWidget);
+        expect(find.text('49 MT available'), findsNothing);
+        expect(find.textContaining('49'), findsNothing);
+      });
+
+      testWidgets('50 m (the boundary) shows Contact Support, not the '
+          'quantity', (tester) async {
+        await pumpWithQuantity(tester, 50);
+
+        expect(find.text('Contact Support for inquiries'), findsOneWidget);
+        expect(find.text('50 MT available'), findsNothing);
+        expect(find.textContaining('50'), findsNothing);
+      });
+
+      testWidgets('50.01 m shows Available with the real quantity', (
+        tester,
+      ) async {
+        await pumpWithQuantity(tester, 50.01);
+
+        expect(find.text('50.01 MT available'), findsOneWidget);
+        expect(find.text('Contact Support for inquiries'), findsNothing);
+      });
+
+      testWidgets('100 m shows Available with the real quantity', (
+        tester,
+      ) async {
+        await pumpWithQuantity(tester, 100);
+
+        expect(find.text('100 MT available'), findsOneWidget);
+        expect(find.text('Contact Support for inquiries'), findsNothing);
+      });
+
+      testWidgets('a non-meters unit at or below 50 still shows its quantity '
+          '(the threshold is meters-specific)', (tester) async {
+        final scanner = FakeBarcodeScannerController();
+        final lookup = FakeStockLookupService()
+          ..defaultResultBuilder = (code) => StockLookupSuccess(
+            code,
+            scannedAt: DateTime.utc(2026, 1, 1),
+            itemNo: 'ITEM-YD',
+            availabilityByLocation: const [
+              StockLocationAvailability(
+                locationCode: 'BEIRUT',
+                remainingQuantity: 15,
+                unitOfMeasureCode: 'YD',
+              ),
+            ],
+          );
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+        );
+        scanner.emit('ITEM-YD');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('15 YD available'), findsOneWidget);
+        expect(find.text('Contact Support for inquiries'), findsNothing);
+      });
     });
 
     testWidgets(

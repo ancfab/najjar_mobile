@@ -1016,6 +1016,132 @@ void main() {
         );
       });
 
+      group('Low-stock (<= 50 m) hides the quantity', () {
+        Future<void> tapVariationWithQuantity(
+          WidgetTester tester,
+          num remainingQuantity,
+        ) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final stockLookupService = FakeStockLookupService()
+            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
+              rawCode,
+              scannedAt: DateTime(2026, 1, 1),
+              availabilityByLocation: [
+                StockLocationAvailability(
+                  locationCode: 'LOC-01',
+                  remainingQuantity: remainingQuantity,
+                  unitOfMeasureCode: 'MT',
+                ),
+              ],
+            );
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-THRESHOLD');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('variation-ITEM-THRESHOLD')),
+          );
+          await tester.pump();
+          await tester.tap(
+            find.byKey(const ValueKey('variation-ITEM-THRESHOLD')),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        testWidgets('49 m shows the location and Contact Support, not the '
+            'quantity', (tester) async {
+          await tapVariationWithQuantity(tester, 49);
+
+          expect(
+            find.text('LOC-01\nContact Support for inquiries'),
+            findsOneWidget,
+          );
+          expect(find.text('49 MT available at LOC-01.'), findsNothing);
+        });
+
+        testWidgets('50 m (the boundary) shows the location and Contact '
+            'Support, not the quantity', (tester) async {
+          await tapVariationWithQuantity(tester, 50);
+
+          expect(
+            find.text('LOC-01\nContact Support for inquiries'),
+            findsOneWidget,
+          );
+          expect(find.text('50 MT available at LOC-01.'), findsNothing);
+        });
+
+        testWidgets('50.01 m shows Available with the real quantity', (
+          tester,
+        ) async {
+          await tapVariationWithQuantity(tester, 50.01);
+
+          expect(find.text('50.01 MT available at LOC-01.'), findsOneWidget);
+          expect(
+            find.textContaining('Contact Support for inquiries'),
+            findsNothing,
+          );
+        });
+
+        testWidgets('100 m shows Available with the real quantity', (
+          tester,
+        ) async {
+          await tapVariationWithQuantity(tester, 100);
+
+          expect(find.text('100 MT available at LOC-01.'), findsOneWidget);
+          expect(
+            find.textContaining('Contact Support for inquiries'),
+            findsNothing,
+          );
+        });
+
+        testWidgets('a non-meters unit at or below 50 still shows its quantity '
+            '(the threshold is meters-specific)', (tester) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final stockLookupService = FakeStockLookupService()
+            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
+              rawCode,
+              scannedAt: DateTime(2026, 1, 1),
+              availabilityByLocation: const [
+                StockLocationAvailability(
+                  locationCode: 'LOC-01',
+                  remainingQuantity: 15,
+                  unitOfMeasureCode: 'YD',
+                ),
+              ],
+            );
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-YD');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('variation-ITEM-YD')),
+          );
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('variation-ITEM-YD')));
+          await tester.pumpAndSettle();
+
+          expect(find.text('15 YD available at LOC-01.'), findsOneWidget);
+          expect(
+            find.textContaining('Contact Support for inquiries'),
+            findsNothing,
+          );
+        });
+      });
+
       testWidgets(
         'duplicate submissions are prevented while a lookup is active',
         (tester) async {
