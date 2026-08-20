@@ -109,12 +109,10 @@ void main() {
       find.byType(SupportRegionSelector),
     );
     expect(selector.selectedRegionId, lebanon.id);
-    expect(
-      find.text(
-        'Office details for ${lebanon.displayName} will be added soon.',
-      ),
-      findsOneWidget,
-    );
+    // Lebanon now has a verified office address, so the office fallback no
+    // longer applies to it — only support hours (still unverified for every
+    // region) falls back.
+    expect(find.text(lebanon.officeAddress!), findsOneWidget);
     expect(
       find.text(
         'Support hours for ${lebanon.displayName} will be confirmed soon.',
@@ -137,12 +135,18 @@ void main() {
           find.byType(SupportRegionSelector),
         );
         expect(selector.selectedRegionId, region.id);
-        expect(
-          find.text(
-            'Office details for ${region.displayName} will be added soon.',
-          ),
-          findsOneWidget,
-        );
+        // Only regions without a verified office address (all but Lebanon)
+        // fall back to the "will be added soon" copy.
+        if (region.officeAddress != null) {
+          expect(find.text(region.officeAddress!), findsOneWidget);
+        } else {
+          expect(
+            find.text(
+              'Office details for ${region.displayName} will be added soon.',
+            ),
+            findsOneWidget,
+          );
+        }
         expect(
           find.text(
             'Support hours for ${region.displayName} will be confirmed '
@@ -153,12 +157,17 @@ void main() {
 
         for (final other in kSupportRegions) {
           if (other.id == region.id) continue;
-          expect(
-            find.text(
-              'Office details for ${other.displayName} will be added soon.',
-            ),
-            findsNothing,
-          );
+          if (other.officeAddress != null) {
+            expect(find.text(other.officeAddress!), findsNothing);
+          } else {
+            expect(
+              find.text(
+                'Office details for ${other.displayName} will be added '
+                'soon.',
+              ),
+              findsNothing,
+            );
+          }
         }
         expect(tester.takeException(), isNull);
       }

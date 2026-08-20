@@ -672,7 +672,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final cardWidth = tester
-          .getSize(find.byKey(const ValueKey('contact-main-office-card')))
+          .getSize(find.byKey(const ValueKey('contact-email-us-card')))
           .width;
       // On a 768px-wide tablet a full-bleed card would be well over 700px,
       // so this confirms the tablet max-width constraint is actually

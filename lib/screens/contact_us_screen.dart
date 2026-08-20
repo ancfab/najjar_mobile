@@ -4,55 +4,53 @@ import '../data/support_regions_data.dart';
 import '../localization/translations.dart';
 import '../models/contact_subject.dart';
 import '../models/support_region.dart';
-import '../services/contact_support_service.dart';
+import '../services/email_launcher.dart';
+import '../services/phone_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
 import '../widgets/contact_form_field.dart';
 import '../widgets/support_info_card.dart';
+import '../widgets/support_region_selector.dart';
+import '../widgets/support_regional_contact_tile.dart';
 
-/// Contact Us form screen: reached from the Support landing screen's
-/// "EMAIL SUPPORT" action. Collects a name, work email, subject, and
-/// message, and shows the region-scoped Email/Office details already
-/// modeled by [SupportRegionData].
+/// Contact Us screen: reached either from the Support landing screen's
+/// "EMAIL SUPPORT" action (with a [region] already selected there) or
+/// directly from Login (with no region yet). Shows region-scoped contact
+/// details — email, office address, direct phone numbers, and (for Syria)
+/// named regional representatives — sourced from [kSupportRegions], plus a
+/// form whose Send action opens the device's email app addressed to the
+/// selected region's verified support email.
 ///
-/// TODO: No real Contact Us / support-ticketing backend exists yet — see
-/// [ContactSupportService] and its default
-/// [UnavailableContactSupportService], which never reaches a real backend
-/// and always reports the submission as unavailable. Inject a real
-/// [ContactSupportService] implementation via [contactService] once the
-/// backend contract exists.
-///
-/// TODO: No logged-in profile/session anywhere in this project currently
-/// exposes a real customer name or email (see `lib/data/mock_user.dart`,
-/// which only holds a hardcoded display name for the Home/Profile
-/// screens, and the Login screen, which never produces a session/profile
-/// object at all). [initialName]/[initialEmail] exist so a real
-/// profile/session source can prefill this form later without further
-/// changes here; until then they're only exercised by tests.
+/// [initialName]/[initialEmail] prefill the form once a real profile/session
+/// source exists; both are null in production today (see
+/// `lib/data/mock_user.dart` and the Login screen) and are only exercised by
+/// tests.
 class ContactUsScreen extends StatefulWidget {
   const ContactUsScreen({
     super.key,
     this.region,
-    this.contactService = const UnavailableContactSupportService(),
+    this.phoneLauncher = const PhoneLauncher(),
+    this.emailLauncher = const EmailLauncher(),
     this.initialName,
     this.initialEmail,
   });
 
-  /// The Support region selected on the landing screen, so this screen can
-  /// show region-scoped contact details instead of generic/unrelated ones.
-  /// Falls back to the first configured region when not supplied.
+  /// The Support region selected on the landing screen. When null (e.g.
+  /// opened directly from Login), this screen shows its own region selector
+  /// instead of silently defaulting to one region behind the scenes.
   final SupportRegionData? region;
 
-  /// Injectable so tests can supply a fake/in-memory service instead of
-  /// depending on a real backend, which doesn't exist yet. Defaults to
-  /// [UnavailableContactSupportService], the explicitly non-production
-  /// placeholder.
-  final ContactSupportService contactService;
+  /// Injectable so tests can supply a fake [UrlLauncherClient]-backed
+  /// launcher instead of touching the real `url_launcher` plugin.
+  final PhoneLauncher phoneLauncher;
+
+  /// Injectable so tests can supply a fake [UrlLauncherClient]-backed
+  /// launcher instead of touching the real `url_launcher` plugin.
+  final EmailLauncher emailLauncher;
 
   /// Prefill values for the customer's name/email, sourced from a
-  /// logged-in profile/session once one exists. Null in production today
-  /// since no such source exists — see the class-level TODO above.
+  /// logged-in profile/session once one exists. Null in production today.
   final String? initialName;
   final String? initialEmail;
 
@@ -72,22 +70,35 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   final _messageFocusNode = FocusNode();
 
   ContactSubject? _selectedSubject;
-  bool _isSubmitting = false;
+  bool _isSendingForm = false;
+  bool _isEmailActionLaunching = false;
+  bool _isPhoneLaunching = false;
   bool _nameEditedByUser = false;
   bool _emailEditedByUser = false;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
 
-  SupportRegionData get _region => widget.region ?? kSupportRegions.first;
+  late SupportRegionId _selectedRegionId;
+
+  bool get _showRegionSelector => widget.region == null;
+
+  SupportRegionData get _region => kSupportRegions.firstWhere(
+    (region) => region.id == _selectedRegionId,
+    orElse: () => kSupportRegions.first,
+  );
 
   @override
   void initState() {
     super.initState();
+    _selectedRegionId = widget.region?.id ?? kSupportRegions.first.id;
     _applyProfilePrefill(widget.initialName, widget.initialEmail);
   }
 
   @override
   void didUpdateWidget(covariant ContactUsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.region != null && widget.region!.id != oldWidget.region?.id) {
+      setState(() => _selectedRegionId = widget.region!.id);
+    }
     if (widget.initialName != oldWidget.initialName ||
         widget.initialEmail != oldWidget.initialEmail) {
       _applyProfilePrefill(widget.initialName, widget.initialEmail);
@@ -95,7 +106,6 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   }
 
   /// Prefills the name/email fields from a logged-in profile/session, once
-  /// one exists (see the class-level TODO). Only overwrites a field that
   /// the customer hasn't touched and hasn't already typed something into,
   /// so late-arriving profile data can never clobber an in-progress edit.
   void _applyProfilePrefill(String? name, String? email) {
@@ -128,14 +138,50 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     Navigator.of(context).maybePop();
   }
 
+  void _selectRegion(SupportRegionId regionId) {
+    setState(() => _selectedRegionId = regionId);
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _onEmailUsTap() async {
+    if (_isEmailActionLaunching) return;
+    final email = _region.supportEmail;
+    if (email == null) return;
+
+    setState(() => _isEmailActionLaunching = true);
+    try {
+      final result = await widget.emailLauncher.send(to: email);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(context.t('contactUs.emailAppUnavailable'));
+      }
+    } finally {
+      if (mounted) setState(() => _isEmailActionLaunching = false);
+    }
+  }
+
+  Future<void> _onCallTap(String number) async {
+    if (_isPhoneLaunching) return;
+
+    setState(() => _isPhoneLaunching = true);
+    try {
+      final result = await widget.phoneLauncher.call(number);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(context.t('contactUs.dialerUnavailable'));
+      }
+    } finally {
+      if (mounted) setState(() => _isPhoneLaunching = false);
+    }
+  }
+
   Future<void> _handleSubmit() async {
-    if (_isSubmitting) return;
+    if (_isSendingForm) return;
 
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) {
@@ -144,39 +190,38 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       return;
     }
 
-    final request = ContactRequest(
-      name: _fullNameController.text.trim(),
-      email: _workEmailController.text.trim(),
-      subject: _selectedSubject!,
-      message: _messageController.text.trim(),
-      regionId: _region.id,
-    );
+    final email = _region.supportEmail;
+    if (email == null) {
+      _showSnackBar(
+        context.t(
+          'contactUs.emailUnavailableForRegion',
+          params: {'region': _region.displayName},
+        ),
+      );
+      return;
+    }
 
-    setState(() => _isSubmitting = true);
+    final name = _fullNameController.text.trim();
+    final workEmail = _workEmailController.text.trim();
+    final message = _messageController.text.trim();
+    final subjectLabel = _selectedSubject!.localizedLabel(context);
+    final body = 'Name: $name\nEmail: $workEmail\n\n$message';
+
+    setState(() => _isSendingForm = true);
     FocusScope.of(context).unfocus();
 
     try {
-      final result = await widget.contactService.submit(request);
+      final result = await widget.emailLauncher.send(
+        to: email,
+        subject: subjectLabel,
+        body: body,
+      );
       if (!mounted) return;
-      switch (result.outcome) {
-        case ContactSubmissionOutcome.success:
-          _showSnackBar(
-            result.message ?? context.t('contactUs.successMessage'),
-          );
-        case ContactSubmissionOutcome.failure:
-          _showSnackBar(
-            result.message ?? context.t('contactUs.failureMessage'),
-          );
-        case ContactSubmissionOutcome.unavailable:
-          _showSnackBar(context.t('contactUs.emailUnavailable'));
+      if (!result.succeeded) {
+        _showSnackBar(context.t('contactUs.sendEmailFailed'));
       }
-    } catch (error) {
-      // Technical detail only — never the name, email, or message content.
-      debugPrint('Contact Us submission failed: $error');
-      if (!mounted) return;
-      _showSnackBar(context.t('contactUs.failureMessage'));
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSendingForm = false);
     }
   }
 
@@ -218,7 +263,15 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     const SizedBox(height: 12),
                     _buildIntro(),
                     const SizedBox(height: 20),
+                    if (_showRegionSelector) ...[
+                      _buildRegionSelector(),
+                      const SizedBox(height: 20),
+                    ],
                     _buildContactSummary(),
+                    if (_region.regionalContacts.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      _buildRegionalContacts(),
+                    ],
                     const SizedBox(height: 20),
                     _buildFormCard(),
                     const SizedBox(height: 24),
@@ -391,43 +444,197 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     );
   }
 
+  Widget _buildRegionSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.t('contactUs.selectRegionLabel'),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0,
+            color: AppColors.grayText,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SupportRegionSelector(
+          key: const ValueKey('contact-region-selector'),
+          regions: kSupportRegions,
+          selectedRegionId: _selectedRegionId,
+          onRegionSelected: _selectRegion,
+        ),
+      ],
+    );
+  }
+
   Widget _buildContactSummary() {
+    final email = _region.supportEmail;
+    final office = _region.officeAddress;
+    final hotlineNumbers = _region.hotlineNumbers;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SupportInfoCard(
-          key: const ValueKey('contact-email-us-card'),
-          icon: Icons.mail_outline_rounded,
-          label: context.t('contactUs.emailUsLabel'),
-          child: Text(
-            _region.supportEmail ?? context.t('contactUs.emailFallback'),
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textNavy,
-              height: 1.4,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SupportInfoCard(
-          key: const ValueKey('contact-main-office-card'),
-          icon: Icons.location_on_rounded,
-          label: context.t('contactUs.mainOfficeLabel'),
-          child: Text(
-            _region.officeAddress ??
-                context.t(
-                  'contactUs.officeFallback',
-                  params: {'region': _region.displayName},
+        if (email != null) ...[
+          SupportInfoCard(
+            key: const ValueKey('contact-email-us-card'),
+            icon: Icons.mail_outline_rounded,
+            label: context.t('contactUs.emailUsLabel'),
+            child: Semantics(
+              button: true,
+              label: context.t(
+                'contactUs.emailAction',
+                params: {'email': email},
+              ),
+              child: InkWell(
+                key: const ValueKey('contact-email-us-action'),
+                onTap: _onEmailUsTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Text(
+                  email,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryNavy,
+                    height: 1.4,
+                  ),
                 ),
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textNavy,
-              height: 1.4,
+              ),
             ),
           ),
+          const SizedBox(height: 16),
+        ],
+        if (office != null) ...[
+          SupportInfoCard(
+            key: const ValueKey('contact-main-office-card'),
+            icon: Icons.location_on_rounded,
+            label: context.t('contactUs.mainOfficeLabel'),
+            child: Text(
+              office,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textNavy,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (hotlineNumbers.isNotEmpty)
+          SupportInfoCard(
+            key: const ValueKey('contact-call-us-card'),
+            icon: Icons.call_rounded,
+            label: context.t('contactUs.callUsLabel'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final number in hotlineNumbers)
+                  Semantics(
+                    button: true,
+                    label: context.t(
+                      'contactUs.callNumber',
+                      params: {'number': number},
+                    ),
+                    child: InkWell(
+                      key: ValueKey('contact-hotline-number-$number'),
+                      onTap: () => _onCallTap(number),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          number,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryNavy,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRegionalContacts() {
+    final upholstery = _region.regionalContacts
+        .where((c) => c.category == SupportContactCategory.upholsteryFabrics)
+        .toList();
+    final curtains = _region.regionalContacts
+        .where((c) => c.category == SupportContactCategory.curtains)
+        .toList();
+
+    return Container(
+      key: const ValueKey('contact-regional-contacts-section'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            context.t('contactUs.regionalContactsLabel'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+              color: AppColors.grayText,
+            ),
+          ),
+          if (upholstery.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _buildRegionalContactGroup(
+              context.t('contactUs.upholsteryFabricsLabel'),
+              upholstery,
+            ),
+          ],
+          if (curtains.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _buildRegionalContactGroup(
+              context.t('contactUs.curtainsLabel'),
+              curtains,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRegionalContactGroup(
+    String groupLabel,
+    List<SupportRegionalContact> contacts,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          groupLabel,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textNavy,
+          ),
         ),
+        const SizedBox(height: 8),
+        for (final contact in contacts) ...[
+          SupportRegionalContactTile(
+            key: ValueKey(
+              'regional-contact-${contact.category.name}-'
+              '${contact.name}-${contact.area}',
+            ),
+            contact: contact,
+            onCallTap: _onCallTap,
+          ),
+          const SizedBox(height: 8),
+        ],
       ],
     );
   }
@@ -578,13 +785,13 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       child: InkWell(
         key: const ValueKey('contact-send-email-button'),
         borderRadius: BorderRadius.circular(12),
-        onTap: _isSubmitting ? null : _handleSubmit,
+        onTap: _isSendingForm ? null : _handleSubmit,
         child: SizedBox(
           width: double.infinity,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
             child: Center(
-              child: _isSubmitting
+              child: _isSendingForm
                   ? const SizedBox(
                       height: 22,
                       width: 22,

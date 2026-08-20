@@ -2,14 +2,45 @@
 /// selector.
 enum SupportRegionId { uae, syria, iraq, oman, lebanon }
 
+/// Which product line a [SupportRegionalContact] represents, used to group
+/// Syria's regional representatives on the Contact Us screen.
+enum SupportContactCategory { upholsteryFabrics, curtains }
+
+/// A single named regional support representative for a region (currently
+/// only populated for Syria), shown in the Contact Us screen's "Regional
+/// Contacts" section.
+///
+/// [phone] is nullable: at least one verified representative (Syria's "عز")
+/// has no telephone number of their own and is reached through the numbers
+/// already listed for the other representatives, so no number should be
+/// fabricated for them.
+class SupportRegionalContact {
+  const SupportRegionalContact({
+    required this.name,
+    required this.category,
+    required this.area,
+    this.phone,
+    this.availability,
+  });
+
+  final String name;
+  final SupportContactCategory category;
+  final String area;
+  final String? phone;
+
+  /// Human-readable availability window (e.g. "6pm-9pm"), when this
+  /// representative is only reachable during specific hours. Null when not
+  /// applicable.
+  final String? availability;
+}
+
 /// Region-specific support contact details shown in the Support screen's
 /// Live Specialist Support, Corporate Office, Direct Hotline, and Support
-/// Hours cards.
+/// Hours cards, and in the Contact Us screen's region-scoped contact
+/// summary.
 ///
-/// Every contact field is nullable/empty by default because no verified
-/// production value exists yet for any region — see
-/// `lib/data/support_regions_data.dart` for where confirmed values get
-/// plugged in later.
+/// Every contact field is nullable/empty by default: only populate a field
+/// once a verified production value exists for that region.
 class SupportRegionData {
   const SupportRegionData({
     required this.id,
@@ -19,6 +50,7 @@ class SupportRegionData {
     this.officeAddress,
     this.hotlineNumbers = const [],
     this.supportHours,
+    this.regionalContacts = const [],
   });
 
   final SupportRegionId id;
@@ -43,4 +75,8 @@ class SupportRegionData {
   /// Human-readable support-hours schedule for this region (e.g.
   /// "Mon-Fri 09:00-18:00"). Null until a verified schedule exists.
   final String? supportHours;
+
+  /// Named regional representatives for this region (currently only
+  /// populated for Syria). Empty for regions with no such representatives.
+  final List<SupportRegionalContact> regionalContacts;
 }
