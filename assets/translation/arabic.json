@@ -13,7 +13,8 @@
     "clear": "مسح",
     "selectDate": "اختر التاريخ",
     "errorGeneric": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
-    "contactSupportForInquiries": "يرجى التواصل مع الدعم للاستفسار"
+    "contactSupportForInquiries": "يرجى التواصل مع الدعم للاستفسار",
+    "available": "متوفر"
   },
   "language": {
     "selectorTitle": "اختر اللغة",
@@ -37,7 +38,6 @@
     "unableToLoadDashboard": "تعذّر تحميل بيانات لوحة المعلومات.",
     "unableToRefreshDashboard": "تعذّر تحديث بيانات لوحة المعلومات.",
     "enterCatalogueCodeValidation": "يرجى إدخال رمز الكتالوج.",
-    "availableAtLocation": "يتوفر {quantity} {unit} في {location}.",
     "unknownLocation": "موقع غير معروف",
     "noAvailabilityFound": "لم يتم العثور على توفر لـ \"{code}\".",
     "catalogueLookupError": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -264,8 +264,7 @@
     "itemNumberLabel": "رقم الصنف",
     "batchReferenceLabel": "الدفعة / المرجع",
     "availabilityByLocationLabel": "التوفر حسب الموقع",
-    "unknownLocationLabel": "موقع غير معروف",
-    "availableQuantityLabel": "{quantity} {unit} متوفر"
+    "unknownLocationLabel": "موقع غير معروف"
   },
   "scanHistory": {
     "title": "سجل المسح",

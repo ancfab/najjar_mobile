@@ -426,7 +426,9 @@ void main() {
             .data,
         'Test Fabric',
       );
-      expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
+      expect(find.text('LOC-01'), findsOneWidget);
+      expect(find.text('Available'), findsOneWidget);
+      expect(find.textContaining('150'), findsNothing);
     },
   );
 
@@ -692,14 +694,14 @@ void main() {
             find.byKey(const ValueKey('variation-ITEM-A')),
             findsOneWidget,
           );
-          expect(find.textContaining('available'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
 
           await tester.enterText(find.byType(TextField), 'ITEM-B');
           await tester.tap(find.byIcon(Icons.search_rounded));
           await tester.pumpAndSettle();
 
           expect(find.byKey(const ValueKey('variation-ITEM-A')), findsNothing);
-          expect(find.textContaining('available'), findsNothing);
+          expect(find.text('Available'), findsNothing);
           expect(
             find.byKey(const ValueKey('variation-ITEM-B')),
             findsOneWidget,
@@ -1022,8 +1024,11 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
         await tester.pumpAndSettle();
 
-        expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
-        expect(find.text('15 YD available at LOC-02.'), findsOneWidget);
+        expect(find.text('LOC-01'), findsOneWidget);
+        expect(find.text('LOC-02'), findsOneWidget);
+        expect(find.text('Available'), findsNWidgets(2));
+        expect(find.textContaining('150'), findsNothing);
+        expect(find.textContaining('15 YD'), findsNothing);
 
         // LOC-01 is MT and above the threshold: green row background.
         final loc01Row = tester.widget<Container>(
@@ -1099,7 +1104,8 @@ void main() {
 
           expect(find.text('LOC-01'), findsOneWidget);
           expect(find.text('Contact Support for inquiries'), findsOneWidget);
-          expect(find.text('99 MT available at LOC-01.'), findsNothing);
+          expect(find.text('Available'), findsNothing);
+          expect(find.textContaining('99'), findsNothing);
           expect(rowBackground(tester), AppColors.warningYellow);
         });
 
@@ -1111,15 +1117,18 @@ void main() {
 
           expect(find.text('LOC-01'), findsOneWidget);
           expect(find.text('Contact Support for inquiries'), findsOneWidget);
-          expect(find.text('100 MT available at LOC-01.'), findsNothing);
+          expect(find.text('Available'), findsNothing);
+          expect(find.textContaining('100'), findsNothing);
           expect(rowBackground(tester), AppColors.warningYellow);
         });
 
-        testWidgets('100.01 m shows Available with the real quantity, with '
-            'a green row background', (tester) async {
+        testWidgets('100.01 m shows Available without the real quantity, '
+            'with a green row background', (tester) async {
           await tapVariationWithQuantity(tester, 100.01);
 
-          expect(find.text('100.01 MT available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.textContaining('100.01'), findsNothing);
           expect(
             find.textContaining('Contact Support for inquiries'),
             findsNothing,
@@ -1127,11 +1136,13 @@ void main() {
           expect(rowBackground(tester), AppColors.mint);
         });
 
-        testWidgets('150 m shows Available with the real quantity, with a '
-            'green row background', (tester) async {
+        testWidgets('150 m shows Available without the real quantity, with '
+            'a green row background', (tester) async {
           await tapVariationWithQuantity(tester, 150);
 
-          expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.textContaining('150'), findsNothing);
           expect(
             find.textContaining('Contact Support for inquiries'),
             findsNothing,
@@ -1174,7 +1185,9 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('variation-ITEM-YD')));
           await tester.pumpAndSettle();
 
-          expect(find.text('15 YD available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.text('15 YD'), findsNothing);
           expect(
             find.textContaining('Contact Support for inquiries'),
             findsNothing,
@@ -1226,7 +1239,9 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('variation-ITEM-PCS')));
           await tester.pumpAndSettle();
 
-          expect(find.text('20 PCS available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.textContaining('20 PCS'), findsNothing);
           expect(
             find.descendant(
               of: find.byKey(const ValueKey('home-availability-row-0')),
@@ -1303,7 +1318,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('variation-ITEM-401')));
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('available'), findsNothing);
+        expect(find.text('Available'), findsNothing);
         expect(
           find.text('Something went wrong. Please try again.'),
           findsNothing,
@@ -1453,7 +1468,9 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(stockLookupService.callCount, 2);
-          expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.textContaining('150'), findsNothing);
           expect(
             find.text('Something went wrong. Please try again.'),
             findsNothing,

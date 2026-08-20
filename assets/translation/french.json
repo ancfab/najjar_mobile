@@ -13,7 +13,8 @@
     "clear": "Effacer",
     "selectDate": "Sélectionner une date",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
-    "contactSupportForInquiries": "Contactez le support pour toute demande"
+    "contactSupportForInquiries": "Contactez le support pour toute demande",
+    "available": "Disponible"
   },
   "language": {
     "selectorTitle": "Choisir la langue",
@@ -37,7 +38,6 @@
     "unableToLoadDashboard": "Impossible de charger les données du tableau de bord.",
     "unableToRefreshDashboard": "Impossible d'actualiser les données du tableau de bord.",
     "enterCatalogueCodeValidation": "Veuillez saisir un code du catalogue.",
-    "availableAtLocation": "{quantity} {unit} disponibles à {location}.",
     "unknownLocation": "Emplacement inconnu",
     "noAvailabilityFound": "Aucune disponibilité trouvée pour « {code} ».",
     "catalogueLookupError": "Une erreur s'est produite. Veuillez réessayer.",
@@ -264,8 +264,7 @@
     "itemNumberLabel": "Numéro d'article",
     "batchReferenceLabel": "Lot / Référence",
     "availabilityByLocationLabel": "Disponibilité par emplacement",
-    "unknownLocationLabel": "Emplacement inconnu",
-    "availableQuantityLabel": "{quantity} {unit} disponible"
+    "unknownLocationLabel": "Emplacement inconnu"
   },
   "scanHistory": {
     "title": "Historique des scans",

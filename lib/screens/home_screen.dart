@@ -1364,9 +1364,10 @@ class _CatalogueVariationsCard extends StatefulWidget {
   final String? availabilityDescription;
 
   /// One colored row per open location/unit-of-measure entry — green
-  /// (available, quantity shown) or yellow (at/below the low-stock
-  /// threshold, quantity hidden) per
-  /// `StockLocationAvailability.isLowStockInMeters`.
+  /// (available) or yellow (at/below the low-stock threshold, showing the
+  /// "contact support" copy instead) per
+  /// `StockLocationAvailability.isLowStockInMeters`. Never shows the actual
+  /// remaining quantity in either case.
   final List<StockLocationAvailability> availabilityLocations;
 
   @override
@@ -1557,17 +1558,21 @@ class _CatalogueVariationsCardState extends State<_CatalogueVariationsCard> {
 /// One row of [_CatalogueVariationsCard]'s per-location/unit availability
 /// breakdown — mirrors `ScanStockScreen`'s own `_LocationAvailabilityRow`.
 ///
+/// Never renders the actual remaining quantity — only the location and a
+/// localized "available"/"contact support" status line, per the "hide
+/// quantity, never change the threshold logic" rule the whole per-location
+/// availability feature follows.
+///
 /// The MT threshold rule (`StockLocationAvailability.isLowStockInMeters`)
 /// only applies to meters entries — see [StockLocationAvailability
 /// .isMeasuredInMeters]'s doc comment for why `!isLowStockInMeters` must
 /// never be read as "available, render green": that's also `true` for a
 /// non-MT entry, which must keep its original/default styling (plain text,
 /// no colored background) instead of picking up a green background. So this
-/// row only gets a colored background for an MT entry — yellow
-/// (at/below the low-stock threshold, quantity hidden in favor of the
-/// localized "contact support" copy) or green (available, quantity shown);
-/// any other unit of measure renders as plain text, exactly as before this
-/// MT-specific feature existed.
+/// row only gets a colored background for an MT entry — yellow (at/below the
+/// low-stock threshold) or green (available); any other unit of measure
+/// renders as plain text, exactly as before this MT-specific feature
+/// existed.
 class _LocationAvailabilityRow extends StatelessWidget {
   const _LocationAvailabilityRow({super.key, required this.availability});
 
@@ -1578,26 +1583,35 @@ class _LocationAvailabilityRow extends StatelessWidget {
     final locationLabel = availability.locationCode.isEmpty
         ? context.t('home.unknownLocation')
         : availability.locationCode;
+    final isLowStock = availability.isLowStockInMeters;
+    final statusText = isLowStock
+        ? context.t('common.contactSupportForInquiries')
+        : context.t('common.available');
 
     if (!availability.isMeasuredInMeters) {
-      return Text(
-        context.t(
-          'home.availableAtLocation',
-          params: {
-            'quantity': _formatQuantity(availability.remainingQuantity),
-            'unit': availability.unitOfMeasureCode,
-            'location': locationLabel,
-          },
-        ),
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: AppColors.darkTeal,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            locationLabel,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkTeal,
+            ),
+          ),
+          Text(
+            statusText,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkTeal,
+            ),
+          ),
+        ],
       );
     }
 
-    final isLowStock = availability.isLowStockInMeters;
     final backgroundColor = isLowStock
         ? AppColors.warningYellow
         : AppColors.mint;
@@ -1617,40 +1631,14 @@ class _LocationAvailabilityRow extends StatelessWidget {
         color: backgroundColor,
         borderRadius: AppRadius.smallAll,
       ),
-      child: isLowStock
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(locationLabel, style: textStyle),
-                Text(
-                  context.t('common.contactSupportForInquiries'),
-                  style: textStyle,
-                ),
-              ],
-            )
-          : Text(
-              context.t(
-                'home.availableAtLocation',
-                params: {
-                  'quantity': _formatQuantity(availability.remainingQuantity),
-                  'unit': availability.unitOfMeasureCode,
-                  'location': locationLabel,
-                },
-              ),
-              style: textStyle,
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(locationLabel, style: textStyle),
+          Text(statusText, style: textStyle),
+        ],
+      ),
     );
-  }
-
-  /// Renders a whole-number quantity without a trailing ".0" while still
-  /// showing decimals when the backend actually reports a fractional value —
-  /// mirrors `ScanStockScreen`'s own `_formatQuantity`.
-  static String _formatQuantity(num value) {
-    final asDouble = value.toDouble();
-    if (asDouble == asDouble.roundToDouble()) {
-      return asDouble.toInt().toString();
-    }
-    return asDouble.toString();
   }
 }
 

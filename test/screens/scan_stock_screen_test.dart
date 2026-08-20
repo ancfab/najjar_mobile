@@ -649,12 +649,15 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('BEIRUT'), findsOneWidget);
-      expect(find.text('150 MT available'), findsOneWidget);
+      // BEIRUT's 150 MT is above the 100 m low-stock threshold: shown as
+      // "Available" only — the exact quantity must never be rendered.
+      expect(find.text('Available'), findsOneWidget);
       expect(find.text('TRIPOLI'), findsOneWidget);
       // TRIPOLI's 20 MT is at/below the 100 m low-stock threshold: the exact
       // quantity must not be shown, only the localized contact-support copy.
-      expect(find.text('20 MT available'), findsNothing);
       expect(find.text('Contact Support for inquiries'), findsOneWidget);
+      expect(find.textContaining('150'), findsNothing);
+      expect(find.textContaining('20 MT'), findsNothing);
 
       final beirutRowContainer = tester.widget<Container>(
         find.descendant(
@@ -744,7 +747,7 @@ void main() {
         await pumpWithQuantity(tester, 99);
 
         expect(find.text('Contact Support for inquiries'), findsOneWidget);
-        expect(find.text('99 MT available'), findsNothing);
+        expect(find.text('Available'), findsNothing);
         expect(find.textContaining('99'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
@@ -763,7 +766,7 @@ void main() {
         await pumpWithQuantity(tester, 100);
 
         expect(find.text('Contact Support for inquiries'), findsOneWidget);
-        expect(find.text('100 MT available'), findsNothing);
+        expect(find.text('Available'), findsNothing);
         expect(find.textContaining('100'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
@@ -777,11 +780,12 @@ void main() {
         );
       });
 
-      testWidgets('100.01 m shows Available with the real quantity, with a '
-          'green row background', (tester) async {
+      testWidgets('100.01 m shows Available without the real quantity, with '
+          'a green row background', (tester) async {
         await pumpWithQuantity(tester, 100.01);
 
-        expect(find.text('100.01 MT available'), findsOneWidget);
+        expect(find.text('Available'), findsOneWidget);
+        expect(find.textContaining('100.01'), findsNothing);
         expect(find.text('Contact Support for inquiries'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
@@ -795,11 +799,12 @@ void main() {
         );
       });
 
-      testWidgets('150 m shows Available with the real quantity, with a '
+      testWidgets('150 m shows Available without the real quantity, with a '
           'green row background', (tester) async {
         await pumpWithQuantity(tester, 150);
 
-        expect(find.text('150 MT available'), findsOneWidget);
+        expect(find.text('Available'), findsOneWidget);
+        expect(find.textContaining('150'), findsNothing);
         expect(find.text('Contact Support for inquiries'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
@@ -813,10 +818,10 @@ void main() {
         );
       });
 
-      testWidgets('a non-meters unit at or below 100 still shows its '
-          'quantity, and keeps the default (no colored) row background — '
-          'the MT threshold/green-yellow visual rule must not apply to it '
-          '(the threshold is meters-specific)', (tester) async {
+      testWidgets('a non-meters unit at or below 100 shows Available '
+          'without its quantity, and keeps the default (no colored) row '
+          'background — the MT threshold/green-yellow visual rule must not '
+          'apply to it (the threshold is meters-specific)', (tester) async {
         final scanner = FakeBarcodeScannerController();
         final lookup = FakeStockLookupService()
           ..defaultResultBuilder = (code) => StockLookupSuccess(
@@ -841,7 +846,8 @@ void main() {
         await tester.pump();
         await tester.pump();
 
-        expect(find.text('15 YD available'), findsOneWidget);
+        expect(find.text('Available'), findsOneWidget);
+        expect(find.textContaining('15'), findsNothing);
         expect(find.text('Contact Support for inquiries'), findsNothing);
         // No MT-threshold styling: the row must not be wrapped in the
         // colored Container that MT rows get — it must not "become green"
@@ -883,7 +889,8 @@ void main() {
         await tester.pump();
         await tester.pump();
 
-        expect(find.text('20 PCS available'), findsOneWidget);
+        expect(find.text('Available'), findsOneWidget);
+        expect(find.textContaining('20 PCS'), findsNothing);
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('scan-stock-availability-row-0')),

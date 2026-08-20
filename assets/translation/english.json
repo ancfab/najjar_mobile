@@ -13,7 +13,8 @@
     "clear": "Clear",
     "selectDate": "Select date",
     "errorGeneric": "Something went wrong. Please try again.",
-    "contactSupportForInquiries": "Contact Support for inquiries"
+    "contactSupportForInquiries": "Contact Support for inquiries",
+    "available": "Available"
   },
   "language": {
     "selectorTitle": "Select Language",
@@ -37,7 +38,6 @@
     "unableToLoadDashboard": "Unable to load dashboard data.",
     "unableToRefreshDashboard": "Unable to refresh dashboard data.",
     "enterCatalogueCodeValidation": "Please enter a catalogue code.",
-    "availableAtLocation": "{quantity} {unit} available at {location}.",
     "unknownLocation": "Unknown location",
     "noAvailabilityFound": "No availability found for \"{code}\".",
     "catalogueLookupError": "Something went wrong. Please try again.",
@@ -264,8 +264,7 @@
     "itemNumberLabel": "Item Number",
     "batchReferenceLabel": "Batch / Reference",
     "availabilityByLocationLabel": "Availability by location",
-    "unknownLocationLabel": "Unknown location",
-    "availableQuantityLabel": "{quantity} {unit} available"
+    "unknownLocationLabel": "Unknown location"
   },
   "scanHistory": {
     "title": "Scan History",

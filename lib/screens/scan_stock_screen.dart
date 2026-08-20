@@ -1071,9 +1071,10 @@ class _StockResultCard extends StatelessWidget {
 }
 
 // One row of the per-location/unit availability breakdown: the location
-// code (or a localized "Unknown location" fallback when empty), and the
-// summed remaining quantity/unit/localized "available" label, kept LTR since
-// it leads with a technical quantity+unit value.
+// code (or a localized "Unknown location" fallback when empty) and a
+// localized "available"/"contact support" status label — never the actual
+// remaining quantity, which must not be exposed to the user — kept LTR since
+// the location code is a technical identifier.
 //
 // The MT threshold rule (`StockLocationAvailability.isLowStockInMeters`)
 // only applies to meters entries — see [StockLocationAvailability
@@ -1100,13 +1101,7 @@ class _LocationAvailabilityRow extends StatelessWidget {
         : context.t('scanStock.unknownLocationLabel');
     final availableText = isLowStock
         ? context.t('common.contactSupportForInquiries')
-        : context.t(
-            'scanStock.availableQuantityLabel',
-            params: {
-              'quantity': _formatQuantity(availability.remainingQuantity),
-              'unit': availability.unitOfMeasureCode,
-            },
-          );
+        : context.t('common.available');
 
     final Color? backgroundColor = !isMeters
         ? null
@@ -1168,16 +1163,6 @@ class _LocationAvailabilityRow extends StatelessWidget {
       ),
       child: row,
     );
-  }
-
-  /// Renders a whole-number quantity without a trailing ".0" while still
-  /// showing decimals when the backend actually reports a fractional value.
-  static String _formatQuantity(num value) {
-    final asDouble = value.toDouble();
-    if (asDouble == asDouble.roundToDouble()) {
-      return asDouble.toInt().toString();
-    }
-    return asDouble.toString();
   }
 }
 
