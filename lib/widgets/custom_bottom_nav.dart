@@ -36,17 +36,27 @@ class CustomBottomNav extends StatelessWidget {
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: Row(
-        children: List.generate(_items.length, (index) {
-          final item = _items[index];
-          return Expanded(
-            child: CustomBottomNavItem(
-              icon: item.icon,
-              label: context.t(item.labelKey),
-              selected: index == currentIndex,
-              onTap: () => onTap(index),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Image.asset(
+              'assets/logo/ANC Logo.png',
+              height: 20,
+              fit: BoxFit.contain,
             ),
-          );
-        }),
+          ),
+          ...List.generate(_items.length, (index) {
+            final item = _items[index];
+            return Expanded(
+              child: CustomBottomNavItem(
+                icon: item.icon,
+                label: context.t(item.labelKey),
+                selected: index == currentIndex,
+                onTap: () => onTap(index),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
