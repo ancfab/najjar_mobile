@@ -10,9 +10,14 @@ import 'package:flutter/material.dart';
 /// - Primary text: [textNavy]. Secondary/muted text: [grayText].
 /// - Success/positive state: [darkTeal] on a [mint] background — the
 ///   pairing already used for "paid"/credit/positive `StatusBadge` and
-///   `QuickHistoryCard` states.
-/// - Warning/negative-amount state: [darkRedBrown] on a [peach]
-///   background — the pairing already used for overdue/debit states.
+///   `QuickHistoryCard` states, and for an available (above-threshold)
+///   stock-quantity row.
+/// - Negative-amount state: [darkRedBrown] on a [peach] background — the
+///   pairing already used for overdue/debit states.
+/// - Low-stock warning state: [darkAmber] on a [warningYellow] background —
+///   a distinct pairing from the negative-amount one above: this is a
+///   caution ("contact support"), not a debit/overdue amount, so reusing
+///   [peach]/[darkRedBrown] here would misrepresent the meaning.
 /// - Error/destructive state: [dangerRed] — used for validation errors and
 ///   destructive actions (e.g. sign-out).
 /// - Card/elevated-component background: [surface] (opaque white),
@@ -53,4 +58,14 @@ class AppColors {
   /// Muted gray for disabled interactive elements (text, icons, borders).
   /// No prior equivalent existed in the palette.
   static const Color disabled = Color(0xFFB9B9C3);
+
+  /// Light yellow background for the low-stock warning ("contact support")
+  /// state — paired with [darkAmber] foreground text. No prior equivalent
+  /// existed in the palette; see the class doc comment for why this is not
+  /// the same pairing as [peach]/[darkRedBrown].
+  static const Color warningYellow = Color(0xFFFFF3B0);
+
+  /// Dark amber foreground text/icon color for content on a [warningYellow]
+  /// background — chosen for sufficient contrast against it.
+  static const Color darkAmber = Color(0xFF7A5B00);
 }

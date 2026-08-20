@@ -30,6 +30,7 @@ import 'package:anc_fabrics/services/last_scan_store.dart';
 import 'package:anc_fabrics/services/scan_camera_permission_service.dart';
 import 'package:anc_fabrics/services/scan_history_store.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
+import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
@@ -101,7 +102,7 @@ StockLookupSuccess _fullSuccess(String rawCode) => StockLookupSuccess(
   availabilityByLocation: const [
     StockLocationAvailability(
       locationCode: 'BEIRUT',
-      remainingQuantity: 80,
+      remainingQuantity: 150,
       unitOfMeasureCode: 'MT',
     ),
     StockLocationAvailability(
@@ -648,12 +649,33 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('BEIRUT'), findsOneWidget);
-      expect(find.text('80 MT available'), findsOneWidget);
+      expect(find.text('150 MT available'), findsOneWidget);
       expect(find.text('TRIPOLI'), findsOneWidget);
-      // TRIPOLI's 20 MT is at/below the 50 m low-stock threshold: the exact
+      // TRIPOLI's 20 MT is at/below the 100 m low-stock threshold: the exact
       // quantity must not be shown, only the localized contact-support copy.
       expect(find.text('20 MT available'), findsNothing);
       expect(find.text('Contact Support for inquiries'), findsOneWidget);
+
+      final beirutRowContainer = tester.widget<Container>(
+        find.descendant(
+          of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+          matching: find.byType(Container),
+        ),
+      );
+      expect(
+        (beirutRowContainer.decoration as BoxDecoration).color,
+        AppColors.mint,
+      );
+      final tripoliRowContainer = tester.widget<Container>(
+        find.descendant(
+          of: find.byKey(const ValueKey('scan-stock-availability-row-1')),
+          matching: find.byType(Container),
+        ),
+      );
+      expect(
+        (tripoliRowContainer.decoration as BoxDecoration).color,
+        AppColors.warningYellow,
+      );
     });
 
     testWidgets('Success with optional fields missing hides those rows', (
@@ -687,7 +709,7 @@ void main() {
       );
     });
 
-    group('Low-stock (<= 50 m) hides the quantity', () {
+    group('Low-stock (<= 100 m) hides the quantity', () {
       Future<void> pumpWithQuantity(
         WidgetTester tester,
         num remainingQuantity,
@@ -717,44 +739,83 @@ void main() {
         await tester.pump();
       }
 
-      testWidgets('49 m shows Contact Support, not the quantity', (
-        tester,
-      ) async {
-        await pumpWithQuantity(tester, 49);
+      testWidgets('99 m shows Contact Support, not the quantity, with a '
+          'yellow row background', (tester) async {
+        await pumpWithQuantity(tester, 99);
 
         expect(find.text('Contact Support for inquiries'), findsOneWidget);
-        expect(find.text('49 MT available'), findsNothing);
-        expect(find.textContaining('49'), findsNothing);
+        expect(find.text('99 MT available'), findsNothing);
+        expect(find.textContaining('99'), findsNothing);
+        final rowContainer = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          (rowContainer.decoration as BoxDecoration).color,
+          AppColors.warningYellow,
+        );
       });
 
-      testWidgets('50 m (the boundary) shows Contact Support, not the '
-          'quantity', (tester) async {
-        await pumpWithQuantity(tester, 50);
-
-        expect(find.text('Contact Support for inquiries'), findsOneWidget);
-        expect(find.text('50 MT available'), findsNothing);
-        expect(find.textContaining('50'), findsNothing);
-      });
-
-      testWidgets('50.01 m shows Available with the real quantity', (
-        tester,
-      ) async {
-        await pumpWithQuantity(tester, 50.01);
-
-        expect(find.text('50.01 MT available'), findsOneWidget);
-        expect(find.text('Contact Support for inquiries'), findsNothing);
-      });
-
-      testWidgets('100 m shows Available with the real quantity', (
-        tester,
-      ) async {
+      testWidgets('100 m (the boundary) shows Contact Support, not the '
+          'quantity, with a yellow row background', (tester) async {
         await pumpWithQuantity(tester, 100);
 
-        expect(find.text('100 MT available'), findsOneWidget);
-        expect(find.text('Contact Support for inquiries'), findsNothing);
+        expect(find.text('Contact Support for inquiries'), findsOneWidget);
+        expect(find.text('100 MT available'), findsNothing);
+        expect(find.textContaining('100'), findsNothing);
+        final rowContainer = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          (rowContainer.decoration as BoxDecoration).color,
+          AppColors.warningYellow,
+        );
       });
 
-      testWidgets('a non-meters unit at or below 50 still shows its quantity '
+      testWidgets('100.01 m shows Available with the real quantity, with a '
+          'green row background', (tester) async {
+        await pumpWithQuantity(tester, 100.01);
+
+        expect(find.text('100.01 MT available'), findsOneWidget);
+        expect(find.text('Contact Support for inquiries'), findsNothing);
+        final rowContainer = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          (rowContainer.decoration as BoxDecoration).color,
+          AppColors.mint,
+        );
+      });
+
+      testWidgets('150 m shows Available with the real quantity, with a '
+          'green row background', (tester) async {
+        await pumpWithQuantity(tester, 150);
+
+        expect(find.text('150 MT available'), findsOneWidget);
+        expect(find.text('Contact Support for inquiries'), findsNothing);
+        final rowContainer = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          (rowContainer.decoration as BoxDecoration).color,
+          AppColors.mint,
+        );
+      });
+
+      testWidgets('a non-meters unit at or below 100 still shows its '
+          'quantity, and keeps the default (no colored) row background — '
+          'the MT threshold/green-yellow visual rule must not apply to it '
           '(the threshold is meters-specific)', (tester) async {
         final scanner = FakeBarcodeScannerController();
         final lookup = FakeStockLookupService()
@@ -782,6 +843,54 @@ void main() {
 
         expect(find.text('15 YD available'), findsOneWidget);
         expect(find.text('Contact Support for inquiries'), findsNothing);
+        // No MT-threshold styling: the row must not be wrapped in the
+        // colored Container that MT rows get — it must not "become green"
+        // just because it isn't low stock.
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('a non-meters unit above 100 also keeps the default (no '
+          'colored) row background — never green from this feature', (
+        tester,
+      ) async {
+        final scanner = FakeBarcodeScannerController();
+        final lookup = FakeStockLookupService()
+          ..defaultResultBuilder = (code) => StockLookupSuccess(
+            code,
+            scannedAt: DateTime.utc(2026, 1, 1),
+            itemNo: 'ITEM-PCS',
+            availabilityByLocation: const [
+              StockLocationAvailability(
+                locationCode: 'BEIRUT',
+                remainingQuantity: 20,
+                unitOfMeasureCode: 'PCS',
+              ),
+            ],
+          );
+        await _pumpScanStockScreen(
+          tester,
+          scannerController: scanner,
+          stockLookupService: lookup,
+        );
+        scanner.emit('ITEM-PCS');
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('20 PCS available'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+          findsNothing,
+        );
       });
     });
 

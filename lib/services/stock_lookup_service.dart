@@ -51,20 +51,29 @@ final class StockLocationAvailability {
 
   /// The low-stock threshold, in meters: at or below this quantity, the
   /// exact figure must not be shown to the user (see [isLowStockInMeters]).
-  /// CONFIRMED business rule: `quantity > 50` is "Available" with the real
-  /// quantity shown; `quantity <= 50` hides the quantity entirely.
-  static const num lowStockThresholdMeters = 50;
+  /// CONFIRMED business rule: `quantity > 100` is "Available" with the real
+  /// quantity shown; `quantity <= 100` hides the quantity entirely.
+  static const num lowStockThresholdMeters = 100;
+
+  /// True when [unitOfMeasureCode] is meters — the single source of truth
+  /// every screen displaying per-location availability must check to tell
+  /// apart "MT, available" from "not MT" before choosing a visual
+  /// available/warning treatment (green/yellow background, etc.): unlike
+  /// [isLowStockInMeters], this is `true` for an above-threshold MT entry
+  /// too, so `!isLowStockInMeters` must never be read as "should render as
+  /// the MT-available state" — a non-MT entry also makes that `true` while
+  /// meaning something else entirely (no MT threshold rule applies at all).
+  bool get isMeasuredInMeters => unitOfMeasureCode == _metersUnitOfMeasureCode;
 
   /// True when this entry is measured in meters and [remainingQuantity] is
   /// at or below [lowStockThresholdMeters] — the single source of truth
   /// every screen displaying per-location availability (`ScanStockScreen`,
   /// the Home screen's Check Availability card) must branch on instead of
-  /// duplicating the `> 50` comparison. Always `false` for a non-meters
+  /// duplicating the `> 100` comparison. Always `false` for a non-meters
   /// [unitOfMeasureCode] — this rule is meters-specific and must not affect
   /// other units of measure (e.g. yards, pieces).
   bool get isLowStockInMeters =>
-      unitOfMeasureCode == _metersUnitOfMeasureCode &&
-      remainingQuantity <= lowStockThresholdMeters;
+      isMeasuredInMeters && remainingQuantity <= lowStockThresholdMeters;
 
   @override
   bool operator ==(Object other) =>

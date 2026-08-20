@@ -420,9 +420,17 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentBalanceOutcome = error.outcome;
         _currentBalanceState = _CurrentBalanceUiState.error;
       });
-    } catch (_) {
+    } catch (error) {
       // Covers CurrentBalanceInconsistentCurrencyException and any other
       // unexpected failure with the same generic, safe retry copy.
+      // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+      // diagnosed. error.toString() here is a developer-facing Dart
+      // exception description (type + constructor args), never a backend
+      // response body or token.
+      debugPrint(
+        '[CURRENT BALANCE] unclassified failure reached HomeScreen: '
+        '${error.runtimeType}: $error',
+      );
       if (!mounted || requestId != _currentBalanceRequestId) return;
       setState(() {
         _currentBalanceOutcome = null;
@@ -711,7 +719,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _isCheckingAvailability = true;
     final requestId = ++_checkAvailabilityGeneration;
 
-
     setState(() {
       _selectedVariation = variation;
       _checkAvailabilityState = _CheckAvailabilityUiState.loading;
@@ -797,90 +804,62 @@ class _HomeScreenState extends State<HomeScreen> {
     };
   }
 
-  /// Result text shown below the helper text for the no-results/success
-  /// states — `null` for every other state.
-  String? _checkAvailabilityResultText() {
+  /// Fallback text shown below the helper text when there is no per-location
+  /// row to render: the no-results state, or (defensively — the confirmed
+  /// ApiStockLookupService contract never returns this, see
+  /// `StockLookupSuccess`'s doc comment) a success with no description and no
+  /// [StockLocationAvailability] entries. `null` whenever
+  /// [_checkAvailabilityLocations] has rows to show instead, or for every
+  /// other state.
+  String? _checkAvailabilityFallbackText() {
     final result = _checkAvailabilityResult;
     if (result == null) return null;
-    return switch (_checkAvailabilityState) {
-      _CheckAvailabilityUiState.notFound => context.t(
-        'home.noAvailabilityFound',
-        params: {'code': result.rawCode},
-      ),
-      _CheckAvailabilityUiState.success when result is StockLookupSuccess =>
-        _formatCheckAvailabilityResult(result) ??
-            // Defensive only: the confirmed ApiStockLookupService contract
-            // never returns a success with an empty availabilityByLocation
-            // (see StockLookupSuccess's doc comment) — but a StockLookupResult
-            // is a shared interface, so this falls back to the same "nothing
-            // available" copy rather than rendering blank text if some future
-            // implementation ever did.
-            context.t(
-              'home.noAvailabilityFound',
-              params: {'code': result.rawCode},
-            ),
-      _ => null,
-    };
+    switch (_checkAvailabilityState) {
+      case _CheckAvailabilityUiState.notFound:
+        return context.t(
+          'home.noAvailabilityFound',
+          params: {'code': result.rawCode},
+        );
+      case _CheckAvailabilityUiState.success:
+        if (result is! StockLookupSuccess) return null;
+        final description = result.description;
+        final hasDescription = description != null && description.isNotEmpty;
+        if (hasDescription || result.availabilityByLocation.isNotEmpty) {
+          return null;
+        }
+        return context.t(
+          'home.noAvailabilityFound',
+          params: {'code': result.rawCode},
+        );
+      default:
+        return null;
+    }
   }
 
-  /// Formats a successful lookup as the item's description (when present —
-  /// never fabricated) followed by one line per open location/unit-of-measure
-  /// combination — see `StockLookupSuccess.availabilityByLocation`. Multiple
-  /// locations, and different units of measure at the same location, are
-  /// always shown as separate lines, never combined into one total. `null`
-  /// when there is nothing to show (see [_checkAvailabilityResultText]).
-  ///
-  /// A meters entry at or below the low-stock threshold
-  /// (`StockLocationAvailability.isLowStockInMeters`) shows the location
-  /// followed by the localized "contact support" line instead of the
-  /// quantity sentence — the location stays visible, but the real quantity
-  /// must never appear anywhere on that line.
-  String? _formatCheckAvailabilityResult(StockLookupSuccess result) {
+  /// The successful lookup's item description, when present and non-empty —
+  /// `null` for every other state or when the field wasn't returned.
+  String? _checkAvailabilityDescription() {
+    final result = _checkAvailabilityResult;
+    if (_checkAvailabilityState != _CheckAvailabilityUiState.success ||
+        result is! StockLookupSuccess) {
+      return null;
+    }
     final description = result.description;
-    final lines = <String>[
-      if (description != null && description.isNotEmpty) description,
-      for (final availability in result.availabilityByLocation)
-        ..._formatAvailabilityLines(availability),
-    ];
-    return lines.isEmpty ? null : lines.join('\n');
+    return (description != null && description.isNotEmpty) ? description : null;
   }
 
-  /// One or two display lines for a single [availability] entry: the
-  /// quantity sentence normally, or the location followed by the localized
-  /// "contact support" line when [StockLocationAvailability.isLowStockInMeters]
-  /// — see [_formatCheckAvailabilityResult].
-  List<String> _formatAvailabilityLines(
-    StockLocationAvailability availability,
-  ) {
-    final locationLabel = availability.locationCode.isEmpty
-        ? context.t('home.unknownLocation')
-        : availability.locationCode;
-    if (availability.isLowStockInMeters) {
-      return [locationLabel, context.t('common.contactSupportForInquiries')];
+  /// The successful lookup's per-location/unit-of-measure availability rows
+  /// — see `StockLookupSuccess.availabilityByLocation`. Multiple locations,
+  /// and different units of measure at the same location, are always kept as
+  /// separate rows, never combined into one total. Empty for every other
+  /// state.
+  List<StockLocationAvailability> _checkAvailabilityLocations() {
+    final result = _checkAvailabilityResult;
+    if (_checkAvailabilityState != _CheckAvailabilityUiState.success ||
+        result is! StockLookupSuccess) {
+      return const [];
     }
-    return [
-      context.t(
-        'home.availableAtLocation',
-        params: {
-          'quantity': _formatAvailabilityQuantity(
-            availability.remainingQuantity,
-          ),
-          'unit': availability.unitOfMeasureCode,
-          'location': locationLabel,
-        },
-      ),
-    ];
-  }
-
-  /// Renders a whole-number quantity without a trailing ".0" while still
-  /// showing decimals when the backend actually reports a fractional value —
-  /// mirrors `ScanStockScreen`'s own `_formatQuantity`.
-  static String _formatAvailabilityQuantity(num value) {
-    final asDouble = value.toDouble();
-    if (asDouble == asDouble.roundToDouble()) {
-      return asDouble.toInt().toString();
-    }
-    return asDouble.toString();
+    return result.availabilityByLocation;
   }
 
   // Opens the Profile (Edit Profile) screen from the header avatar/name tap.
@@ -892,7 +871,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Handles the header gear icon tap.
   void _openSettings() {
-    // TODO: No Settings screen exists yet in this app — destination needs
     // confirmation. Showing a safe placeholder instead of navigating.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.t('home.settingsComingSoon'))),
@@ -1056,7 +1034,9 @@ class _HomeScreenState extends State<HomeScreen> {
       isAvailabilityLoading:
           _checkAvailabilityState == _CheckAvailabilityUiState.loading,
       availabilityErrorText: _checkAvailabilityErrorText(),
-      availabilityResultText: _checkAvailabilityResultText(),
+      availabilityFallbackText: _checkAvailabilityFallbackText(),
+      availabilityDescription: _checkAvailabilityDescription(),
+      availabilityLocations: _checkAvailabilityLocations(),
     );
   }
 
@@ -1360,7 +1340,9 @@ class _CatalogueVariationsCard extends StatefulWidget {
     required this.onSelectVariation,
     required this.isAvailabilityLoading,
     required this.availabilityErrorText,
-    required this.availabilityResultText,
+    required this.availabilityFallbackText,
+    required this.availabilityDescription,
+    required this.availabilityLocations,
   });
 
   final BusinessCentralItemSearchGroup group;
@@ -1370,7 +1352,22 @@ class _CatalogueVariationsCard extends StatefulWidget {
   final ValueChanged<BusinessCentralItemVariation> onSelectVariation;
   final bool isAvailabilityLoading;
   final String? availabilityErrorText;
-  final String? availabilityResultText;
+
+  /// No-results/defensive-empty fallback text — mutually exclusive with
+  /// [availabilityDescription]/[availabilityLocations] having anything to
+  /// show (see `_HomeScreenState._checkAvailabilityFallbackText`).
+  final String? availabilityFallbackText;
+
+  /// The looked-up item's description, when present — shown above
+  /// [availabilityLocations] as plain text (not a colored row: it isn't a
+  /// per-location availability state).
+  final String? availabilityDescription;
+
+  /// One colored row per open location/unit-of-measure entry — green
+  /// (available, quantity shown) or yellow (at/below the low-stock
+  /// threshold, quantity hidden) per
+  /// `StockLocationAvailability.isLowStockInMeters`.
+  final List<StockLocationAvailability> availabilityLocations;
 
   @override
   State<_CatalogueVariationsCard> createState() =>
@@ -1512,20 +1509,148 @@ class _CatalogueVariationsCardState extends State<_CatalogueVariationsCard> {
                     color: AppColors.dangerRed,
                   ),
                 )
-              else if (widget.availabilityResultText != null)
+              else if (widget.availabilityFallbackText != null)
                 Text(
-                  widget.availabilityResultText!,
+                  widget.availabilityFallbackText!,
                   style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.darkTeal,
                   ),
-                ),
+                )
+              else if (widget.availabilityDescription != null ||
+                  widget.availabilityLocations.isNotEmpty) ...[
+                if (widget.availabilityDescription != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      widget.availabilityDescription!,
+                      key: const ValueKey('home-availability-description'),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkTeal,
+                      ),
+                    ),
+                  ),
+                for (var i = 0; i < widget.availabilityLocations.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: i == widget.availabilityLocations.length - 1
+                          ? 0
+                          : 6,
+                    ),
+                    child: _LocationAvailabilityRow(
+                      key: ValueKey('home-availability-row-$i'),
+                      availability: widget.availabilityLocations[i],
+                    ),
+                  ),
+              ],
             ],
           ],
         ],
       ),
     );
+  }
+}
+
+/// One row of [_CatalogueVariationsCard]'s per-location/unit availability
+/// breakdown — mirrors `ScanStockScreen`'s own `_LocationAvailabilityRow`.
+///
+/// The MT threshold rule (`StockLocationAvailability.isLowStockInMeters`)
+/// only applies to meters entries — see [StockLocationAvailability
+/// .isMeasuredInMeters]'s doc comment for why `!isLowStockInMeters` must
+/// never be read as "available, render green": that's also `true` for a
+/// non-MT entry, which must keep its original/default styling (plain text,
+/// no colored background) instead of picking up a green background. So this
+/// row only gets a colored background for an MT entry — yellow
+/// (at/below the low-stock threshold, quantity hidden in favor of the
+/// localized "contact support" copy) or green (available, quantity shown);
+/// any other unit of measure renders as plain text, exactly as before this
+/// MT-specific feature existed.
+class _LocationAvailabilityRow extends StatelessWidget {
+  const _LocationAvailabilityRow({super.key, required this.availability});
+
+  final StockLocationAvailability availability;
+
+  @override
+  Widget build(BuildContext context) {
+    final locationLabel = availability.locationCode.isEmpty
+        ? context.t('home.unknownLocation')
+        : availability.locationCode;
+
+    if (!availability.isMeasuredInMeters) {
+      return Text(
+        context.t(
+          'home.availableAtLocation',
+          params: {
+            'quantity': _formatQuantity(availability.remainingQuantity),
+            'unit': availability.unitOfMeasureCode,
+            'location': locationLabel,
+          },
+        ),
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.darkTeal,
+        ),
+      );
+    }
+
+    final isLowStock = availability.isLowStockInMeters;
+    final backgroundColor = isLowStock
+        ? AppColors.warningYellow
+        : AppColors.mint;
+    final foregroundColor = isLowStock
+        ? AppColors.darkAmber
+        : AppColors.darkTeal;
+    final textStyle = TextStyle(
+      fontSize: 12.5,
+      fontWeight: FontWeight.w600,
+      color: foregroundColor,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: AppRadius.smallAll,
+      ),
+      child: isLowStock
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(locationLabel, style: textStyle),
+                Text(
+                  context.t('common.contactSupportForInquiries'),
+                  style: textStyle,
+                ),
+              ],
+            )
+          : Text(
+              context.t(
+                'home.availableAtLocation',
+                params: {
+                  'quantity': _formatQuantity(availability.remainingQuantity),
+                  'unit': availability.unitOfMeasureCode,
+                  'location': locationLabel,
+                },
+              ),
+              style: textStyle,
+            ),
+    );
+  }
+
+  /// Renders a whole-number quantity without a trailing ".0" while still
+  /// showing decimals when the backend actually reports a fractional value —
+  /// mirrors `ScanStockScreen`'s own `_formatQuantity`.
+  static String _formatQuantity(num value) {
+    final asDouble = value.toDouble();
+    if (asDouble == asDouble.roundToDouble()) {
+      return asDouble.toInt().toString();
+    }
+    return asDouble.toString();
   }
 }
 

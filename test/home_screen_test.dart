@@ -22,6 +22,7 @@ import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
 import 'package:anc_fabrics/services/item_catalogue_search_service.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
+import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/availability_search_card.dart';
 import 'package:anc_fabrics/widgets/balance_card.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
@@ -382,7 +383,7 @@ void main() {
           availabilityByLocation: const [
             StockLocationAvailability(
               locationCode: 'LOC-01',
-              remainingQuantity: 80,
+              remainingQuantity: 150,
               unitOfMeasureCode: 'MT',
             ),
           ],
@@ -414,9 +415,18 @@ void main() {
 
       expect(stockLookupService.calls, ['TEST-ITEM-01']);
       expect(
-        find.text('Test Fabric\n80 MT available at LOC-01.'),
+        find.byKey(const ValueKey('home-availability-description')),
         findsOneWidget,
       );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('home-availability-description')),
+            )
+            .data,
+        'Test Fabric',
+      );
+      expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
     },
   );
 
@@ -656,7 +666,7 @@ void main() {
               availabilityByLocation: const [
                 StockLocationAvailability(
                   locationCode: 'LOC-01',
-                  remainingQuantity: 80,
+                  remainingQuantity: 150,
                   unitOfMeasureCode: 'MT',
                 ),
               ],
@@ -973,7 +983,9 @@ void main() {
       );
 
       testWidgets('multiple locations and different units remain separate, '
-          'never combined into one total', (tester) async {
+          'never combined into one total, each its own colored row', (
+        tester,
+      ) async {
         final catalogueSearchService = FakeItemCatalogueSearchService()
           ..defaultResultBuilder = _singleVariationExactMatch;
         final stockLookupService = FakeStockLookupService()
@@ -983,7 +995,7 @@ void main() {
             availabilityByLocation: const [
               StockLocationAvailability(
                 locationCode: 'LOC-01',
-                remainingQuantity: 80,
+                remainingQuantity: 150,
                 unitOfMeasureCode: 'MT',
               ),
               StockLocationAvailability(
@@ -1010,13 +1022,29 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
         await tester.pumpAndSettle();
 
+        expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
+        expect(find.text('15 YD available at LOC-02.'), findsOneWidget);
+
+        // LOC-01 is MT and above the threshold: green row background.
+        final loc01Row = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('home-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect((loc01Row.decoration as BoxDecoration).color, AppColors.mint);
+        // LOC-02 is YD, not MT: the MT green/yellow rule must not apply —
+        // no colored Container at all, just the default plain text.
         expect(
-          find.text('80 MT available at LOC-01.\n15 YD available at LOC-02.'),
-          findsOneWidget,
+          find.descendant(
+            of: find.byKey(const ValueKey('home-availability-row-1')),
+            matching: find.byType(Container),
+          ),
+          findsNothing,
         );
       });
 
-      group('Low-stock (<= 50 m) hides the quantity', () {
+      group('Low-stock (<= 100 m) hides the quantity', () {
         Future<void> tapVariationWithQuantity(
           WidgetTester tester,
           num remainingQuantity,
@@ -1055,53 +1083,65 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        testWidgets('49 m shows the location and Contact Support, not the '
-            'quantity', (tester) async {
-          await tapVariationWithQuantity(tester, 49);
-
-          expect(
-            find.text('LOC-01\nContact Support for inquiries'),
-            findsOneWidget,
+        Color? rowBackground(WidgetTester tester) {
+          final container = tester.widget<Container>(
+            find.descendant(
+              of: find.byKey(const ValueKey('home-availability-row-0')),
+              matching: find.byType(Container),
+            ),
           );
-          expect(find.text('49 MT available at LOC-01.'), findsNothing);
+          return (container.decoration as BoxDecoration).color;
+        }
+
+        testWidgets('99 m shows the location and Contact Support, not the '
+            'quantity, with a yellow row background', (tester) async {
+          await tapVariationWithQuantity(tester, 99);
+
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Contact Support for inquiries'), findsOneWidget);
+          expect(find.text('99 MT available at LOC-01.'), findsNothing);
+          expect(rowBackground(tester), AppColors.warningYellow);
         });
 
-        testWidgets('50 m (the boundary) shows the location and Contact '
-            'Support, not the quantity', (tester) async {
-          await tapVariationWithQuantity(tester, 50);
-
-          expect(
-            find.text('LOC-01\nContact Support for inquiries'),
-            findsOneWidget,
-          );
-          expect(find.text('50 MT available at LOC-01.'), findsNothing);
-        });
-
-        testWidgets('50.01 m shows Available with the real quantity', (
-          tester,
-        ) async {
-          await tapVariationWithQuantity(tester, 50.01);
-
-          expect(find.text('50.01 MT available at LOC-01.'), findsOneWidget);
-          expect(
-            find.textContaining('Contact Support for inquiries'),
-            findsNothing,
-          );
-        });
-
-        testWidgets('100 m shows Available with the real quantity', (
+        testWidgets('100 m (the boundary) shows the location and Contact '
+            'Support, not the quantity, with a yellow row background', (
           tester,
         ) async {
           await tapVariationWithQuantity(tester, 100);
 
-          expect(find.text('100 MT available at LOC-01.'), findsOneWidget);
+          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Contact Support for inquiries'), findsOneWidget);
+          expect(find.text('100 MT available at LOC-01.'), findsNothing);
+          expect(rowBackground(tester), AppColors.warningYellow);
+        });
+
+        testWidgets('100.01 m shows Available with the real quantity, with '
+            'a green row background', (tester) async {
+          await tapVariationWithQuantity(tester, 100.01);
+
+          expect(find.text('100.01 MT available at LOC-01.'), findsOneWidget);
           expect(
             find.textContaining('Contact Support for inquiries'),
             findsNothing,
           );
+          expect(rowBackground(tester), AppColors.mint);
         });
 
-        testWidgets('a non-meters unit at or below 50 still shows its quantity '
+        testWidgets('150 m shows Available with the real quantity, with a '
+            'green row background', (tester) async {
+          await tapVariationWithQuantity(tester, 150);
+
+          expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
+          expect(
+            find.textContaining('Contact Support for inquiries'),
+            findsNothing,
+          );
+          expect(rowBackground(tester), AppColors.mint);
+        });
+
+        testWidgets('a non-meters unit at or below 100 still shows its '
+            'quantity, and keeps the default (no colored) row background — '
+            'the MT threshold/green-yellow visual rule must not apply to it '
             '(the threshold is meters-specific)', (tester) async {
           final catalogueSearchService = FakeItemCatalogueSearchService()
             ..defaultResultBuilder = _singleVariationExactMatch;
@@ -1137,6 +1177,61 @@ void main() {
           expect(find.text('15 YD available at LOC-01.'), findsOneWidget);
           expect(
             find.textContaining('Contact Support for inquiries'),
+            findsNothing,
+          );
+          // No MT-threshold styling: the row must not be wrapped in the
+          // colored Container that MT rows get — it must not "become
+          // green" just because it isn't low stock.
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('home-availability-row-0')),
+              matching: find.byType(Container),
+            ),
+            findsNothing,
+          );
+        });
+
+        testWidgets('a non-meters unit above 100 also keeps the default '
+            '(no colored) row background — never green from this feature', (
+          tester,
+        ) async {
+          final catalogueSearchService = FakeItemCatalogueSearchService()
+            ..defaultResultBuilder = _singleVariationExactMatch;
+          final stockLookupService = FakeStockLookupService()
+            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
+              rawCode,
+              scannedAt: DateTime(2026, 1, 1),
+              availabilityByLocation: const [
+                StockLocationAvailability(
+                  locationCode: 'LOC-01',
+                  remainingQuantity: 20,
+                  unitOfMeasureCode: 'PCS',
+                ),
+              ],
+            );
+          await _pumpHomeScreen(
+            tester,
+            390,
+            catalogueSearchService: catalogueSearchService,
+            checkAvailabilityService: stockLookupService,
+          );
+
+          await tester.enterText(find.byType(TextField), 'ITEM-PCS');
+          await tester.tap(find.byIcon(Icons.search_rounded));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('variation-ITEM-PCS')),
+          );
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('variation-ITEM-PCS')));
+          await tester.pumpAndSettle();
+
+          expect(find.text('20 PCS available at LOC-01.'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('home-availability-row-0')),
+              matching: find.byType(Container),
+            ),
             findsNothing,
           );
         });
@@ -1347,7 +1442,7 @@ void main() {
                 availabilityByLocation: const [
                   StockLocationAvailability(
                     locationCode: 'LOC-01',
-                    remainingQuantity: 80,
+                    remainingQuantity: 150,
                     unitOfMeasureCode: 'MT',
                   ),
                 ],
@@ -1358,7 +1453,7 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(stockLookupService.callCount, 2);
-          expect(find.text('80 MT available at LOC-01.'), findsOneWidget);
+          expect(find.text('150 MT available at LOC-01.'), findsOneWidget);
           expect(
             find.text('Something went wrong. Please try again.'),
             findsNothing,
@@ -1930,8 +2025,11 @@ void main() {
     // TEMPORARY CLIENT DEMO MODE: covers resolveDefaultCurrentBalanceDataSource
     // (the pure resolver HomeScreen falls back to when no currentBalanceSource
     // is injected) for both DemoConfig.useDemoCurrentBalance branches,
-    // regardless of the flag's current compiled-in value, plus the actual
-    // default-injection behavior at the flag's current value.
+    // regardless of the flag's current compiled-in value. With the flag now
+    // false, HomeScreen's real default is LiveCurrentBalanceDataSource, so
+    // the widget test below always injects a currentBalanceSource rather
+    // than relying on the default (which would attempt real HTTP/secure
+    // storage and hang in the widget-test sandbox).
     test('useDemo: true resolves to DemoCurrentBalanceDataSource, never the '
         'live ledger-entries integration', () {
       final source = resolveDefaultCurrentBalanceDataSource(useDemo: true);
@@ -1945,48 +2043,37 @@ void main() {
     });
 
     testWidgets(
-      'With no currentBalanceSource injected, the demo flag shows the mock '
-      'balance without reaching the live ledger-entries endpoint',
+      'With DemoConfig.useDemoCurrentBalance false, HomeScreen resolves its '
+      'default CurrentBalanceDataSource to Live — so widget tests must '
+      'always inject a currentBalanceSource to avoid real HTTP/secure '
+      'storage, and whatever that injected source returns is what the card '
+      'shows',
       (tester) async {
-        tester.view.physicalSize = const Size(390, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        // Distinct from DemoCurrentBalanceDataSource.mockBalance (AED
+        // 18,450.75) on purpose: if HomeScreen ever silently fell back to
+        // the demo source instead of the injected one, this assertion would
+        // catch it.
+        const liveStyleBalance = CurrentBalanceAmount(
+          amount: 27610.40,
+          currencyCode: 'AED',
+        );
 
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: const [
-              AppTranslationsDelegate(),
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: HomeScreen(
-              lastPaymentSource: FakeLastPaymentDataSource(
-                entry: _samplePaymentEntry(),
-              ),
-              checkAvailabilityService: FakeStockLookupService(),
-            ),
+        await _pumpHomeScreen(
+          tester,
+          390,
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            amount: liveStyleBalance,
           ),
         );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 700));
-        // With DemoConfig.useDemoCurrentBalance false, this would instead
-        // fall back to LiveCurrentBalanceDataSource (real HTTP/secure
-        // storage), which never resolves in this widget-test sandbox and
-        // would leave the loading spinner animating forever — pumpAndSettle
-        // completing at all is itself evidence the demo path, not the live
-        // one, was taken.
-        await tester.pumpAndSettle();
 
         expect(
           find.descendant(
             of: find.byType(BalanceCard),
-            matching: find.text('AED 18,450.75'),
+            matching: find.text('AED 27,610.40'),
           ),
           findsOneWidget,
         );
+        expect(find.text('AED 18,450.75'), findsNothing);
       },
     );
   });

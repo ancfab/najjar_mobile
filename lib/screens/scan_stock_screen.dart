@@ -1074,6 +1074,16 @@ class _StockResultCard extends StatelessWidget {
 // code (or a localized "Unknown location" fallback when empty), and the
 // summed remaining quantity/unit/localized "available" label, kept LTR since
 // it leads with a technical quantity+unit value.
+//
+// The MT threshold rule (`StockLocationAvailability.isLowStockInMeters`)
+// only applies to meters entries — see [StockLocationAvailability
+// .isMeasuredInMeters]'s doc comment for why `!isLowStockInMeters` must
+// never be read as "available, render green": that's also `true` for a
+// non-MT entry, which must keep its original/default styling instead of
+// picking up a green background. So the row only gets a colored background
+// for an MT entry — yellow (contact-support warning) at/below the
+// threshold, green (available) above it; any other unit of measure renders
+// with no background, exactly as before this MT-specific feature existed.
 class _LocationAvailabilityRow extends StatelessWidget {
   const _LocationAvailabilityRow({super.key, required this.availability});
 
@@ -1081,12 +1091,14 @@ class _LocationAvailabilityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMeters = availability.isMeasuredInMeters;
+    final isLowStock = availability.isLowStockInMeters;
     final locationCode = availability.locationCode;
     final hasLocationCode = locationCode.isNotEmpty;
     final locationLabel = hasLocationCode
         ? locationCode
         : context.t('scanStock.unknownLocationLabel');
-    final availableText = availability.isLowStockInMeters
+    final availableText = isLowStock
         ? context.t('common.contactSupportForInquiries')
         : context.t(
             'scanStock.availableQuantityLabel',
@@ -1096,7 +1108,15 @@ class _LocationAvailabilityRow extends StatelessWidget {
             },
           );
 
-    return Row(
+    final Color? backgroundColor = !isMeters
+        ? null
+        : (isLowStock ? AppColors.warningYellow : AppColors.mint);
+    final foregroundColor = !isMeters
+        ? Colors.white60
+        : (isLowStock ? AppColors.darkAmber : AppColors.darkTeal);
+    final quantityForegroundColor = !isMeters ? Colors.white : foregroundColor;
+
+    final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
@@ -1106,14 +1126,16 @@ class _LocationAvailabilityRow extends StatelessWidget {
                   child: Text(
                     locationLabel,
                     style: AppTypography.bodySecondary.copyWith(
-                      color: Colors.white60,
+                      color: foregroundColor,
+                      fontWeight: isMeters ? FontWeight.w600 : null,
                     ),
                   ),
                 )
               : Text(
                   locationLabel,
                   style: AppTypography.bodySecondary.copyWith(
-                    color: Colors.white60,
+                    color: foregroundColor,
+                    fontWeight: isMeters ? FontWeight.w600 : null,
                   ),
                 ),
         ),
@@ -1124,11 +1146,27 @@ class _LocationAvailabilityRow extends StatelessWidget {
             child: Text(
               availableText,
               textAlign: TextAlign.end,
-              style: AppTypography.body.copyWith(color: Colors.white),
+              style: AppTypography.body.copyWith(
+                color: quantityForegroundColor,
+              ),
             ),
           ),
         ),
       ],
+    );
+
+    if (!isMeters) return row;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: row,
     );
   }
 
