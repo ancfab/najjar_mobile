@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/data/country_codes.dart';
 import 'package:anc_fabrics/main.dart';
@@ -24,6 +25,8 @@ import 'package:anc_fabrics/screens/order_detail_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/anc_api_client.dart';
+import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/widgets/account_balance_hero_card.dart';
 import 'package:anc_fabrics/widgets/country_code_picker.dart';
@@ -35,9 +38,11 @@ import 'package:anc_fabrics/widgets/scan_fabric_button.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_current_balance_data_source.dart';
 import 'helpers/fake_invoice_lookup_data_source.dart';
 import 'helpers/fake_last_payment_data_source.dart';
+
 import 'helpers/fake_order_detail_data_source.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'helpers/fake_sales_order_lines_data_source.dart';
@@ -45,6 +50,29 @@ import 'helpers/fake_invoice_document_actions.dart';
 import 'helpers/fake_invoice_pdf_service.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
+
+/// An http.Client that fails the test if it is ever called — see the
+/// matching fixture in home_screen_test.dart.
+class _ShouldNeverBeCalledHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    throw StateError(
+      'AuthService must not call the ANC API from these layout checks.',
+    );
+  }
+
+  @override
+  void close() {}
+}
+
+/// A real [AuthService] over an empty [FakeAuthSessionStore] (no persisted
+/// session), so `HomeScreen`'s username load resolves to its safe fallback
+/// label instead of exercising real secure storage in this widget-test
+/// sandbox — these layout checks don't care which username is shown.
+AuthService _authServiceForLayoutCheck() => AuthService(
+  apiClient: AncApiClient(httpClient: _ShouldNeverBeCalledHttpClient()),
+  sessionStore: FakeAuthSessionStore(),
+);
 
 // Recommended test dimensions from the audit brief: small, standard, and
 // large phones, plus a tablet.
@@ -136,6 +164,7 @@ void main() {
                 currencyCode: 'AED',
               ),
             ),
+            authService: _authServiceForLayoutCheck(),
           ),
         ),
       );

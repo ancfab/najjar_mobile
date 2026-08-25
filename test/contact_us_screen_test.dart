@@ -566,6 +566,134 @@ void main() {
     });
   });
 
+  group('Office locations', () {
+    testWidgets('Syria renders both Damascus and Aleppo, each with its '
+        'verified address and no phone/name placeholder', (tester) async {
+      final syria = region(SupportRegionId.syria);
+      await pumpContactUs(tester, region: syria);
+
+      expect(
+        find.byKey(const ValueKey('contact-locations-section')),
+        findsOneWidget,
+      );
+      expect(find.text('LOCATIONS'), findsOneWidget);
+      expect(syria.officeLocations, hasLength(2));
+      for (final location in syria.officeLocations) {
+        expect(find.text(location.city), findsOneWidget);
+        expect(find.text(location.address), findsOneWidget);
+        expect(location.phone, isNull);
+        expect(location.name, isNull);
+      }
+    });
+
+    testWidgets('Lebanon renders its verified Beirut location', (tester) async {
+      final lebanon = region(SupportRegionId.lebanon);
+      await pumpContactUs(tester, region: lebanon);
+
+      expect(lebanon.officeLocations, hasLength(1));
+      final beirut = lebanon.officeLocations.single;
+      expect(beirut.city, 'Beirut');
+      expect(find.text(beirut.city), findsOneWidget);
+      expect(find.text(beirut.address), findsOneWidget);
+    });
+
+    testWidgets(
+      'UAE renders Sharjah with the Industrial Area 18 address and the '
+      'ANC Najjar Fabric business name',
+      (tester) async {
+        final uae = region(SupportRegionId.uae);
+        await pumpContactUs(tester, region: uae);
+
+        expect(uae.officeLocations, hasLength(1));
+        final sharjah = uae.officeLocations.single;
+        expect(sharjah.city, 'Sharjah');
+        expect(sharjah.address, 'المدينة الصناعية، منطقة 18');
+        expect(sharjah.name, 'ANC Najjar Fabric');
+        expect(find.text(sharjah.city), findsOneWidget);
+        expect(find.text(sharjah.address), findsOneWidget);
+        expect(find.text(sharjah.name!), findsOneWidget);
+      },
+    );
+
+    testWidgets('Oman renders the Muscat/Seeb location', (tester) async {
+      final oman = region(SupportRegionId.oman);
+      await pumpContactUs(tester, region: oman);
+
+      expect(oman.officeLocations, hasLength(1));
+      final muscat = oman.officeLocations.single;
+      expect(find.text(muscat.city), findsOneWidget);
+      expect(find.text(muscat.address), findsOneWidget);
+    });
+
+    testWidgets('Iraq renders both Erbil and Sulaymaniyah, each with its own '
+        'verified phone number', (tester) async {
+      final iraq = region(SupportRegionId.iraq);
+      await pumpContactUs(tester, region: iraq);
+
+      expect(iraq.officeLocations, hasLength(2));
+      final erbil = iraq.officeLocations.firstWhere((l) => l.city == 'Erbil');
+      final sulaymaniyah = iraq.officeLocations.firstWhere(
+        (l) => l.city == 'Sulaymaniyah',
+      );
+      expect(erbil.phone, '+964 751 401 8777');
+      expect(sulaymaniyah.phone, '+964 750 166 1000');
+
+      expect(find.text(erbil.city), findsOneWidget);
+      expect(find.text(erbil.address), findsOneWidget);
+      expect(find.text(erbil.phone!), findsOneWidget);
+      expect(find.text(sulaymaniyah.city), findsOneWidget);
+      expect(find.text(sulaymaniyah.address), findsOneWidget);
+      expect(find.text(sulaymaniyah.phone!), findsOneWidget);
+    });
+
+    testWidgets("Tapping Erbil's number produces tel:+9647514018777 and "
+        "Sulaymaniyah's produces tel:+9647501661000", (tester) async {
+      final client = FakeUrlLauncherClient(telResult: true);
+      final iraq = region(SupportRegionId.iraq);
+      await pumpContactUs(
+        tester,
+        region: iraq,
+        phoneLauncher: PhoneLauncher(client: client),
+      );
+
+      final erbilCall = find.byKey(
+        const ValueKey('office-location-call-Erbil'),
+      );
+      await tester.ensureVisible(erbilCall);
+      await tester.tap(erbilCall);
+      await tester.pumpAndSettle();
+
+      final sulaymaniyahCall = find.byKey(
+        const ValueKey('office-location-call-Sulaymaniyah'),
+      );
+      await tester.ensureVisible(sulaymaniyahCall);
+      await tester.tap(sulaymaniyahCall);
+      await tester.pumpAndSettle();
+
+      expect(client.attemptedUris.map((uri) => uri.toString()).toList(), [
+        'tel:+9647514018777',
+        'tel:+9647501661000',
+      ]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Changing region updates the displayed locations', (
+      tester,
+    ) async {
+      await pumpContactUs(tester);
+
+      expect(find.text('Sharjah'), findsOneWidget);
+      expect(find.text('Damascus'), findsNothing);
+
+      await tester.tap(find.text('Syria'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sharjah'), findsNothing);
+      expect(find.text('Damascus'), findsOneWidget);
+      expect(find.text('Aleppo'), findsOneWidget);
+    });
+  });
+
   group('Form validation', () {
     testWidgets('Empty submission shows required validation and attempts no '
         'email launch', (tester) async {

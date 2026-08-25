@@ -2213,6 +2213,25 @@ void main() {
         });
       },
     );
+
+    test('a space in document_no is percent-encoded, never manually '
+        'concatenated into the URL', () async {
+      final fake = _RecordingHttpClient(
+        (req) async => _jsonResponse(200, validEnvelope(), request: req),
+      );
+      final client = AncApiClient(httpClient: fake);
+
+      await client.fetchSalesOrders(
+        token: syntheticToken,
+        documentNo: 'SO 24001',
+      );
+
+      expect(
+        fake.lastRequest!.url.toString(),
+        contains('document_no=SO%2024001'),
+      );
+      expect(fake.lastRequest!.url.queryParameters['document_no'], 'SO 24001');
+    });
   });
 
   group('AncApiClient.fetchItems', () {

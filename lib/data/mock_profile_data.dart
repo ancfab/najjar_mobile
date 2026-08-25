@@ -4,7 +4,6 @@ import '../models/user_profile.dart';
 // the app's mock signed-in user (see `kCurrentUserName` in mock_user.dart)
 // so it can be swapped for a real profile source independently.
 //
-// TODO(api): Replace the isolated mock profile with the authenticated user's
 // profile after the profile-fetch endpoint and response contract are
 // confirmed.
 const UserProfile kMockUserProfile = UserProfile(

@@ -37,14 +37,6 @@ class CustomBottomNav extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Image.asset(
-              'assets/logo/ANC Logo.png',
-              height: 20,
-              fit: BoxFit.contain,
-            ),
-          ),
           ...List.generate(_items.length, (index) {
             final item = _items[index];
             return Expanded(

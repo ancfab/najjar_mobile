@@ -22,7 +22,7 @@ class DemoConfig {
 
   // TEMPORARY CLIENT DEMO MODE.
   // Set to false to restore the live Business Central Current Balance integration.
-  static const bool useDemoCurrentBalance = true;
+  static const bool useDemoCurrentBalance = false;
 
   // TEMPORARY CLIENT DEMO MODE.
   // Set to false to restore the live Business Central Orders integration.

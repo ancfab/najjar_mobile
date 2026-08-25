@@ -1,7 +1,6 @@
 /// Credit utilization figures shown in the Account Balance screen's Credit
 /// Utilization card.
 ///
-// TODO(api): Replace mock account-balance summary and credit-utilization
 // data after the backend endpoint and response contract are confirmed.
 class CreditUtilizationData {
   const CreditUtilizationData({

@@ -11,6 +11,7 @@ import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
 import '../widgets/contact_form_field.dart';
 import '../widgets/support_info_card.dart';
+import '../widgets/support_office_location_tile.dart';
 import '../widgets/support_region_selector.dart';
 import '../widgets/support_regional_contact_tile.dart';
 
@@ -268,6 +269,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                       const SizedBox(height: 20),
                     ],
                     _buildContactSummary(),
+                    if (_region.officeLocations.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      _buildLocations(),
+                    ],
                     if (_region.regionalContacts.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       _buildRegionalContacts(),
@@ -557,6 +562,42 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildLocations() {
+    return Container(
+      key: const ValueKey('contact-locations-section'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            context.t('contactUs.locationsLabel'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+              color: AppColors.grayText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final location in _region.officeLocations) ...[
+            SupportOfficeLocationTile(
+              key: ValueKey('office-location-${location.city}'),
+              location: location,
+              onCallTap: _onCallTap,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
     );
   }
 

@@ -44,7 +44,6 @@ const int _navIndexProfile = 3;
 /// (ANC ID + last-updated label), a prefilled editable form, a full-width
 /// "Save Changes" action, and a "Logout" action.
 ///
-/// TODO(api): Replace mock profile display/prefill data (see
 /// [kMockUserProfile]) once the profile API/backend contract is confirmed.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({

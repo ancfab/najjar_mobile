@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../config/demo_config.dart';
-import '../data/mock_user.dart';
 import '../localization/translations.dart';
 import '../models/business_central/business_central_item_search_group.dart';
 import '../models/business_central/payment_entry.dart';
 import '../models/home_dashboard_data.dart';
 import '../services/api_stock_lookup_service.dart';
+import '../services/auth_service.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/current_balance_data_source.dart';
 import '../services/current_balance_service.dart';
@@ -115,6 +115,7 @@ class HomeScreen extends StatefulWidget {
     this.currentBalanceSource,
     this.checkAvailabilityService,
     this.catalogueSearchService,
+    this.authService,
   });
 
   /// Last Payment data seam. Defaults (lazily, in State) to
@@ -152,6 +153,13 @@ class HomeScreen extends StatefulWidget {
   /// exact ownership-disposal pattern.
   final ItemCatalogueSearchService? catalogueSearchService;
 
+  /// Authenticated-username display seam — used only to read the current
+  /// session for [HomeHeader]'s display, never to decide authentication
+  /// (see [AuthService.currentSession]'s doc comment). Left `null` here and
+  /// resolved lazily in [_HomeScreenState.initState], mirroring
+  /// [checkAvailabilityService]'s exact ownership-disposal pattern.
+  final AuthService? authService;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -187,6 +195,23 @@ class _HomeScreenState extends State<HomeScreen> {
   /// (no [HomeScreen.catalogueSearchService] was injected) — the only
   /// instance this screen ever closes.
   ApiItemCatalogueSearchService? _ownedCatalogueSearchService;
+
+  /// Authenticated-username display seam actually used by [_loadUsername] —
+  /// resolved in [initState], mirroring [_checkAvailabilityService]'s exact
+  /// pattern; see [HomeScreen.authService]'s doc comment for why.
+  late final AuthService _authService;
+
+  /// Set only when this State created its own [AuthService] (no
+  /// [HomeScreen.authService] was injected) — the only instance this screen
+  /// ever closes.
+  AuthService? _ownedAuthService;
+
+  /// The authenticated user's username, loaded from the persisted session
+  /// for display only (see [AuthService.currentSession]'s doc comment) —
+  /// `null` before that load completes or when no session/username could be
+  /// read, in which case [HomeHeader] falls back to a safe generic label
+  /// rather than a fabricated name.
+  String? _username;
 
   int _selectedNavIndex = _navIndexHome;
 
@@ -317,6 +342,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _ownedCatalogueSearchService = owned;
       _catalogueSearchService = owned;
     }
+    final injectedAuthService = widget.authService;
+    if (injectedAuthService != null) {
+      _authService = injectedAuthService;
+    } else {
+      final owned = AuthService.production();
+      _ownedAuthService = owned;
+      _authService = owned;
+    }
+    _loadUsername();
   }
 
   @override
@@ -330,7 +364,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkAvailabilityGeneration++;
     _ownedCheckAvailabilityService?.close();
     _ownedCatalogueSearchService?.close();
+    _ownedAuthService?.close();
     super.dispose();
+  }
+
+  /// Loads the Home header's display username from the currently persisted
+  /// session (display only — never used to decide authentication; see
+  /// [AuthService.currentSession]'s doc comment), mirroring
+  /// `EditProfileScreen._loadIdentity`'s exact pattern. A missing/unreadable
+  /// session leaves [_username] `null`, which [HomeHeader] renders as a safe
+  /// generic label rather than a fabricated name.
+  Future<void> _loadUsername() async {
+    final session = await _authService.currentSession();
+    if (!mounted) return;
+    setState(() => _username = session?.username);
   }
 
   /// Loads Home dashboard summary data from API or mock fallback.
@@ -949,7 +996,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             HomeHeader(
-              userName: kCurrentUserName,
+              userName: _username ?? context.t('home.defaultUserLabel'),
               onAvatarTap: _openProfile,
               onSettingsTap: _openSettings,
             ),

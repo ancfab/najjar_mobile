@@ -35,6 +35,7 @@
     "validationUnavailable": "We could not verify your session. Please check your connection and sign in again."
   },
   "home": {
+    "defaultUserLabel": "User",
     "unableToLoadDashboard": "Unable to load dashboard data.",
     "unableToRefreshDashboard": "Unable to refresh dashboard data.",
     "enterCatalogueCodeValidation": "Please enter a catalogue code.",
@@ -318,6 +319,7 @@
     "callUsLabel": "CALL US",
     "callNumber": "Call {number}",
     "dialerUnavailable": "Unable to open the phone dialer. Please try again.",
+    "locationsLabel": "LOCATIONS",
     "regionalContactsLabel": "REGIONAL CONTACTS",
     "upholsteryFabricsLabel": "Upholstery Fabrics",
     "curtainsLabel": "Curtains",

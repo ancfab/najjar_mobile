@@ -28,7 +28,6 @@ class LoginResponse {
   /// only when the top-level field is absent (see
   /// [_normalizeMustChangePassword]).
   ///
-  /// TODO(api): No password-change endpoint exists yet. This flag is
   /// parsed and stored as session metadata only — it must not gate
   /// navigation or drive a forced password-change screen until such an
   /// endpoint exists.

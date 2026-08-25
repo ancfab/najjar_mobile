@@ -12,11 +12,25 @@ const List<SupportRegionData> kSupportRegions = [
     displayName: 'UAE',
     supportEmail: 'accounting01@anc-uae.com',
     hotlineNumbers: ['+971 56 511 0448'],
+    officeLocations: [
+      SupportOfficeLocation(
+        city: 'Sharjah',
+        address: 'المدينة الصناعية، منطقة 18',
+        name: 'ANC Najjar Fabric',
+      ),
+    ],
   ),
   SupportRegionData(
     id: SupportRegionId.syria,
     displayName: 'Syria',
     supportEmail: 'info@anc-syr.com',
+    officeLocations: [
+      SupportOfficeLocation(
+        city: 'Damascus',
+        address: 'طريق المطار دمشق الدولي، شركة النجار',
+      ),
+      SupportOfficeLocation(city: 'Aleppo', address: 'استراد دمشق'),
+    ],
     regionalContacts: [
       SupportRegionalContact(
         name: 'روى',
@@ -78,12 +92,30 @@ const List<SupportRegionData> kSupportRegions = [
     id: SupportRegionId.iraq,
     displayName: 'Iraq',
     supportEmail: 'accounting@najjar-lb.com',
+    officeLocations: [
+      SupportOfficeLocation(
+        city: 'Erbil',
+        address: 'شارع 60، جانب جليل خياط',
+        phone: '+964 751 401 8777',
+      ),
+      SupportOfficeLocation(
+        city: 'Sulaymaniyah',
+        address: 'شارع 60، جانب مستشفى بخشين',
+        phone: '+964 750 166 1000',
+      ),
+    ],
   ),
   SupportRegionData(
     id: SupportRegionId.oman,
     displayName: 'Oman',
     supportEmail: 'mhd.oman@anc-uae.com',
     hotlineNumbers: ['+968 9819 8501'],
+    officeLocations: [
+      SupportOfficeLocation(
+        city: 'Muscat / Seeb',
+        address: 'مسقط - السيب، شركة النجار للأعمال العالمية',
+      ),
+    ],
   ),
   SupportRegionData(
     id: SupportRegionId.lebanon,
@@ -91,5 +123,8 @@ const List<SupportRegionData> kSupportRegions = [
     supportEmail: 'info@najjar-lb.com',
     officeAddress: 'طريق المطار - شركة النجار',
     hotlineNumbers: ['+961 79 303 551', '+961 81 107 942', '+961 76 408 455'],
+    officeLocations: [
+      SupportOfficeLocation(city: 'Beirut', address: 'جنب السفارة الكويتية'),
+    ],
   ),
 ];

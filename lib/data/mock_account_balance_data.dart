@@ -5,7 +5,6 @@ import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
 import '../models/credit_utilization_data.dart';
 
-// TODO(api): Replace mock account-balance summary and credit-utilization
 // data after the backend endpoint and response contract are confirmed.
 const AccountBalanceSummary kMockAccountBalanceSummary = AccountBalanceSummary(
   currentBalance: 42850.00,
@@ -13,7 +12,6 @@ const AccountBalanceSummary kMockAccountBalanceSummary = AccountBalanceSummary(
   changePeriodLabel: 'from last month',
 );
 
-// TODO(api): Replace mock account-balance summary and credit-utilization
 // data after the backend endpoint and response contract are confirmed.
 const CreditUtilizationData kMockCreditUtilizationData = CreditUtilizationData(
   totalCredit: 100000.00,
@@ -82,7 +80,6 @@ BalanceHistoryPoint _pointAt({
   );
 }
 
-// TODO(api): Replace mock balance-history points with API data for the
 // selected 30-day, 90-day, or 1-year range.
 final Map<BalanceHistoryRange, List<BalanceHistoryPoint>>
 kMockBalanceHistoryByRange = {

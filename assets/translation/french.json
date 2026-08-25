@@ -35,6 +35,7 @@
     "validationUnavailable": "Nous n'avons pas pu vérifier votre session. Veuillez vérifier votre connexion et vous reconnecter."
   },
   "home": {
+    "defaultUserLabel": "Utilisateur",
     "unableToLoadDashboard": "Impossible de charger les données du tableau de bord.",
     "unableToRefreshDashboard": "Impossible d'actualiser les données du tableau de bord.",
     "enterCatalogueCodeValidation": "Veuillez saisir un code du catalogue.",
@@ -318,6 +319,7 @@
     "callUsLabel": "APPELEZ-NOUS",
     "callNumber": "Appeler le {number}",
     "dialerUnavailable": "Impossible d'ouvrir le composeur téléphonique. Veuillez réessayer.",
+    "locationsLabel": "SITES",
     "regionalContactsLabel": "CONTACTS RÉGIONAUX",
     "upholsteryFabricsLabel": "Tissus d'ameublement",
     "curtainsLabel": "Rideaux",

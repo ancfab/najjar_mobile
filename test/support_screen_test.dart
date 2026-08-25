@@ -8,11 +8,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/data/support_regions_data.dart';
+import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/phone_launcher.dart';
 import 'package:anc_fabrics/services/support_region_service.dart';
 import 'package:anc_fabrics/services/url_launcher_client.dart';
@@ -24,9 +26,38 @@ import 'package:anc_fabrics/widgets/support_hours_card.dart';
 import 'package:anc_fabrics/widgets/support_info_card.dart';
 import 'package:anc_fabrics/widgets/support_region_selector.dart';
 
+import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_url_launcher_client.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
+
+const _syntheticToken = 'synthetic-id|synthetic-secret';
+
+/// An authenticated session with [country] as its login country, otherwise
+/// filled with unremarkable sample identity data — mirrors the shape
+/// `AuthSession.fromLoginResponse` would produce after a real login.
+AuthSession _sessionWithCountry(String country) => AuthSession(
+  token: _syntheticToken,
+  userId: 7,
+  username: 'sample.user',
+  phone: '+9715xxxxxxxx',
+  country: country,
+  clientId: 'ANCNAJJAR',
+  mustChangePassword: false,
+);
+
+/// Builds a real [AuthService] over a [FakeAuthSessionStore] seeded with
+/// [session] (or left empty when null, simulating no persisted session) —
+/// the same real-service-over-fake-store pattern used in
+/// edit_profile_screen_test.dart, so SupportScreen's real
+/// [AuthService.currentSession] call is exercised for real. The network
+/// [AncApiClient] this leaves at its real default is never touched, since
+/// [AuthService.currentSession] only reads local session storage.
+AuthService _authServiceFor(AuthSession? session) {
+  final store = FakeAuthSessionStore();
+  if (session != null) store.seed(session);
+  return AuthService.production(sessionStore: store);
+}
 
 void main() {
   Future<void> pumpSupport(WidgetTester tester) async {
@@ -109,10 +140,13 @@ void main() {
       find.byType(SupportRegionSelector),
     );
     expect(selector.selectedRegionId, lebanon.id);
-    // Lebanon now has a verified office address, so the office fallback no
+    // Lebanon now has verified office locations, so the office fallback no
     // longer applies to it — only support hours (still unverified for every
     // region) falls back.
-    expect(find.text(lebanon.officeAddress!), findsOneWidget);
+    for (final location in lebanon.officeLocations) {
+      expect(find.text(location.city), findsOneWidget);
+      expect(find.text(location.address), findsOneWidget);
+    }
     expect(
       find.text(
         'Support hours for ${lebanon.displayName} will be confirmed soon.',
@@ -135,17 +169,21 @@ void main() {
           find.byType(SupportRegionSelector),
         );
         expect(selector.selectedRegionId, region.id);
-        // Only regions without a verified office address (all but Lebanon)
-        // fall back to the "will be added soon" copy.
-        if (region.officeAddress != null) {
-          expect(find.text(region.officeAddress!), findsOneWidget);
-        } else {
+        // Every current region has at least one verified office location,
+        // so the "will be added soon" fallback never applies to any of
+        // them today.
+        if (region.officeLocations.isEmpty) {
           expect(
             find.text(
               'Office details for ${region.displayName} will be added soon.',
             ),
             findsOneWidget,
           );
+        } else {
+          for (final location in region.officeLocations) {
+            expect(find.text(location.city), findsOneWidget);
+            expect(find.text(location.address), findsOneWidget);
+          }
         }
         expect(
           find.text(
@@ -157,16 +195,15 @@ void main() {
 
         for (final other in kSupportRegions) {
           if (other.id == region.id) continue;
-          if (other.officeAddress != null) {
-            expect(find.text(other.officeAddress!), findsNothing);
-          } else {
-            expect(
-              find.text(
-                'Office details for ${other.displayName} will be added '
-                'soon.',
-              ),
-              findsNothing,
+          for (final location in other.officeLocations) {
+            // Skip cities that also belong to the selected region (e.g.
+            // none currently overlap, but this keeps the check honest if
+            // that ever changes) to avoid a false negative.
+            final sharedCity = region.officeLocations.any(
+              (l) => l.city == location.city,
             );
+            if (sharedCity) continue;
+            expect(find.text(location.city), findsNothing);
           }
         }
         expect(tester.takeException(), isNull);
@@ -477,6 +514,202 @@ void main() {
 
       expect(client.attemptedUris, hasLength(1));
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Corporate Office locations', () {
+    testWidgets('UAE shows Sharjah', (tester) async {
+      await pumpSupport(tester);
+
+      expect(find.text('Sharjah'), findsOneWidget);
+    });
+
+    testWidgets('Syria shows Damascus and Aleppo', (tester) async {
+      await pumpSupport(tester);
+
+      await tester.tap(find.text('Syria'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Damascus'), findsOneWidget);
+      expect(find.text('Aleppo'), findsOneWidget);
+    });
+
+    testWidgets('Lebanon shows Beirut', (tester) async {
+      await pumpSupport(tester);
+
+      await tester.tap(find.text('Lebanon'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Beirut'), findsOneWidget);
+    });
+
+    testWidgets('Oman shows Muscat / Seeb', (tester) async {
+      await pumpSupport(tester);
+
+      await tester.tap(find.text('Oman'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Muscat / Seeb'), findsOneWidget);
+    });
+
+    testWidgets('Iraq shows Erbil and Sulaymaniyah', (tester) async {
+      await pumpSupport(tester);
+
+      await tester.tap(find.text('Iraq'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Erbil'), findsOneWidget);
+      expect(find.text('Sulaymaniyah'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Changing the Support region updates Corporate Office locations',
+      (tester) async {
+        await pumpSupport(tester);
+
+        expect(find.text('Sharjah'), findsOneWidget);
+
+        await tester.tap(find.text('Syria'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sharjah'), findsNothing);
+        expect(find.text('Damascus'), findsOneWidget);
+        expect(find.text('Aleppo'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'A region with multiple offices renders every location, each with '
+      'its own city/address/phone',
+      (tester) async {
+        await pumpSupport(tester);
+
+        await tester.tap(find.text('Iraq'));
+        await tester.pumpAndSettle();
+
+        final iraq = kSupportRegions.firstWhere(
+          (region) => region.id == SupportRegionId.iraq,
+        );
+        expect(iraq.officeLocations, hasLength(2));
+        for (final location in iraq.officeLocations) {
+          expect(find.text(location.city), findsOneWidget);
+          expect(find.text(location.address), findsOneWidget);
+          if (location.phone != null) {
+            expect(find.text(location.phone!), findsOneWidget);
+          }
+        }
+      },
+    );
+
+    testWidgets(
+      'A region with a single office renders it with no placeholder for '
+      'missing optional fields',
+      (tester) async {
+        await pumpSupport(tester);
+
+        final uae = kSupportRegions.firstWhere(
+          (region) => region.id == SupportRegionId.uae,
+        );
+        final sharjah = uae.officeLocations.single;
+        expect(sharjah.phone, isNull);
+
+        expect(find.text(sharjah.city), findsOneWidget);
+        expect(find.text(sharjah.address), findsOneWidget);
+        // No verified phone for Sharjah, so no tappable call row is
+        // rendered for that office location (the Direct Hotline card
+        // below still has its own unrelated call icon).
+        expect(
+          find.byKey(const ValueKey('office-location-call-Sharjah')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Missing optional name/phone values never show placeholder text',
+      (tester) async {
+        await pumpSupport(tester);
+
+        await tester.tap(find.text('Syria'));
+        await tester.pumpAndSettle();
+
+        // Damascus and Aleppo have no verified business name or phone.
+        expect(
+          find.byKey(const ValueKey('office-location-call-Damascus')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('office-location-call-Aleppo')),
+          findsNothing,
+        );
+        expect(find.textContaining('null'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'Iraq office location phone actions generate the correct tel: URIs '
+      'from Support',
+      (tester) async {
+        final client = FakeUrlLauncherClient(telResult: true);
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
+              AppTranslationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: SupportScreen(phoneLauncher: PhoneLauncher(client: client)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Iraq'));
+        await tester.pumpAndSettle();
+
+        final erbilCall = find.byKey(
+          const ValueKey('office-location-call-Erbil'),
+        );
+        await tester.ensureVisible(erbilCall);
+        await tester.pumpAndSettle();
+        await tester.tap(erbilCall);
+        await tester.pumpAndSettle();
+
+        expect(client.attemptedUris, hasLength(1));
+        expect(client.attemptedUris.single.toString(), 'tel:+9647514018777');
+
+        final sulaymaniyahCall = find.byKey(
+          const ValueKey('office-location-call-Sulaymaniyah'),
+        );
+        await tester.ensureVisible(sulaymaniyahCall);
+        await tester.pumpAndSettle();
+        await tester.tap(sulaymaniyahCall);
+        await tester.pumpAndSettle();
+
+        expect(client.attemptedUris, hasLength(2));
+        expect(client.attemptedUris.last.toString(), 'tel:+9647501661000');
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('No old officeAddress value is rendered after migration', (
+      tester,
+    ) async {
+      await pumpSupport(tester);
+
+      final lebanon = kSupportRegions.firstWhere(
+        (region) => region.id == SupportRegionId.lebanon,
+      );
+      await tester.tap(find.text('Lebanon'));
+      await tester.pumpAndSettle();
+
+      // Lebanon's Beirut office location (from officeLocations) is shown...
+      expect(find.text('Beirut'), findsOneWidget);
+      // ...but the separate, no-longer-used-by-Support officeAddress
+      // string is not.
+      expect(find.text(lebanon.officeAddress!), findsNothing);
     });
   });
 
@@ -887,6 +1120,155 @@ void main() {
           findsNothing,
         );
         expect(find.text('OverrideLand'), findsOneWidget);
+      },
+    );
+  });
+
+  group('Login country default region', () {
+    Future<void> pumpSupportForCountry(
+      WidgetTester tester,
+      String? country,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(
+            authService: _authServiceFor(
+              country == null ? null : _sessionWithCountry(country),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    for (final entry in <String, SupportRegionId>{
+      'LB': SupportRegionId.lebanon,
+      'SY': SupportRegionId.syria,
+      'IQ': SupportRegionId.iraq,
+      'AE': SupportRegionId.uae,
+      'OM': SupportRegionId.oman,
+    }.entries) {
+      final country = entry.key;
+      final expectedRegionId = entry.value;
+
+      testWidgets('Login country $country defaults Support to '
+          '${expectedRegionId.name}, visibly selected', (tester) async {
+        await pumpSupportForCountry(tester, country);
+
+        final expectedRegion = kSupportRegions.firstWhere(
+          (region) => region.id == expectedRegionId,
+        );
+
+        final selector = tester.widget<SupportRegionSelector>(
+          find.byType(SupportRegionSelector),
+        );
+        expect(selector.selectedRegionId, expectedRegionId);
+        // The region-scoped content (e.g. a verified office location)
+        // renders from the defaulted region immediately, not just the
+        // selector's internal state.
+        if (expectedRegion.officeLocations.isNotEmpty) {
+          expect(
+            find.text(expectedRegion.officeLocations.first.city),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets(
+      'A session with no recognized country falls back to the first region',
+      (tester) async {
+        await pumpSupportForCountry(tester, 'US');
+
+        final selector = tester.widget<SupportRegionSelector>(
+          find.byType(SupportRegionSelector),
+        );
+        expect(selector.selectedRegionId, kSupportRegions.first.id);
+      },
+    );
+
+    testWidgets(
+      'No persisted session (e.g. a legacy/unauthenticated read) falls '
+      'back to the first region',
+      (tester) async {
+        await pumpSupportForCountry(tester, null);
+
+        final selector = tester.widget<SupportRegionSelector>(
+          find.byType(SupportRegionSelector),
+        );
+        expect(selector.selectedRegionId, kSupportRegions.first.id);
+      },
+    );
+
+    testWidgets('Manually switching region after the login-country default is '
+        'applied is preserved, not reset back', (tester) async {
+      await pumpSupportForCountry(tester, 'LB');
+
+      final selector = tester.widget<SupportRegionSelector>(
+        find.byType(SupportRegionSelector),
+      );
+      expect(selector.selectedRegionId, SupportRegionId.lebanon);
+
+      final syria = kSupportRegions.firstWhere(
+        (region) => region.id == SupportRegionId.syria,
+      );
+      await tester.tap(find.text(syria.displayName));
+      await tester.pumpAndSettle();
+
+      final updatedSelector = tester.widget<SupportRegionSelector>(
+        find.byType(SupportRegionSelector),
+      );
+      expect(updatedSelector.selectedRegionId, SupportRegionId.syria);
+
+      // Pumping further (simulating time passing, e.g. any late-settling
+      // async work) must never silently revert the manual choice back to
+      // the login country.
+      await tester.pump(const Duration(seconds: 1));
+      final settledSelector = tester.widget<SupportRegionSelector>(
+        find.byType(SupportRegionSelector),
+      );
+      expect(settledSelector.selectedRegionId, SupportRegionId.syria);
+    });
+
+    testWidgets(
+      'The Support-selected region (after switching away from the login '
+      'country) is passed to Contact Us, taking priority over login country',
+      (tester) async {
+        await pumpSupportForCountry(tester, 'LB');
+
+        final syria = kSupportRegions.firstWhere(
+          (region) => region.id == SupportRegionId.syria,
+        );
+        await tester.tap(find.text(syria.displayName));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('support-email-button')),
+        );
+        await tester.tap(find.byKey(const ValueKey('support-email-button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ContactUsScreen), findsOneWidget);
+        final contactUs = tester.widget<ContactUsScreen>(
+          find.byType(ContactUsScreen),
+        );
+        expect(contactUs.region?.id, SupportRegionId.syria);
+        // The region selector is hidden on Contact Us since an explicit
+        // region was handed off — confirming priority over the login
+        // country, not just a matching id.
+        expect(find.byType(SupportRegionSelector), findsNothing);
+        // Syria-specific contact content (its Regional Contacts section)
+        // renders, confirming the hand-off drove real content, not just the
+        // widget's region field.
+        expect(find.text('REGIONAL CONTACTS'), findsOneWidget);
       },
     );
   });

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/business_central/ledger_entry.dart';
 import 'ledger_entries_service.dart';
 
@@ -114,13 +116,22 @@ class CurrentBalanceService {
   /// load-more failure, but this method still throws rather than reducing
   /// them, since a partial page set is not a confirmed complete balance.
   Future<CurrentBalanceAmount> fetchCurrentBalance() async {
+    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
+    // diagnosed.
+    debugPrint('[CURRENT BALANCE] load started');
     await _ledgerEntriesService.loadFirstPage();
     var pagesLoaded = 1;
     while (_ledgerEntriesService.hasNextPage && pagesLoaded < maxPages) {
       await _ledgerEntriesService.loadNextPage();
       pagesLoaded++;
     }
-    return computeCurrentBalance(_ledgerEntriesService.entries);
+    debugPrint(
+      '[CURRENT BALANCE] all pages loaded: $pagesLoaded, '
+      'total entries: ${_ledgerEntriesService.entries.length}',
+    );
+    final result = computeCurrentBalance(_ledgerEntriesService.entries);
+    debugPrint('[CURRENT BALANCE] calculation succeeded');
+    return result;
   }
 
   /// Closes the underlying [LedgerEntriesService]'s HTTP client, but only

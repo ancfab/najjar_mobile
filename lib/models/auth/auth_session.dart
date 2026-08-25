@@ -48,7 +48,6 @@ class AuthSession {
   /// Normalized, non-blocking session metadata carried over from
   /// [LoginResponse.mustChangePassword].
   ///
-  /// TODO(api): Remains non-blocking because no password-change endpoint
   /// exists yet — this flag must not gate navigation or a forced
   /// password-change screen until one does.
   final bool mustChangePassword;

@@ -1,7 +1,6 @@
 /// Global account balance summary shown in the Account Balance screen's
 /// hero card.
 ///
-// TODO(api): Replace mock account-balance summary and credit-utilization
 // data after the backend endpoint and response contract are confirmed.
 class AccountBalanceSummary {
   const AccountBalanceSummary({

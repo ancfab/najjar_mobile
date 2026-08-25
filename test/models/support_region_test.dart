@@ -30,6 +30,20 @@ void main() {
     });
   });
 
+  group('SupportOfficeLocation', () {
+    test('stores the required fields and defaults name/phone to null', () {
+      const location = SupportOfficeLocation(
+        city: 'Beirut',
+        address: 'جنب السفارة الكويتية',
+      );
+
+      expect(location.city, 'Beirut');
+      expect(location.address, 'جنب السفارة الكويتية');
+      expect(location.name, isNull);
+      expect(location.phone, isNull);
+    });
+  });
+
   group('Lebanon', () {
     test('has verified email, office, and three verified phone numbers; no '
         'regional contacts', () {
@@ -43,6 +57,19 @@ void main() {
         '+961 76 408 455',
       ]);
       expect(lebanon.regionalContacts, isEmpty);
+    });
+
+    test('has exactly one verified office location: Beirut, with the '
+        'newly supplied address (not the older Airport Road address used '
+        'by the single-address officeAddress field)', () {
+      final lebanon = region(SupportRegionId.lebanon);
+
+      expect(lebanon.officeLocations, hasLength(1));
+      final beirut = lebanon.officeLocations.single;
+      expect(beirut.city, 'Beirut');
+      expect(beirut.address, 'جنب السفارة الكويتية');
+      expect(beirut.name, isNull);
+      expect(beirut.phone, isNull);
     });
 
     test('the phone numbers are not labeled as WhatsApp: no verified '
@@ -68,6 +95,18 @@ void main() {
       expect(uae.officeAddress, isNull);
       expect(uae.regionalContacts, isEmpty);
     });
+
+    test('has exactly one verified office location: Sharjah, with the '
+        'ANC Najjar Fabric business name', () {
+      final uae = region(SupportRegionId.uae);
+
+      expect(uae.officeLocations, hasLength(1));
+      final sharjah = uae.officeLocations.single;
+      expect(sharjah.city, 'Sharjah');
+      expect(sharjah.address, 'المدينة الصناعية، منطقة 18');
+      expect(sharjah.name, 'ANC Najjar Fabric');
+      expect(sharjah.phone, isNull);
+    });
   });
 
   group('Oman', () {
@@ -78,6 +117,17 @@ void main() {
       expect(oman.hotlineNumbers, ['+968 9819 8501']);
       expect(oman.officeAddress, isNull);
       expect(oman.regionalContacts, isEmpty);
+    });
+
+    test('has exactly one verified office location: Muscat / Seeb', () {
+      final oman = region(SupportRegionId.oman);
+
+      expect(oman.officeLocations, hasLength(1));
+      final muscat = oman.officeLocations.single;
+      expect(muscat.city, 'Muscat / Seeb');
+      expect(muscat.address, 'مسقط - السيب، شركة النجار للأعمال العالمية');
+      expect(muscat.name, isNull);
+      expect(muscat.phone, isNull);
     });
   });
 
@@ -90,6 +140,25 @@ void main() {
       expect(iraq.officeAddress, isNull);
       expect(iraq.hotlineNumbers, isEmpty);
       expect(iraq.regionalContacts, isEmpty);
+    });
+
+    test('has exactly two verified office locations, each with its own '
+        'verified phone number: Erbil and Sulaymaniyah', () {
+      final iraq = region(SupportRegionId.iraq);
+
+      expect(iraq.officeLocations, hasLength(2));
+      final erbil = iraq.officeLocations.firstWhere((l) => l.city == 'Erbil');
+      final sulaymaniyah = iraq.officeLocations.firstWhere(
+        (l) => l.city == 'Sulaymaniyah',
+      );
+
+      expect(erbil.address, 'شارع 60، جانب جليل خياط');
+      expect(erbil.phone, '+964 751 401 8777');
+      expect(erbil.name, isNull);
+
+      expect(sulaymaniyah.address, 'شارع 60، جانب مستشفى بخشين');
+      expect(sulaymaniyah.phone, '+964 750 166 1000');
+      expect(sulaymaniyah.name, isNull);
     });
   });
 
@@ -104,6 +173,25 @@ void main() {
       expect(syria.supportEmail, 'info@anc-syr.com');
       expect(syria.officeAddress, isNull);
       expect(syria.hotlineNumbers, isEmpty);
+    });
+
+    test('has exactly two verified office locations: Damascus and Aleppo, '
+        'neither with a verified phone or business name', () {
+      expect(syria.officeLocations, hasLength(2));
+      final damascus = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Damascus',
+      );
+      final aleppo = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Aleppo',
+      );
+
+      expect(damascus.address, 'طريق المطار دمشق الدولي، شركة النجار');
+      expect(damascus.phone, isNull);
+      expect(damascus.name, isNull);
+
+      expect(aleppo.address, 'استراد دمشق');
+      expect(aleppo.phone, isNull);
+      expect(aleppo.name, isNull);
     });
 
     test('has exactly 9 regional contacts: 7 upholstery, 2 curtains', () {

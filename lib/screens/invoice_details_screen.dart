@@ -31,7 +31,6 @@ import 'invoices_screen.dart';
 /// tasks will add notes, payment history, and a footer once their
 /// screenshots/scope are provided.
 ///
-/// TODO: Replace mock invoice fetching with the real Invoice Details API
 /// once the endpoint is confirmed. All fetching on this screen is
 /// mock/frontend-only until then.
 class InvoiceDetailsScreen extends StatefulWidget {
@@ -39,7 +38,6 @@ class InvoiceDetailsScreen extends StatefulWidget {
     super.key,
     required this.invoiceNumber,
     this.liveInvoiceLines,
-    // TODO(api): Absent `liveInvoiceLines`, this screen is still mock-backed
     // via MockInvoiceService. `liveInvoiceLines` is the smallest live-data
     // injection built so far (see `OrderDetailScreen`'s Invoice button) —
     // it renders only confirmed invoice-line fields via
@@ -240,7 +238,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   /// this shows a safe placeholder message instead of a fake `mailto:`
   /// launch.
   ///
-  /// TODO: Add a `mailto:` email-launching helper (mirroring
   /// `PhoneLauncher`/`WhatsAppLauncher`, built on the existing
   /// `UrlLauncherClient`) once product/backend confirms the desired
   /// behavior.
@@ -391,14 +388,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               const SizedBox(height: 16),
               PaymentTimeline(events: invoice.timelineEvents),
             ],
-            // TODO(product): Revisit this visibility rule when the confirmed
             // backend contract defines whether partial logistics information
             // should be shown.
             if (invoice.logisticsInfo != null) ...[
               const SizedBox(height: 16),
               InvoiceLogisticsStatusCard(logistics: invoice.logisticsInfo),
             ],
-            // TODO(product): Confirm whether invoice notes are client-visible
             // or back-office-only. If confirmed as back-office-only, stop
             // exposing this field in the mobile app and remove
             // InvoiceNotesSection from InvoiceDetailsScreen.

@@ -6,7 +6,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
+import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/business_central/business_central_item_search_group.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
@@ -15,6 +17,8 @@ import 'package:anc_fabrics/screens/home_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/scan_stock_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/anc_api_client.dart';
+import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
@@ -26,14 +30,50 @@ import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/availability_search_card.dart';
 import 'package:anc_fabrics/widgets/balance_card.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
+import 'package:anc_fabrics/widgets/home_header.dart';
 import 'package:anc_fabrics/widgets/last_payment_card.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
+import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_current_balance_data_source.dart';
 import 'helpers/fake_item_catalogue_search_service.dart';
 import 'helpers/fake_last_payment_data_source.dart';
 import 'helpers/fake_stock_lookup_service.dart';
+
+const _syntheticToken = 'synthetic-id|synthetic-secret';
+
+/// An http.Client that fails the test if it is ever called — Home screen's
+/// username load only ever calls [AuthService.currentSession] (a local
+/// secure-storage read), never the network, so any real HTTP attempt here
+/// indicates a bug.
+class _ShouldNeverBeCalledHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    throw StateError(
+      'AuthService must not call the ANC API from HomeScreen — only '
+      'currentSession (a local secure-storage read) is used here.',
+    );
+  }
+
+  @override
+  void close() {}
+}
+
+/// Builds a real [AuthService] over a [FakeAuthSessionStore] seeded with
+/// [session] (or left empty when `null`, simulating no persisted session) —
+/// the same real-service-over-fake-transport pattern used throughout
+/// edit_profile_screen_test.dart, so HomeScreen's real
+/// `AuthService.currentSession` call is exercised for real rather than
+/// re-implemented as a parallel fake.
+AuthService _authServiceFor({AuthSession? session}) {
+  final store = FakeAuthSessionStore();
+  if (session != null) store.seed(session);
+  return AuthService(
+    apiClient: AncApiClient(httpClient: _ShouldNeverBeCalledHttpClient()),
+    sessionStore: store,
+  );
+}
 
 /// Builds a single-variation exact-commonItemNo match, the common fixture
 /// shape for tests that only care about the eventual stock lookup, not
@@ -110,6 +150,7 @@ Future<void> _pumpHomeScreen(
   CurrentBalanceDataSource? currentBalanceSource,
   StockLookupService? checkAvailabilityService,
   ItemCatalogueSearchService? catalogueSearchService,
+  AuthService? authService,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -142,6 +183,7 @@ Future<void> _pumpHomeScreen(
             catalogueSearchService ?? FakeItemCatalogueSearchService(),
         checkAvailabilityService:
             checkAvailabilityService ?? FakeStockLookupService(),
+        authService: authService ?? _authServiceFor(),
       ),
     ),
   );
@@ -182,6 +224,7 @@ Future<void> _pumpHomeScreenWithoutSettling(
         currentBalanceSource:
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
+        authService: _authServiceFor(),
       ),
     ),
   );
@@ -2345,5 +2388,61 @@ void main() {
       expect(source.callCount, 2);
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('Home header username', () {
+    AuthSession sessionWithUsername(String username) => AuthSession(
+      token: _syntheticToken,
+      userId: 7,
+      username: username,
+      phone: '+96890000000',
+      country: 'OM',
+      clientId: 'ANCNAJJAR',
+      bcCustomerNo: 'SAMPLE-0001',
+      mustChangePassword: false,
+    );
+
+    testWidgets(
+      'Shows the authenticated username from the persisted session, never '
+      'the mock name',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          authService: _authServiceFor(session: sessionWithUsername('rasha')),
+        );
+
+        expect(find.widgetWithText(HomeHeader, 'rasha'), findsOneWidget);
+        expect(find.text('Alex Sterling'), findsNothing);
+      },
+    );
+
+    testWidgets('A different authenticated username changes the header', (
+      tester,
+    ) async {
+      await _pumpHomeScreen(
+        tester,
+        390,
+        authService: _authServiceFor(session: sessionWithUsername('nour')),
+      );
+
+      expect(find.widgetWithText(HomeHeader, 'nour'), findsOneWidget);
+      expect(find.widgetWithText(HomeHeader, 'rasha'), findsNothing);
+    });
+
+    testWidgets(
+      'Falls back to a safe generic label — never "Alex Sterling" — when no '
+      'session is persisted',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          authService: _authServiceFor(session: null),
+        );
+
+        expect(find.widgetWithText(HomeHeader, 'User'), findsOneWidget);
+        expect(find.text('Alex Sterling'), findsNothing);
+      },
+    );
   });
 }

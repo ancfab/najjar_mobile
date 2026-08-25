@@ -86,4 +86,87 @@ void main() {
       expect(find.byIcon(Icons.person), findsNothing);
     },
   );
+
+  testWidgets(
+    'Logo, language, and settings icons form a compact group with equal '
+    'fixed gaps and no expanding spacer between them',
+    (tester) async {
+      final avatarController = CurrentUserAvatarController();
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: HomeHeader(
+              userName: 'Alex Sterling',
+              avatarController: avatarController,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final logo = find.byKey(const ValueKey('home-header-logo'));
+      final language = find.byKey(
+        const ValueKey('home-header-language-button'),
+      );
+      final settings = find.byKey(
+        const ValueKey('home-header-settings-button'),
+      );
+
+      // Logo is sized 34-36px tall (a modest bump from the prior 34px) and
+      // keeps its aspect ratio (no explicit width forced on it).
+      final logoSize = tester.getSize(logo);
+      expect(logoSize.height, inInclusiveRange(34, 36));
+
+      final logoRight = tester.getTopRight(logo).dx;
+      final languageLeft = tester.getTopLeft(language).dx;
+      final languageRight = tester.getTopRight(language).dx;
+      final settingsLeft = tester.getTopLeft(settings).dx;
+
+      final logoToLanguageGap = languageLeft - logoRight;
+      final languageToSettingsGap = settingsLeft - languageRight;
+
+      expect(logoToLanguageGap, closeTo(languageToSettingsGap, 0.5));
+    },
+  );
+
+  testWidgets('Right-side action group does not overflow on a narrow phone '
+      'width', (tester) async {
+    final avatarController = CurrentUserAvatarController();
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: HomeHeader(
+            userName: 'Alex Sterling Longer Name For Testing',
+            avatarController: avatarController,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('home-header-settings-button')),
+      findsOneWidget,
+    );
+  });
 }

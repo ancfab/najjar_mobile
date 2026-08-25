@@ -30,6 +30,15 @@ class HomeHeader extends StatelessWidget {
   /// across test cases.
   final CurrentUserAvatarController? avatarController;
 
+  /// Fixed gap used on both sides of the language icon, so the logo↔language
+  /// and language↔settings spacing in the right-side action group match.
+  static const double _actionGroupGap = 8;
+
+  /// Logo height: slightly larger than the previous 34px to read clearly
+  /// next to the 34px language/settings icon buttons, while still fitting
+  /// the header's existing minHeight.
+  static const double _logoHeight = 36;
+
   @override
   Widget build(BuildContext context) {
     final controller = avatarController ?? currentUserAvatarController;
@@ -43,6 +52,7 @@ class HomeHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
+            flex: 3,
             child: InkWell(
               onTap: onAvatarTap,
               borderRadius: BorderRadius.circular(8),
@@ -82,22 +92,36 @@ class HomeHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          LanguagePopupMenuButton(
-            key: const ValueKey('home-header-language-button'),
-          ),
-          const SizedBox(width: 8),
-          InkWell(
-            key: const ValueKey('home-header-settings-button'),
-            onTap: onSettingsTap,
-            borderRadius: AppRadius.circularAll,
-            child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(
-                Icons.settings_outlined,
-                color: AppColors.textNavy,
-                size: 26,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                key: const ValueKey('home-header-logo'),
+                height: _logoHeight,
+                child: Image.asset(
+                  'assets/logo/ANC Logo.png',
+                  fit: BoxFit.contain,
+                ),
               ),
-            ),
+              const SizedBox(width: _actionGroupGap),
+              LanguagePopupMenuButton(
+                key: const ValueKey('home-header-language-button'),
+              ),
+              const SizedBox(width: _actionGroupGap),
+              InkWell(
+                key: const ValueKey('home-header-settings-button'),
+                onTap: onSettingsTap,
+                borderRadius: AppRadius.circularAll,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.settings_outlined,
+                    color: AppColors.textNavy,
+                    size: 26,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

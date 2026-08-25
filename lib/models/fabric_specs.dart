@@ -1,7 +1,6 @@
 /// Mock fabric specification fields shown in the Fabric Specs bottom sheet,
 /// opened from the Order Detail screen's Order Items card.
 ///
-/// TODO: Replace mock fabric specs with real fabric specification fields
 /// once the backend/API response shape is confirmed.
 class FabricSpecs {
   const FabricSpecs({

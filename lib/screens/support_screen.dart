@@ -4,6 +4,7 @@ import '../data/support_regions_data.dart';
 import '../localization/translations.dart';
 import '../models/support_region.dart';
 import '../navigation/main_bottom_nav.dart';
+import '../services/auth_service.dart';
 import '../services/phone_launcher.dart';
 import '../services/support_region_service.dart';
 import '../services/whatsapp_launcher.dart';
@@ -13,6 +14,7 @@ import '../widgets/custom_bottom_nav.dart';
 import '../widgets/support_action_card.dart';
 import '../widgets/support_hours_card.dart';
 import '../widgets/support_info_card.dart';
+import '../widgets/support_office_location_tile.dart';
 import '../widgets/support_region_selector.dart';
 import 'contact_us_screen.dart';
 
@@ -39,6 +41,7 @@ class SupportScreen extends StatefulWidget {
     PhoneLauncher? phoneLauncher,
     this.regions,
     SupportRegionService? regionService,
+    this.authService,
   }) : whatsAppLauncher = whatsAppLauncher ?? const WhatsAppLauncher(),
        phoneLauncher = phoneLauncher ?? const PhoneLauncher(),
        regionService = regionService ?? const SupportRegionService();
@@ -62,6 +65,15 @@ class SupportScreen extends StatefulWidget {
   /// directly. Defaults to [SupportRegionService].
   final SupportRegionService regionService;
 
+  /// Session seam used only to read the authenticated user's login country
+  /// (via [AuthService.currentSession] — display/prefill only, never an
+  /// auth check) so the initial region selection can default to it. Defaults
+  /// (lazily, in State — see [_SupportScreenState]) to
+  /// [AuthService.production]; overridable so tests can inject an
+  /// [AuthService] wired to a fake session store instead of touching real
+  /// secure storage.
+  final AuthService? authService;
+
   @override
   State<SupportScreen> createState() => _SupportScreenState();
 }
@@ -73,6 +85,31 @@ class _SupportScreenState extends State<SupportScreen> {
   bool _isWhatsAppLaunching = false;
   bool _isPhoneLaunching = false;
 
+  late final AuthService _authService;
+
+  /// Whether this instance created [_authService] itself (via
+  /// [AuthService.production]) as opposed to receiving a caller-injected
+  /// one — only an owned service is closed by [dispose].
+  late final bool _ownsAuthService;
+
+  // The region list and the session's login country load independently and
+  // in either order (see _loadRegions/_loadSessionRegion). Whichever
+  // resolves first applies the best default it can (see
+  // _resolveDefaultRegionId); if the session then resolves afterward with a
+  // recognized country, the default is upgraded — unless the user has
+  // already made a manual choice (_hasManualSelection), which always wins.
+  //
+  // This intentionally does not block the loading spinner on the session
+  // lookup: AuthService.currentSession() reads real secure storage by
+  // default, whose platform channel never resolves in a widget test unless
+  // a fake session store is injected (see feedback_pumpandsettle_perpetual
+  // _spinner) — gating _isLoadingRegions on it would hang pumpAndSettle()
+  // for every caller that doesn't inject one, including production.
+  bool _regionsReady = false;
+  bool _sessionReady = false;
+  SupportRegionId? _sessionRegionId;
+  bool _hasManualSelection = false;
+
   SupportRegionData get _selectedRegion => _regions.firstWhere(
     (region) => region.id == _selectedRegionId,
     orElse: () => _regions.first,
@@ -81,12 +118,61 @@ class _SupportScreenState extends State<SupportScreen> {
   @override
   void initState() {
     super.initState();
+    final injected = widget.authService;
+    if (injected != null) {
+      _authService = injected;
+      _ownsAuthService = false;
+    } else {
+      _authService = AuthService.production();
+      _ownsAuthService = true;
+    }
+
+    _loadSessionRegion();
+
     final overrideRegions = widget.regions;
     if (overrideRegions != null) {
       _applyLoadedRegions(overrideRegions);
     } else {
       _loadRegions();
     }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsAuthService) _authService.close();
+    super.dispose();
+  }
+
+  /// Reads the authenticated user's login country (display/prefill only —
+  /// never used to decide authentication, see [AuthService.currentSession]'s
+  /// doc comment) and maps it to a Support region via
+  /// [SupportRegionId.fromCountryIsoCode]. A missing session, a session with
+  /// no/unrecognized country (e.g. an older persisted session), or a
+  /// storage read failure all safely resolve to no default (`null`) here —
+  /// [_resolveDefaultRegionId] then falls back to the first region.
+  ///
+  /// Deliberately never gates [_isLoadingRegions]: this may not resolve at
+  /// all in production if secure storage genuinely hangs, and must not
+  /// leave the whole screen stuck loading over a prefill-only lookup.
+  Future<void> _loadSessionRegion() async {
+    SupportRegionId? regionId;
+    try {
+      final session = await _authService.currentSession();
+      regionId = SupportRegionId.fromCountryIsoCode(session?.country);
+    } catch (_) {
+      regionId = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _sessionReady = true;
+      _sessionRegionId = regionId;
+      // Only upgrades a default already applied by _applyLoadedRegions —
+      // never overrides a manual pick, and does nothing yet if regions
+      // haven't loaded (that load will apply this once it does).
+      if (_regionsReady && !_hasManualSelection) {
+        _selectedRegionId = _resolveDefaultRegionId();
+      }
+    });
   }
 
   Future<void> _loadRegions() async {
@@ -106,13 +192,32 @@ class _SupportScreenState extends State<SupportScreen> {
   void _applyLoadedRegions(List<SupportRegionData> regions) {
     setState(() {
       _regions = regions;
-      _selectedRegionId = regions.first.id;
+      _regionsReady = true;
       _isLoadingRegions = false;
+      if (!_hasManualSelection) {
+        _selectedRegionId = _resolveDefaultRegionId();
+      }
     });
   }
 
+  /// The best region default available right now: the login country's
+  /// region when the session has already resolved to one that's present in
+  /// [_regions], otherwise the first region — matching the screen's prior
+  /// unconditional default. Only meaningful once [_regionsReady] is true.
+  SupportRegionId _resolveDefaultRegionId() {
+    final sessionRegionId = _sessionRegionId;
+    final hasSessionRegion =
+        _sessionReady &&
+        sessionRegionId != null &&
+        _regions.any((region) => region.id == sessionRegionId);
+    return hasSessionRegion ? sessionRegionId : _regions.first.id;
+  }
+
   void _selectRegion(SupportRegionId regionId) {
-    setState(() => _selectedRegionId = regionId);
+    setState(() {
+      _hasManualSelection = true;
+      _selectedRegionId = regionId;
+    });
   }
 
   Future<void> _onChatOnWhatsApp() async {
@@ -172,6 +277,21 @@ class _SupportScreenState extends State<SupportScreen> {
         builder: (_) => ContactUsScreen(region: _selectedRegion),
       ),
     );
+  }
+
+  Future<void> _onCallOfficeLocation(String number) async {
+    if (_isPhoneLaunching) return;
+
+    setState(() => _isPhoneLaunching = true);
+    try {
+      final result = await widget.phoneLauncher.call(number);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(context.t('support.dialerUnavailable'));
+      }
+    } finally {
+      if (mounted) setState(() => _isPhoneLaunching = false);
+    }
   }
 
   Future<void> _onCallHotline(String number) async {
@@ -238,20 +358,7 @@ class _SupportScreenState extends State<SupportScreen> {
                           key: const ValueKey('support-corporate-office-card'),
                           icon: Icons.apartment_rounded,
                           label: context.t('support.corporateOfficeLabel'),
-                          child: Text(
-                            _selectedRegion.officeAddress ??
-                                context.t(
-                                  'support.officeDetailsFallback',
-                                  params: {
-                                    'region': _selectedRegion.displayName,
-                                  },
-                                ),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textNavy,
-                              height: 1.4,
-                            ),
-                          ),
+                          child: _buildCorporateOfficeContent(),
                         ),
                         const SizedBox(height: 16),
                         SupportInfoCard(
@@ -403,6 +510,38 @@ class _SupportScreenState extends State<SupportScreen> {
       key: ValueKey('support-regions-loading'),
       padding: EdgeInsets.symmetric(vertical: 40),
       child: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildCorporateOfficeContent() {
+    final locations = _selectedRegion.officeLocations;
+    if (locations.isEmpty) {
+      return Text(
+        context.t(
+          'support.officeDetailsFallback',
+          params: {'region': _selectedRegion.displayName},
+        ),
+        style: const TextStyle(
+          fontSize: 14,
+          color: AppColors.textNavy,
+          height: 1.4,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final location in locations) ...[
+          SupportOfficeLocationTile(
+            key: ValueKey('support-office-location-${location.city}'),
+            location: location,
+            onCallTap: _onCallOfficeLocation,
+            compact: true,
+            callNumberLabelKey: 'support.callNumber',
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
     );
   }
 

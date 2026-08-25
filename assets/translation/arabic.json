@@ -35,6 +35,7 @@
     "validationUnavailable": "تعذّر التحقق من جلستك. يرجى التحقق من اتصالك وتسجيل الدخول مرة أخرى."
   },
   "home": {
+    "defaultUserLabel": "مستخدم",
     "unableToLoadDashboard": "تعذّر تحميل بيانات لوحة المعلومات.",
     "unableToRefreshDashboard": "تعذّر تحديث بيانات لوحة المعلومات.",
     "enterCatalogueCodeValidation": "يرجى إدخال رمز الكتالوج.",
@@ -318,6 +319,7 @@
     "callUsLabel": "اتصل بنا",
     "callNumber": "اتصل بالرقم {number}",
     "dialerUnavailable": "تعذّر فتح تطبيق الاتصال. يرجى المحاولة مرة أخرى.",
+    "locationsLabel": "الفروع",
     "regionalContactsLabel": "جهات الاتصال الإقليمية",
     "upholsteryFabricsLabel": "أقمشة التنجيد",
     "curtainsLabel": "الستائر",

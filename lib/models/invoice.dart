@@ -4,7 +4,6 @@ import '../localization/translations.dart';
 
 /// Invoice status as understood by the Invoice Details UI.
 ///
-/// TODO: Confirm the complete list of possible invoice statuses (e.g. Paid,
 /// Overdue, Draft) with the backend/API team before connecting live data.
 /// Only [paid] is confirmed for the current mock design.
 enum InvoiceStatus { paid }
@@ -30,7 +29,6 @@ String invoiceStatusLabel(BuildContext context, InvoiceStatus status) {
 
 /// A single billable line item on an [Invoice] (e.g. one fabric roll SKU).
 ///
-/// TODO: Replace with a backend-shaped model (likely with a `fromJson`
 /// factory) once the Invoice Details API response format is confirmed.
 class InvoiceLineItem {
   const InvoiceLineItem({
@@ -59,7 +57,6 @@ class InvoiceLineItem {
 /// Received"), newest-first order is the caller's responsibility (see
 /// [Invoice.timelineEvents]).
 ///
-/// TODO: Replace with data from the real Invoice API/accounting backend once
 /// the endpoint and response shape are confirmed. Timeline events are
 /// currently mock-only, populated directly in `mock_invoices_data.dart`.
 class InvoiceTimelineEvent {
@@ -74,18 +71,15 @@ class InvoiceTimelineEvent {
 /// Temporary Invoice Details logistics/shipment info: a free-text status
 /// label (e.g. "In Production") and an estimated delivery date, shown on
 /// [InvoiceLogisticsStatusCard]. [statusLabel] is a plain string rather than
-/// an enum — see the TODO below for why.
 class InvoiceLogisticsInfo {
   const InvoiceLogisticsInfo({this.statusLabel, this.estimatedDeliveryDate});
 
-  // TODO(product): Confirm the complete client-visible logistics status list
   // and localization rules before replacing this temporary display label with
   // a typed status enum or backend status-code mapping.
   /// Display-only logistics status text (e.g. "In Production"). Null/blank
   /// means no status is shown.
   final String? statusLabel;
 
-  // TODO(product): Confirm whether this value represents an estimated,
   // promised, or committed delivery date and whether timezone conversion is
   // required before displaying backend data.
   /// Estimated delivery date. Null means no estimate is shown.
@@ -98,7 +92,6 @@ class InvoiceLogisticsInfo {
 /// are modeled here — later sections (notes, payment history, footer) will
 /// extend this once their screenshots/scope are provided.
 ///
-/// TODO: Replace with a backend-shaped model (likely with a `fromJson`
 /// factory) once the Invoice Details API response format is confirmed.
 class Invoice {
   const Invoice({
@@ -149,7 +142,6 @@ class Invoice {
 
   /// Flat sample tax amount for the mock invoice.
   ///
-  /// TODO: Replace with the real tax amount/rate from the Invoice API or
   /// accounting backend once confirmed. This fixed sample value carries no
   /// real tax rule (no rate, jurisdiction, or product-tax-category logic) —
   /// it exists only so the Totals section has a value to display and sum.
@@ -164,7 +156,6 @@ class Invoice {
   /// Free-text note shown in the Invoice Details screen's Internal Notes
   /// section. Null/empty means no note is displayed.
   ///
-  // TODO(product): Confirm whether invoice notes are client-visible or
   // back-office-only. If confirmed as back-office-only, stop exposing this
   // field in the mobile app and remove InvoiceNotesSection from InvoiceInfoCard.
   final String? clientVisibleNote;
