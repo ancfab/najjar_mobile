@@ -4,7 +4,6 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:anc_fabrics/models/account_balance_summary.dart';
 import 'package:anc_fabrics/models/account_statement_data.dart';
 import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/models/balance_history_range.dart';
@@ -13,35 +12,12 @@ import 'package:anc_fabrics/services/account_statement_exporter.dart';
 
 void main() {
   final data = AccountStatementData(
-    summary: const AccountBalanceSummary(
-      currentBalance: 42850.00,
-      percentChangeFromLastMonth: 12.4,
-      changePeriodLabel: 'from last month',
-    ),
+    customerBalance: 36711.73,
     creditUtilization: const CreditUtilizationData(
-      totalCredit: 100000.00,
       availableCredit: 57150.00,
       usedCredit: 42850.00,
     ),
-    selectedRange: BalanceHistoryRange.ninetyDays,
-    quickHistory: [
-      AccountTransaction(
-        id: 'txn-client-deposit',
-        label: 'Client Deposit',
-        amount: 15000,
-        type: AccountTransactionType.credit,
-        occurredAt: DateTime.utc(2023, 10, 26),
-        category: AccountTransactionCategory.deposit,
-      ),
-      AccountTransaction(
-        id: 'txn-loom-supply-42',
-        label: 'Loom Supply #42',
-        amount: -2400,
-        type: AccountTransactionType.debit,
-        occurredAt: DateTime.utc(2023, 10, 28),
-        category: AccountTransactionCategory.supplyPurchase,
-      ),
-    ],
+    selectedRange: BalanceHistoryRange.thirtyDays,
     generatedAt: DateTime.utc(2023, 10, 30),
   );
 
@@ -77,117 +53,57 @@ void main() {
       },
     );
 
-    test('includes the balance, percent change, and credit figures', () async {
+    test('includes the balance and credit figures with no hardcoded "\$" and '
+        'no derived credit-limit/total figure', () async {
       final bytes = await buildAccountStatementPdfBytes(data);
       final text = String.fromCharCodes(bytes);
 
-      expect(text, contains(r'($42,850.00)'));
-      expect(text, contains('(+12.4%)'));
+      expect(text, contains('(?)'));
+      expect(text, contains('(36,711.73)'));
       expect(text, contains('(Available)'));
-      expect(text, contains(r'($57,150.00)'));
+      expect(text, contains('(57,150.00)'));
       expect(text, contains('(Used)'));
-      expect(text, contains(r'($42,850.00)'));
-      expect(text, contains('(Credit)'));
-      expect(text, contains('(Limit)'));
-      expect(text, contains(r'($100,000.00)'));
+      expect(text, contains('(42,850.00)'));
+      expect(text, isNot(contains(r'($36,711.73)')));
+      // No inferred total (availableCredit + usedCredit = 100,000.00) and
+      // no "Credit Limit" label — that figure isn't a confirmed backend
+      // contract.
+      expect(text, isNot(contains('(100,000.00)')));
+      expect(text, isNot(contains('(Limit)')));
     });
 
-    test('includes the selected Balance History range label', () async {
+    test('includes the selected Balance History range as a label only, '
+        'with no chart figures (the chart itself is demo/mock data)', () async {
       final bytes = await buildAccountStatementPdfBytes(data);
       final text = String.fromCharCodes(bytes);
 
-      expect(text, contains('(90)'));
+      expect(text, contains('(HISTORY)'));
+      expect(text, contains('(30)'));
       expect(text, contains('(Days)'));
     });
 
     test(
-      'includes Quick History transaction rows with signed amounts',
+      'includes no Quick History section when there are no transactions',
       () async {
         final bytes = await buildAccountStatementPdfBytes(data);
         final text = String.fromCharCodes(bytes);
 
-        expect(text, contains('(Client)'));
-        expect(text, contains('(Deposit)'));
-        expect(text, contains('(+\$15,000)'));
-        expect(text, contains('(Loom)'));
-        expect(text, contains('(Supply)'));
-        expect(text, contains('(#42)'));
-        expect(text, contains('(-\$2,400)'));
+        expect(text, isNot(contains('(QUICK)')));
       },
     );
 
-    test(
-      'renders an AED API-backed transaction with the AED currency code, '
-      'not a dollar sign, matching Quick History and Transaction Details',
-      () async {
-        final aedData = AccountStatementData(
-          summary: data.summary,
-          creditUtilization: data.creditUtilization,
-          selectedRange: data.selectedRange,
-          quickHistory: [
-            AccountTransaction(
-              id: 'ledger-entry-53473',
-              label: 'Invoice INV-53473',
-              amount: 1936.5,
-              type: AccountTransactionType.neutral,
-              occurredAt: DateTime.utc(2026, 1, 5),
-              category: AccountTransactionCategory.ledgerEntry,
-              reference: 'INV-53473',
-              currencyCode: 'AED',
-            ),
-          ],
-          generatedAt: data.generatedAt,
-        );
-
-        final bytes = await buildAccountStatementPdfBytes(aedData);
-        final text = String.fromCharCodes(bytes);
-
-        expect(text, contains('(AED)'));
-        expect(text, contains('(1,936.50)'));
-        expect(text, isNot(contains(r'($1,936.50)')));
-      },
-    );
-
-    test('renders a USD API-backed transaction with the USD currency code, '
-        'not a dollar sign', () async {
-      final usdData = AccountStatementData(
-        summary: data.summary,
+    test('includes the live Quick History transactions when present', () async {
+      final dataWithHistory = AccountStatementData(
+        customerBalance: data.customerBalance,
         creditUtilization: data.creditUtilization,
         selectedRange: data.selectedRange,
         quickHistory: [
           AccountTransaction(
-            id: 'ledger-entry-1004',
-            label: 'Invoice INV-TEST-004',
-            amount: 250.0,
+            id: 'ledger-entry-1001',
+            label: 'Invoice INV-TEST-001',
+            amount: 100.50,
             type: AccountTransactionType.neutral,
-            occurredAt: DateTime.utc(2026, 1, 6),
-            category: AccountTransactionCategory.ledgerEntry,
-            currencyCode: 'USD',
-          ),
-        ],
-        generatedAt: data.generatedAt,
-      );
-
-      final bytes = await buildAccountStatementPdfBytes(usdData);
-      final text = String.fromCharCodes(bytes);
-
-      expect(text, contains('(USD)'));
-      expect(text, contains('(250.00)'));
-    });
-
-    test('places the sign before the currency code for a negative API-backed '
-        'amount, and leaves the numeric amount unchanged', () async {
-      final negativeAedData = AccountStatementData(
-        summary: data.summary,
-        creditUtilization: data.creditUtilization,
-        selectedRange: data.selectedRange,
-        quickHistory: [
-          AccountTransaction(
-            id: 'ledger-entry-9001',
-            label: 'Credit Note CN-9001',
-            amount: -42.5,
-            type: AccountTransactionType.neutral,
-            occurredAt: DateTime.utc(2026, 1, 7),
+            occurredAt: DateTime.utc(2026, 1, 5),
             category: AccountTransactionCategory.ledgerEntry,
             currencyCode: 'AED',
           ),
@@ -195,34 +111,53 @@ void main() {
         generatedAt: data.generatedAt,
       );
 
-      final bytes = await buildAccountStatementPdfBytes(negativeAedData);
+      final bytes = await buildAccountStatementPdfBytes(dataWithHistory);
       final text = String.fromCharCodes(bytes);
 
-      expect(text, contains('(-AED)'));
-      expect(text, contains('(42.50)'));
+      expect(text, contains('(QUICK)'));
+      expect(text, contains('(Invoice)'));
+      expect(text, contains('(AED)'));
+      expect(text, contains('(100.50)'));
     });
 
-    test('keeps the legacy signed dollar fallback for a transaction with no '
-        'currencyCode', () async {
-      final bytes = await buildAccountStatementPdfBytes(data);
-      final text = String.fromCharCodes(bytes);
-
-      expect(text, contains('(+\$15,000)'));
-      expect(text, contains('(-\$2,400)'));
-    });
-
-    test('succeeds when Quick History has no transactions', () async {
-      final emptyHistoryData = AccountStatementData(
-        summary: data.summary,
+    test('uses the passed-in currencyCode for the balance and credit figures, '
+        'with no "?" fallback, agreeing with what the UI shows', () async {
+      final aeData = AccountStatementData(
+        customerBalance: data.customerBalance,
         creditUtilization: data.creditUtilization,
         selectedRange: data.selectedRange,
-        quickHistory: const [],
         generatedAt: data.generatedAt,
+        currencyCode: 'AED',
       );
 
-      final bytes = await buildAccountStatementPdfBytes(emptyHistoryData);
+      final bytes = await buildAccountStatementPdfBytes(aeData);
+      final text = String.fromCharCodes(bytes);
 
-      expect(bytes, isNotEmpty);
+      expect(text, contains('(AED)'));
+      expect(text, contains('(36,711.73)'));
+      expect(text, contains('(57,150.00)'));
+      expect(text, contains('(42,850.00)'));
+      expect(text, isNot(contains('(?)')));
     });
+
+    for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {
+      test(
+        'A $currency currencyCode resolves to the $currency prefix',
+        () async {
+          final currencyData = AccountStatementData(
+            customerBalance: data.customerBalance,
+            creditUtilization: data.creditUtilization,
+            selectedRange: data.selectedRange,
+            generatedAt: data.generatedAt,
+            currencyCode: currency,
+          );
+
+          final bytes = await buildAccountStatementPdfBytes(currencyData);
+          final text = String.fromCharCodes(bytes);
+
+          expect(text, contains('($currency)'));
+        },
+      );
+    }
   });
 }

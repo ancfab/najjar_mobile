@@ -435,6 +435,9 @@
     "availableCredit": "الائتمان المتاح",
     "usedCredit": "الائتمان المستخدم"
   },
+  "quickHistory": {
+    "heading": "السجل السريع"
+  },
   "fabricSpecs": {
     "title": "مواصفات القماش",
     "sku": "رمز الصنف",
@@ -451,9 +454,6 @@
   },
   "paymentTimeline": {
     "heading": "الجدول الزمني للدفعات"
-  },
-  "quickHistory": {
-    "heading": "السجل السريع"
   },
   "countryCodePicker": {
     "selectTitle": "اختر رمز الدولة",

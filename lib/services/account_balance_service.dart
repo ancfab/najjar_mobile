@@ -1,53 +1,31 @@
-import '../data/mock_account_balance_data.dart';
-import '../models/account_balance_summary.dart';
-import '../models/balance_history_point.dart';
-import '../models/balance_history_range.dart';
-import '../models/credit_utilization_data.dart';
+import '../models/business_central/customer_details.dart';
+import 'customer_details_service.dart';
 
-/// Data seam for the Account Balance screen: global balance summary, credit
-/// utilization, and balance history by time range.
-///
-/// Quick History is deliberately not part of this seam — it is backed by
-/// the live Business Central ledger-entries endpoint (see
-/// `QuickHistoryDataSource`/`LedgerQuickHistoryDataSource`), not mock data.
-///
-/// TODO(api): Replace [MockAccountBalanceService] with a real API-backed
-/// implementation once the backend endpoint and response contract are
-/// confirmed. The screen depends on this abstract type (constructor-
-/// injectable, defaulting to the mock) so that swap won't require changes
-/// outside this file.
+/// Data seam for the Account Balance screen: the hero balance/Credit
+/// Information snapshot, backed by the Business Central customer-details
+/// endpoint (see `CustomerDetailsService`).
 abstract class AccountBalanceService {
-  Future<AccountBalanceSummary> fetchSummary();
-
-  Future<CreditUtilizationData> fetchCreditUtilization();
-
-  Future<List<BalanceHistoryPoint>> fetchBalanceHistory(
-    BalanceHistoryRange range,
-  );
+  /// Fetches the authenticated customer's current snapshot with no date
+  /// filter, for the Global Account Balance hero card and Credit
+  /// Information card.
+  Future<CustomerDetails> fetchAccountSummary();
 }
 
-/// Mock implementation returning deterministic sample data with a simulated
-/// network delay, used until the real backend endpoints are confirmed.
-class MockAccountBalanceService implements AccountBalanceService {
-  const MockAccountBalanceService();
+/// Default [AccountBalanceService]: backed by the live
+/// [CustomerDetailsService].
+class LiveAccountBalanceService implements AccountBalanceService {
+  LiveAccountBalanceService({CustomerDetailsService? customerDetailsService})
+    : _customerDetailsService =
+          customerDetailsService ?? CustomerDetailsService();
+
+  final CustomerDetailsService _customerDetailsService;
 
   @override
-  Future<AccountBalanceSummary> fetchSummary() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return kMockAccountBalanceSummary;
-  }
+  Future<CustomerDetails> fetchAccountSummary() =>
+      _customerDetailsService.fetchCustomerDetails();
 
-  @override
-  Future<CreditUtilizationData> fetchCreditUtilization() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return kMockCreditUtilizationData;
-  }
-
-  @override
-  Future<List<BalanceHistoryPoint>> fetchBalanceHistory(
-    BalanceHistoryRange range,
-  ) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return kMockBalanceHistoryByRange[range]!;
-  }
+  /// Closes the underlying [CustomerDetailsService]'s HTTP client, but only
+  /// when this instance created its own (a caller-supplied
+  /// [CustomerDetailsService] is left for the caller to manage).
+  void close() => _customerDetailsService.close();
 }

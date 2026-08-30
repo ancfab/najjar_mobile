@@ -435,6 +435,9 @@
     "availableCredit": "Crédit disponible",
     "usedCredit": "Crédit utilisé"
   },
+  "quickHistory": {
+    "heading": "HISTORIQUE RAPIDE"
+  },
   "fabricSpecs": {
     "title": "Spécifications du tissu",
     "sku": "SKU",
@@ -451,9 +454,6 @@
   },
   "paymentTimeline": {
     "heading": "Historique des paiements"
-  },
-  "quickHistory": {
-    "heading": "HISTORIQUE RAPIDE"
   },
   "countryCodePicker": {
     "selectTitle": "Sélectionner l'indicatif du pays",

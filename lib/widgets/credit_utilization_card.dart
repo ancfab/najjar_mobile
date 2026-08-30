@@ -5,21 +5,32 @@ import '../models/credit_utilization_data.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
 
-/// Bordered white card showing Available/Used Credit rows (each with a
-/// progress bar calculated from [CreditUtilizationData]'s figures) and an
-/// optional credit-limit-change note.
+/// Bordered white card showing Available/Used Credit rows, each with a
+/// progress bar derived from [CreditUtilizationData]'s figures (see its
+/// doc comment — the denominator is `availableCredit + usedCredit`, not a
+/// separate credit-limit field, since none is returned by customer-details).
 ///
 /// Reusable: takes its data through the constructor rather than reading a
 /// model directly, matching the Invoice Details cards' convention.
 class CreditUtilizationCard extends StatelessWidget {
-  const CreditUtilizationCard({super.key, required this.data});
+  const CreditUtilizationCard({
+    super.key,
+    required this.data,
+    this.currencyCode,
+  });
 
   final CreditUtilizationData data;
 
+  /// The display currency for [data]'s figures — passed in by the caller
+  /// (Home's already-loaded `CurrentBalanceAmount.currencyCode`, ultimately
+  /// from ledger-entries' `Currency_Code`); this card never resolves it
+  /// itself. `null` (not yet resolved, or every contributing ledger entry
+  /// had a blank `Currency_Code`) renders `formatCurrencyOrUnknown`'s "?"
+  /// fallback, never a guessed code.
+  final String? currencyCode;
+
   @override
   Widget build(BuildContext context) {
-    final note = data.creditLimitChangeNote?.trim();
-
     return Container(
       key: const ValueKey('credit-utilization-card'),
       width: double.infinity,
@@ -46,6 +57,7 @@ class CreditUtilizationCard extends StatelessWidget {
             label: context.t('creditUtilization.availableCredit'),
             amount: data.availableCredit,
             ratio: data.availableCreditRatio,
+            currencyCode: currencyCode,
             barColor: AppColors.darkTeal,
           ),
           const SizedBox(height: 18),
@@ -54,25 +66,9 @@ class CreditUtilizationCard extends StatelessWidget {
             label: context.t('creditUtilization.usedCredit'),
             amount: data.usedCredit,
             ratio: data.usedCreditRatio,
+            currencyCode: currencyCode,
             barColor: AppColors.darkRedBrown,
           ),
-          if (note != null && note.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            Container(
-              key: const ValueKey('credit-utilization-note'),
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text(
-                note,
-                style: const TextStyle(fontSize: 13, color: AppColors.grayText),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -87,6 +83,7 @@ class _CreditRow extends StatelessWidget {
     required this.label,
     required this.amount,
     required this.ratio,
+    required this.currencyCode,
     required this.barColor,
   });
 
@@ -96,6 +93,7 @@ class _CreditRow extends StatelessWidget {
   /// Fraction of total credit this row represents, already clamped to
   /// `0..1` by [CreditUtilizationData].
   final double ratio;
+  final String? currencyCode;
   final Color barColor;
 
   @override
@@ -118,7 +116,7 @@ class _CreditRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              formatCurrency(amount),
+              formatCurrencyOrUnknown(amount, currencyCode: currencyCode),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -131,6 +129,7 @@ class _CreditRow extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         ClipRRect(
+          key: const ValueKey('credit-utilization-progress-bar'),
           borderRadius: BorderRadius.circular(4),
           child: LayoutBuilder(
             builder: (context, constraints) {

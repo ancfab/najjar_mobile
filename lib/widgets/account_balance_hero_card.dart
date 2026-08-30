@@ -15,20 +15,12 @@ class AccountBalanceHeroCard extends StatelessWidget {
   const AccountBalanceHeroCard({
     super.key,
     required this.balance,
-    required this.percentChange,
-    required this.changePeriodLabel,
     required this.onExportPdf,
     this.isExporting = false,
+    this.currencyCode,
   });
 
   final double balance;
-
-  /// e.g. `12.4` for "+12.4%". A negative value renders with a
-  /// downward-trend icon instead.
-  final double percentChange;
-
-  /// Trailing label shown after the percentage, e.g. "from last month".
-  final String changePeriodLabel;
 
   final VoidCallback onExportPdf;
 
@@ -37,11 +29,16 @@ class AccountBalanceHeroCard extends StatelessWidget {
   /// and disables it so a second export can't be triggered mid-flight.
   final bool isExporting;
 
+  /// The display currency for [balance] — passed in by the caller (Home's
+  /// already-loaded `CurrentBalanceAmount.currencyCode`, ultimately from
+  /// ledger-entries' `Currency_Code`); this card never resolves it itself.
+  /// `null` (not yet resolved, or every contributing ledger entry had a
+  /// blank `Currency_Code`) renders `formatCurrencyOrUnknown`'s "?"
+  /// fallback, never a guessed code.
+  final String? currencyCode;
+
   @override
   Widget build(BuildContext context) {
-    final isPositive = percentChange >= 0;
-    final sign = isPositive ? '+' : '';
-
     return Container(
       key: const ValueKey('account-balance-hero-card'),
       width: double.infinity,
@@ -71,7 +68,7 @@ class AccountBalanceHeroCard extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: AlignmentDirectional.centerStart,
                 child: Text(
-                  formatCurrency(balance),
+                  formatCurrencyOrUnknown(balance, currencyCode: currencyCode),
                   maxLines: 1,
                   style: const TextStyle(
                     fontSize: 32,
@@ -79,31 +76,6 @@ class AccountBalanceHeroCard extends StatelessWidget {
                     color: Colors.white,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    isPositive
-                        ? Icons.trending_up_rounded
-                        : Icons.trending_down_rounded,
-                    color: AppColors.mint,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '$sign${percentChange.toStringAsFixed(1)}% $changePeriodLabel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.mint,
-                      ),
-                    ),
-                  ),
-                ],
               ),
               const SizedBox(height: 20),
               Align(

@@ -91,22 +91,17 @@ pw.Widget _buildHeader(AccountStatementData data) {
 }
 
 pw.Widget _buildBalanceSection(AccountStatementData data) {
-  final summary = data.summary;
-  final isPositive = summary.percentChangeFromLastMonth >= 0;
-  final sign = isPositive ? '+' : '';
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       _sectionLabel('GLOBAL ACCOUNT BALANCE'),
       pw.SizedBox(height: 4),
       pw.Text(
-        formatCurrency(summary.currentBalance),
+        formatCurrencyOrUnknown(
+          data.customerBalance,
+          currencyCode: data.currencyCode,
+        ),
         style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-      ),
-      pw.SizedBox(height: 2),
-      pw.Text(
-        '$sign${summary.percentChangeFromLastMonth.toStringAsFixed(1)}% '
-        '${summary.changePeriodLabel}',
       ),
     ],
   );
@@ -117,11 +112,10 @@ pw.Widget _buildCreditSection(AccountStatementData data) {
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
-      _sectionLabel('CREDIT'),
+      _sectionLabel('CREDIT UTILIZATION'),
       pw.SizedBox(height: 4),
-      _statRow('Available Credit', credit.availableCredit),
-      _statRow('Used Credit', credit.usedCredit),
-      _statRow('Credit Limit', credit.totalCredit),
+      _statRow('Available Credit', credit.availableCredit, data.currencyCode),
+      _statRow('Used Credit', credit.usedCredit, data.currencyCode),
     ],
   );
 }
@@ -175,12 +169,15 @@ String _formatTransactionAmount(AccountTransaction txn) {
   return formatSignedCurrency(txn.amount);
 }
 
-pw.Widget _statRow(String label, double amount) {
+pw.Widget _statRow(String label, double amount, String? currencyCode) {
   return pw.Padding(
     padding: const pw.EdgeInsets.only(top: 2),
     child: pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [pw.Text(label), pw.Text(formatCurrency(amount))],
+      children: [
+        pw.Text(label),
+        pw.Text(formatCurrencyOrUnknown(amount, currencyCode: currencyCode)),
+      ],
     ),
   );
 }

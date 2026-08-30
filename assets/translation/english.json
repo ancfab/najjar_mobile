@@ -435,6 +435,9 @@
     "availableCredit": "Available Credit",
     "usedCredit": "Used Credit"
   },
+  "quickHistory": {
+    "heading": "QUICK HISTORY"
+  },
   "fabricSpecs": {
     "title": "Fabric Specs",
     "sku": "SKU",
@@ -451,9 +454,6 @@
   },
   "paymentTimeline": {
     "heading": "Payment Timeline"
-  },
-  "quickHistory": {
-    "heading": "QUICK HISTORY"
   },
   "countryCodePicker": {
     "selectTitle": "Select country code",

@@ -1,7 +1,7 @@
 // Focused widget checks for CreditUtilizationCard, independent of the full
-// Account Balance screen: figure rendering, progress-bar widths calculated
-// from the supplied ratios, and the credit-limit-change note's empty-state
-// safety.
+// Account Balance screen: figure rendering with the "Credit Utilization"
+// heading, the passed-in currencyCode (or the "?" unknown-currency
+// fallback), and the derived progress bars.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +11,11 @@ import 'package:anc_fabrics/widgets/credit_utilization_card.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
-Future<void> _pumpCard(WidgetTester tester, CreditUtilizationData data) async {
+Future<void> _pumpCard(
+  WidgetTester tester,
+  CreditUtilizationData data, {
+  String? currencyCode,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
@@ -21,7 +25,9 @@ Future<void> _pumpCard(WidgetTester tester, CreditUtilizationData data) async {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: Scaffold(body: CreditUtilizationCard(data: data)),
+      home: Scaffold(
+        body: CreditUtilizationCard(data: data, currencyCode: currencyCode),
+      ),
     ),
   );
   await tester.pump();
@@ -29,120 +35,112 @@ Future<void> _pumpCard(WidgetTester tester, CreditUtilizationData data) async {
 
 void main() {
   group('Figures', () {
-    testWidgets('Shows Available Credit and Used Credit labels and values', (
+    testWidgets(
+      'Shows the Credit Utilization heading and Available/Used Credit '
+      'labels, with the "?" unknown-currency fallback when no currency is '
+      'supplied',
+      (tester) async {
+        await _pumpCard(
+          tester,
+          const CreditUtilizationData(
+            availableCredit: 57150.00,
+            usedCredit: 42850.00,
+          ),
+        );
+
+        expect(find.text('Credit Utilization'), findsOneWidget);
+        expect(find.text('Credit Information'), findsNothing);
+        expect(find.text('Available Credit'), findsOneWidget);
+        expect(find.text('? 57,150.00'), findsOneWidget);
+        expect(find.text('Used Credit'), findsOneWidget);
+        expect(find.text('? 42,850.00'), findsOneWidget);
+        expect(find.text('\$57,150.00'), findsNothing);
+        expect(find.text('\$42,850.00'), findsNothing);
+      },
+    );
+
+    testWidgets('Shows the passed-in currencyCode when supplied', (
       tester,
     ) async {
       await _pumpCard(
         tester,
         const CreditUtilizationData(
-          totalCredit: 100000.00,
           availableCredit: 57150.00,
           usedCredit: 42850.00,
         ),
+        currencyCode: 'AED',
       );
 
-      expect(find.text('Available Credit'), findsOneWidget);
-      expect(find.text('\$57,150.00'), findsOneWidget);
-      expect(find.text('Used Credit'), findsOneWidget);
-      expect(find.text('\$42,850.00'), findsOneWidget);
+      expect(find.text('AED 57,150.00'), findsOneWidget);
+      expect(find.text('AED 42,850.00'), findsOneWidget);
+      expect(find.text('? 57,150.00'), findsNothing);
+    });
+
+    for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {
+      testWidgets('A $currency currencyCode renders the $currency prefix', (
+        tester,
+      ) async {
+        await _pumpCard(
+          tester,
+          const CreditUtilizationData(availableCredit: 0, usedCredit: 36711.73),
+          currencyCode: currency,
+        );
+
+        expect(find.text('$currency 0.00'), findsOneWidget);
+        expect(find.text('$currency 36,711.73'), findsOneWidget);
+      });
+    }
+
+    testWidgets('Renders correctly with no exception even when '
+        'availableCredit is 0', (tester) async {
+      await _pumpCard(
+        tester,
+        const CreditUtilizationData(availableCredit: 0, usedCredit: 36711.73),
+        currencyCode: 'AED',
+      );
+
+      expect(tester.takeException(), isNull);
     });
   });
 
   group('Progress bars', () {
-    testWidgets('Available Credit bar is wider when its ratio is higher', (
+    testWidgets('Renders a progress bar for each of the two rows', (
       tester,
     ) async {
       await _pumpCard(
         tester,
         const CreditUtilizationData(
-          totalCredit: 100000.00,
           availableCredit: 57150.00,
           usedCredit: 42850.00,
         ),
       );
 
-      final availableBarWidth = tester
-          .getSize(
-            find
-                .descendant(
-                  of: find.byKey(
-                    const ValueKey('credit-utilization-available-row'),
-                  ),
-                  matching: find.byType(Container),
-                )
-                .at(1),
-          )
-          .width;
-      final usedBarWidth = tester
-          .getSize(
-            find
-                .descendant(
-                  of: find.byKey(const ValueKey('credit-utilization-used-row')),
-                  matching: find.byType(Container),
-                )
-                .at(1),
-          )
-          .width;
-
-      expect(availableBarWidth, greaterThan(usedBarWidth));
+      expect(
+        find.byKey(const ValueKey('credit-utilization-progress-bar')),
+        findsNWidgets(2),
+      );
       expect(tester.takeException(), isNull);
     });
   });
 
-  group('Credit-limit-change note', () {
-    testWidgets('Renders the note text when present', (tester) async {
-      await _pumpCard(
-        tester,
-        const CreditUtilizationData(
-          totalCredit: 100000.00,
-          availableCredit: 57150.00,
-          usedCredit: 42850.00,
-          creditLimitChangeNote:
-              'Your credit limit was recently increased by \$10,000 on Oct 12.',
-        ),
-      );
+  group('No credit-limit-change note', () {
+    testWidgets(
+      'Never renders a note container (removed — no confirmed backend field)',
+      (tester) async {
+        await _pumpCard(
+          tester,
+          const CreditUtilizationData(
+            availableCredit: 57150.00,
+            usedCredit: 42850.00,
+          ),
+        );
 
-      expect(
-        find.text(
-          'Your credit limit was recently increased by \$10,000 on Oct 12.',
-        ),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('Renders nothing when the note is null', (tester) async {
-      await _pumpCard(
-        tester,
-        const CreditUtilizationData(
-          totalCredit: 100000.00,
-          availableCredit: 57150.00,
-          usedCredit: 42850.00,
-        ),
-      );
-
-      expect(
-        find.byKey(const ValueKey('credit-utilization-note')),
-        findsNothing,
-      );
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('Renders nothing when the note is blank', (tester) async {
-      await _pumpCard(
-        tester,
-        const CreditUtilizationData(
-          totalCredit: 100000.00,
-          availableCredit: 57150.00,
-          usedCredit: 42850.00,
-          creditLimitChangeNote: '   ',
-        ),
-      );
-
-      expect(
-        find.byKey(const ValueKey('credit-utilization-note')),
-        findsNothing,
-      );
-      expect(tester.takeException(), isNull);
-    });
+        expect(
+          find.byKey(const ValueKey('credit-utilization-note')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

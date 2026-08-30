@@ -1,39 +1,31 @@
 // Fake AccountBalanceService for AccountBalanceScreen tests: resolves
-// immediately (no simulated network delay) with deterministic mock data, so
-// tests don't need to pump for an artificial delay.
-//
-// Quick History is intentionally not part of this fake — it is backed by a
-// separate QuickHistoryDataSource seam (see fake_quick_history_data_source.dart).
+// immediately (no simulated network delay) with deterministic fixture data,
+// so tests don't need to pump for an artificial delay.
 
-import 'package:anc_fabrics/data/mock_account_balance_data.dart';
-import 'package:anc_fabrics/models/account_balance_summary.dart';
-import 'package:anc_fabrics/models/balance_history_point.dart';
-import 'package:anc_fabrics/models/balance_history_range.dart';
-import 'package:anc_fabrics/models/credit_utilization_data.dart';
+import 'package:anc_fabrics/models/business_central/customer_details.dart';
 import 'package:anc_fabrics/services/account_balance_service.dart';
 
+/// Default live-shaped fixture for tests that don't care about the exact
+/// figures — distinct from the retired `$42,850.00`/`+12.4%` mock values.
+const CustomerDetails kFakeAccountSummary = CustomerDetails(
+  customerBalance: 36711.73,
+  availableCredit: 57150.00,
+  usedCredit: 42850.00,
+);
+
 class FakeAccountBalanceService implements AccountBalanceService {
-  FakeAccountBalanceService({
-    AccountBalanceSummary? summary,
-    CreditUtilizationData? creditUtilization,
-    Map<BalanceHistoryRange, List<BalanceHistoryPoint>>? historyByRange,
-  }) : summary = summary ?? kMockAccountBalanceSummary,
-       creditUtilization = creditUtilization ?? kMockCreditUtilizationData,
-       historyByRange = historyByRange ?? kMockBalanceHistoryByRange;
+  FakeAccountBalanceService({CustomerDetails? summary, this.summaryError})
+    : summary = summary ?? kFakeAccountSummary;
 
-  final AccountBalanceSummary summary;
-  final CreditUtilizationData creditUtilization;
-  final Map<BalanceHistoryRange, List<BalanceHistoryPoint>> historyByRange;
+  final CustomerDetails summary;
+
+  /// When set, thrown from [fetchAccountSummary] instead of returning
+  /// [summary].
+  final Object? summaryError;
 
   @override
-  Future<AccountBalanceSummary> fetchSummary() async => summary;
-
-  @override
-  Future<CreditUtilizationData> fetchCreditUtilization() async =>
-      creditUtilization;
-
-  @override
-  Future<List<BalanceHistoryPoint>> fetchBalanceHistory(
-    BalanceHistoryRange range,
-  ) async => historyByRange[range]!;
+  Future<CustomerDetails> fetchAccountSummary() async {
+    if (summaryError != null) throw summaryError!;
+    return summary;
+  }
 }

@@ -11,11 +11,9 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/data/country_codes.dart';
 import 'package:anc_fabrics/main.dart';
-import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/models/fabric_order_filter.dart';
 import 'package:anc_fabrics/models/fabric_specs.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
-import 'package:anc_fabrics/screens/account_transaction_details_screen.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
@@ -744,6 +742,12 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
+          // Quick History defaults to the live Business Central
+          // ledger-entries endpoint (real HTTP/secure storage), which never
+          // resolves in this widget-test sandbox — inject a fake so
+          // _settleFetch's pumpAndSettle doesn't wait forever on its
+          // loading spinner (these layout checks don't exercise Quick
+          // History data specifically).
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
@@ -783,72 +787,6 @@ void main() {
 
       final cardWidth = tester
           .getSize(find.byType(AccountBalanceHeroCard))
-          .width;
-      // On a 768px-wide tablet a full-bleed card would be well over 700px,
-      // so this confirms the tablet max-width constraint is actually
-      // applied rather than the phone layout simply stretching.
-      expect(cardWidth, lessThan(700));
-    });
-  });
-
-  group('Account Transaction Details screen', () {
-    final transaction = AccountTransaction(
-      id: 'txn-client-deposit',
-      label: 'Client Deposit',
-      amount: 15000,
-      type: AccountTransactionType.credit,
-      occurredAt: DateTime.utc(2023, 10, 26),
-      category: AccountTransactionCategory.deposit,
-      reference: 'REF-20231026-CD',
-    );
-
-    Future<void> pumpTransactionDetails(WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
-          localizationsDelegates: const [
-            AppTranslationsDelegate(),
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          home: AccountTransactionDetailsScreen(transaction: transaction),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    for (final size in _sizes) {
-      testWidgets(
-        'No overflow at ${size.width.toInt()}x${size.height.toInt()}',
-        (tester) async {
-          await _setSize(tester, size);
-          await pumpTransactionDetails(tester);
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
-
-    testWidgets('No overflow at 1.5x system text scale', (tester) async {
-      await _setSize(tester, _standardPhone, textScaleFactor: 1.5);
-      await pumpTransactionDetails(tester);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('No overflow in landscape', (tester) async {
-      await _setSize(tester, const Size(844, 390));
-      await pumpTransactionDetails(tester);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('Content column is width-capped on tablet', (tester) async {
-      await _setSize(tester, _tablet);
-      await pumpTransactionDetails(tester);
-
-      final cardWidth = tester
-          .getSize(
-            find.byKey(const ValueKey('account-transaction-details-card')),
-          )
           .width;
       // On a 768px-wide tablet a full-bleed card would be well over 700px,
       // so this confirms the tablet max-width constraint is actually

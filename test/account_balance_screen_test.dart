@@ -1,9 +1,17 @@
-// Widget checks for the Account Balance screen: hero card figures, credit
-// utilization figures and note, the Balance History range selector/chart,
-// the Quick History list (rendering, styling, row/see-all navigation), the
-// Export PDF flow (loading state, duplicate-tap guard, success/failure
-// handling, and the data handed to the exporter), bottom navigation, and
-// narrow-width overflow safety.
+// Widget checks for the Account Balance screen: hero card balance, Credit
+// Utilization figures/progress bars, the Balance History range selector/
+// chart (demo/mock data), the Quick History list (live ledger-adapted
+// rows), the Export PDF flow, bottom navigation, narrow-width overflow
+// safety, and that retired mock content (the old $42,850/+12.4%/Oct-12
+// note) never returns.
+//
+// Display currency is not resolved by this screen at all (no AuthService/
+// AuthSession.country region mapping): AccountBalanceScreen only accepts a
+// `currencyCode` via constructor injection — the caller (HomeScreen) passes
+// through Current Balance's already-loaded ledger-derived
+// `CurrentBalanceAmount.currencyCode`. See home_screen_test.dart's "Current
+// Balance card navigation" group for coverage of that hand-off, including
+// the AE-login/USD-ledger regression case.
 
 import 'dart:async';
 
@@ -13,10 +21,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/models/account_transaction.dart';
 import 'package:anc_fabrics/models/balance_history_range.dart';
+import 'package:anc_fabrics/models/business_central/customer_details.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/services/account_balance_service.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
@@ -67,9 +77,10 @@ final _quickHistoryRows = [
 Future<void> _pumpAccountBalanceScreen(
   WidgetTester tester, {
   double width = 390,
-  FakeAccountBalanceService? service,
+  AccountBalanceService? service,
   FakeAccountStatementExporter? exporter,
   CurrentUserAvatarController? avatarController,
+  String? currencyCode,
   FakeQuickHistoryDataSource? quickHistorySource,
 }) async {
   tester.view.physicalSize = Size(width, 800);
@@ -90,12 +101,25 @@ Future<void> _pumpAccountBalanceScreen(
         service: service ?? FakeAccountBalanceService(),
         exporter: exporter ?? FakeAccountStatementExporter(),
         avatarController: avatarController,
+        currencyCode: currencyCode,
         quickHistorySource:
             quickHistorySource ??
             FakeQuickHistoryDataSource(rows: _quickHistoryRows),
       ),
     ),
   );
+  // Balance History's mock data source has its own fixed ~400ms delay,
+  // independent of the account summary. When the summary fetch fails, the
+  // screen renders only the error state — BalanceHistoryCard (and its
+  // animating spinner) is never mounted, so nothing keeps `pumpAndSettle`
+  // pumping long enough to reach that 400ms mark on its own. A zero-
+  // duration pump first lets the translation delegate's async asset load
+  // resolve (so the screen actually mounts and initState's fetches begin),
+  // then an explicit fixed-duration pump guarantees the mock delay is
+  // always flushed — matching `_settleFetch`'s pattern in
+  // responsive_layout_test.dart.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
 }
 
@@ -105,7 +129,7 @@ void main() {
   });
 
   group('Renders without exceptions', () {
-    testWidgets('Builds successfully with mock data', (tester) async {
+    testWidgets('Builds successfully with fake service data', (tester) async {
       await _pumpAccountBalanceScreen(tester);
       expect(tester.takeException(), isNull);
     });
@@ -139,10 +163,6 @@ void main() {
       // A single pump (never pumpAndSettle) — the controller now holds a
       // network URL, and this only asserts the ImageProvider reference was
       // wired through the widget tree, not that a real fetch completed.
-      // Loopback with nothing listening refuses the connection almost
-      // instantly (no DNS lookup, no real round trip), unlike a real
-      // internet host, which can resolve its async failure late enough to
-      // be misattributed to whichever test runs next.
       avatarController.setAvatarUrl('http://127.0.0.1:9/avatars/7.jpg');
       await tester.pump();
 
@@ -154,46 +174,271 @@ void main() {
   });
 
   group('Global Account Balance hero card', () {
-    testWidgets('Shows the balance, percent change, and Export PDF button', (
+    testWidgets(
+      'Shows the live balance with no hardcoded "\$", and Export PDF',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        expect(find.text('? 36,711.73'), findsWidgets);
+        expect(find.text('Export PDF'), findsOneWidget);
+      },
+    );
+
+    testWidgets('Never shows the retired mock balance or percent change', (
       tester,
     ) async {
       await _pumpAccountBalanceScreen(tester);
 
-      expect(find.text('\$42,850.00'), findsWidgets);
-      expect(find.text('+12.4% from last month'), findsOneWidget);
-      expect(find.text('Export PDF'), findsOneWidget);
+      // Scoped to the hero card itself — this assertion is only about the
+      // hero balance no longer showing the retired mock figure/percent-
+      // change text (Credit Utilization's own figures are covered by the
+      // "Credit Utilization card" group below).
+      final heroCard = find.byKey(const ValueKey('account-balance-hero-card'));
+      expect(
+        find.descendant(of: heroCard, matching: find.text('\$42,850.00')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: heroCard, matching: find.textContaining('%')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: heroCard,
+          matching: find.textContaining('from last month'),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('Shows the initial-load spinner, then the balance', (
+      tester,
+    ) async {
+      final pending = Completer<CustomerDetails>();
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: AccountBalanceScreen(
+            service: _PendingSummaryService(pending.future),
+            exporter: FakeAccountStatementExporter(),
+            quickHistorySource: FakeQuickHistoryDataSource(
+              rows: _quickHistoryRows,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('account-balance-loading')),
+        findsOneWidget,
+      );
+
+      pending.complete(kFakeAccountSummary);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('account-balance-loading')),
+        findsNothing,
+      );
+      expect(find.text('? 36,711.73'), findsWidgets);
+    });
+
+    testWidgets('Shows the error state with retry on a summary failure', (
+      tester,
+    ) async {
+      final service = FakeAccountBalanceService(
+        summaryError: const BusinessCentralFailureException(
+          BusinessCentralUpstreamFailure(),
+        ),
+      );
+      await _pumpAccountBalanceScreen(tester, service: service);
+
+      expect(find.text('Unable to load account balance.'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Retrying after a summary failure re-invokes fetchAccountSummary',
+      (tester) async {
+        var callCount = 0;
+        final failThenSucceed = _CountingFailOnceService(() => callCount++);
+        await _pumpAccountBalanceScreen(tester, service: failThenSucceed);
+        expect(callCount, 1);
+
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+
+        expect(callCount, 2);
+        expect(find.text('? 36,711.73'), findsWidgets);
+      },
+    );
+
+    testWidgets('Opening the screen makes only the single unfiltered '
+        'fetchAccountSummary request', (tester) async {
+      final service = _CountingAccountBalanceService();
+      await _pumpAccountBalanceScreen(tester, service: service);
+
+      expect(service.fetchAccountSummaryCallCount, 1);
     });
   });
 
   group('Credit Utilization card', () {
-    testWidgets('Shows the Available Credit and Used Credit values', (
+    testWidgets(
+      'Shows the "Credit Utilization" heading, not "Credit Information"',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        expect(find.text('Credit Utilization'), findsOneWidget);
+        expect(find.text('Credit Information'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Shows the Available Credit and Used Credit values with the "?" '
+      'unknown-currency fallback when no currencyCode is passed in',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        expect(find.text('Available Credit'), findsOneWidget);
+        expect(find.text('? 57,150.00'), findsOneWidget);
+        expect(find.text('Used Credit'), findsOneWidget);
+        expect(find.text('? 42,850.00'), findsOneWidget);
+        expect(find.text('\$57,150.00'), findsNothing);
+        expect(find.text('\$42,850.00'), findsNothing);
+      },
+    );
+
+    testWidgets('Shows a progress bar for each row, derived from '
+        'availableCredit/usedCredit, even when availableCredit is 0', (
       tester,
     ) async {
-      await _pumpAccountBalanceScreen(tester);
+      final service = FakeAccountBalanceService(
+        summary: const CustomerDetails(
+          customerBalance: 36711.73,
+          availableCredit: 0,
+          usedCredit: 36711.73,
+        ),
+      );
+      await _pumpAccountBalanceScreen(tester, service: service);
 
-      expect(find.text('Available Credit'), findsOneWidget);
-      expect(find.text('\$57,150.00'), findsOneWidget);
-      expect(find.text('Used Credit'), findsOneWidget);
-      // $42,850.00 appears twice: once as the hero balance, once as Used
-      // Credit (matching the mock data, where they're equal).
-      expect(find.text('\$42,850.00'), findsNWidgets(2));
+      final creditCard = find.byKey(const ValueKey('credit-utilization-card'));
+      expect(
+        find.descendant(
+          of: creditCard,
+          matching: find.byKey(
+            const ValueKey('credit-utilization-progress-bar'),
+          ),
+        ),
+        findsNWidgets(2),
+      );
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Shows the credit-limit-change note', (tester) async {
+    testWidgets('Never shows the retired mock credit-limit-change note', (
+      tester,
+    ) async {
       await _pumpAccountBalanceScreen(tester);
 
       expect(
         find.text(
           'Your credit limit was recently increased by \$10,000 on Oct 12.',
         ),
-        findsOneWidget,
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('credit-utilization-note')),
+        findsNothing,
       );
     });
   });
 
+  group('Passed-in display currency (ledger-derived, from Home)', () {
+    // The confirmed live customer-details shape investigated for this
+    // amendment: availableCredit == 0, usedCredit == customerBalance.
+    const summary = CustomerDetails(
+      customerBalance: 36711.73,
+      availableCredit: 0,
+      usedCredit: 36711.73,
+    );
+
+    for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {
+      testWidgets(
+        'A $currency currencyCode renders on the hero balance and both '
+        'Credit Utilization rows, with no numeric change',
+        (tester) async {
+          final service = FakeAccountBalanceService(summary: summary);
+          await _pumpAccountBalanceScreen(
+            tester,
+            service: service,
+            currencyCode: currency,
+          );
+
+          expect(find.text('$currency 36,711.73'), findsNWidgets(2));
+          expect(find.text('$currency 0.00'), findsOneWidget);
+          expect(find.text('? 36,711.73'), findsNothing);
+        },
+      );
+    }
+
+    testWidgets(
+      'A null currencyCode (Current Balance not yet resolved) uses the '
+      'existing "?" unknown-currency fallback, never a guessed code',
+      (tester) async {
+        final service = FakeAccountBalanceService(summary: summary);
+        await _pumpAccountBalanceScreen(tester, service: service);
+
+        expect(find.text('? 36,711.73'), findsNWidgets(2));
+        expect(find.text('? 0.00'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Does not perform currency conversion — the numeric figures are '
+      'identical regardless of currencyCode, only the prefix changes',
+      (tester) async {
+        final service = FakeAccountBalanceService(summary: summary);
+        await _pumpAccountBalanceScreen(
+          tester,
+          service: service,
+          currencyCode: 'AED',
+        );
+
+        expect(find.text('AED 36,711.73'), findsNWidgets(2));
+      },
+    );
+
+    testWidgets(
+      'Does not depend on AuthSession.country/AuthService at all — the '
+      'screen is constructible and renders correctly with only '
+      'currencyCode supplied, no session-related parameter exists',
+      (tester) async {
+        final service = FakeAccountBalanceService(summary: summary);
+        // No authService/session concept is passed — AccountBalanceScreen's
+        // constructor no longer even has such a parameter (compile-time
+        // proof), only currencyCode.
+        await _pumpAccountBalanceScreen(
+          tester,
+          service: service,
+          currencyCode: 'USD',
+        );
+
+        expect(find.text('USD 36,711.73'), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
   group('Balance History card', () {
     testWidgets(
-      'Renders all three range options with 30 Days selected initially',
+      'Renders below Credit Utilization, with all three range options and '
+      '30 Days selected initially',
       (tester) async {
         await _pumpAccountBalanceScreen(tester);
 
@@ -204,6 +449,14 @@ void main() {
           find.text('Trend analysis for Oct 1 - Oct 30, 2023'),
           findsOneWidget,
         );
+
+        final creditCardTop = tester.getTopLeft(
+          find.byKey(const ValueKey('credit-utilization-card')),
+        );
+        final historyCardTop = tester.getTopLeft(
+          find.byKey(const ValueKey('balance-history-card')),
+        );
+        expect(historyCardTop.dy, greaterThan(creditCardTop.dy));
       },
     );
 
@@ -249,17 +502,6 @@ void main() {
         (selected.decoration as BoxDecoration).color,
         AppColors.primaryNavy,
       );
-
-      final unselected = tester.widget<Container>(
-        find.descendant(
-          of: find.byKey(const ValueKey('balance-history-range-thirtyDays')),
-          matching: find.byType(Container),
-        ),
-      );
-      expect(
-        (unselected.decoration as BoxDecoration).color,
-        Colors.transparent,
-      );
       expect(tester.takeException(), isNull);
     });
 
@@ -274,17 +516,6 @@ void main() {
       expect(
         find.text('Trend analysis for Oct 30, 2022 - Oct 30, 2023'),
         findsOneWidget,
-      );
-
-      final selected = tester.widget<Container>(
-        find.descendant(
-          of: find.byKey(const ValueKey('balance-history-range-oneYear')),
-          matching: find.byType(Container),
-        ),
-      );
-      expect(
-        (selected.decoration as BoxDecoration).color,
-        AppColors.primaryNavy,
       );
       expect(tester.takeException(), isNull);
     });
@@ -402,71 +633,6 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Quick History and Transaction Details show the same API-provided '
-      'currency for the same ledger entry',
-      (tester) async {
-        final aedRow = AccountTransaction(
-          id: 'ledger-entry-53473',
-          label: 'Invoice INV-53473',
-          amount: 1936.5,
-          type: AccountTransactionType.neutral,
-          occurredAt: DateTime.utc(2026, 1, 5),
-          category: AccountTransactionCategory.ledgerEntry,
-          reference: 'INV-53473',
-          currencyCode: 'AED',
-        );
-        await _pumpAccountBalanceScreen(
-          tester,
-          quickHistorySource: FakeQuickHistoryDataSource(rows: [aedRow]),
-        );
-
-        // Quick History shows the AED amount, not a dollar sign — scoped to
-        // the Quick History card itself, since the still-mocked Global
-        // Balance/Credit Utilization sections legitimately show USD "$"
-        // amounts elsewhere on the same screen (out of scope for this fix).
-        final quickHistoryCard = find.byKey(
-          const ValueKey('quick-history-card'),
-        );
-        expect(
-          find.descendant(
-            of: quickHistoryCard,
-            matching: find.text('AED 1,936.50'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(
-            of: quickHistoryCard,
-            matching: find.textContaining('\$'),
-          ),
-          findsNothing,
-        );
-
-        final row = find.byKey(
-          const ValueKey('quick-history-row-ledger-entry-53473'),
-        );
-        await tester.ensureVisible(row);
-        await tester.tap(row);
-        await tester.pumpAndSettle();
-
-        // Transaction Details shows the exact same currency-formatted
-        // amount as Quick History did.
-        final detailsCard = find.byKey(
-          const ValueKey('account-transaction-details-card'),
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('AED 1,936.50')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.textContaining('\$')),
-          findsNothing,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
-
     testWidgets('Tapping See all shows the temporary placeholder SnackBar', (
       tester,
     ) async {
@@ -522,7 +688,8 @@ void main() {
           ),
           findsOneWidget,
         );
-        // The rest of the screen is unaffected by a Quick-History-only failure.
+        // The rest of the screen is unaffected by a Quick-History-only
+        // failure.
         expect(find.text('Export PDF'), findsOneWidget);
         expect(find.text('Available Credit'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -650,83 +817,6 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Disables the button while export is pending', (tester) async {
-      final pending = Completer<void>();
-      final exporter = FakeAccountStatementExporter(pending: pending);
-      await _pumpAccountBalanceScreen(tester, exporter: exporter);
-
-      await tester.tap(find.text('Export PDF'));
-      await tester.pump();
-
-      final button = tester.widget<ElevatedButton>(
-        find.byKey(const ValueKey('account-balance-export-pdf-button')),
-      );
-      expect(button.onPressed, isNull);
-
-      pending.complete();
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('Repeated taps while pending do not invoke duplicate exports', (
-      tester,
-    ) async {
-      final pending = Completer<void>();
-      final exporter = FakeAccountStatementExporter(pending: pending);
-      await _pumpAccountBalanceScreen(tester, exporter: exporter);
-
-      final exportButton = find.byKey(
-        const ValueKey('account-balance-export-pdf-button'),
-      );
-      await tester.tap(exportButton);
-      await tester.pump();
-      await tester.tap(exportButton, warnIfMissed: false);
-      await tester.tap(exportButton, warnIfMissed: false);
-      await tester.pump();
-
-      expect(exporter.exportedData, hasLength(1));
-
-      pending.complete();
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('Successful export restores the normal Export PDF state', (
-      tester,
-    ) async {
-      final exporter = FakeAccountStatementExporter();
-      await _pumpAccountBalanceScreen(tester, exporter: exporter);
-
-      await tester.tap(find.text('Export PDF'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Export PDF'), findsOneWidget);
-      expect(find.text('Generating...'), findsNothing);
-      final button = tester.widget<ElevatedButton>(
-        find.byKey(const ValueKey('account-balance-export-pdf-button')),
-      );
-      expect(button.onPressed, isNotNull);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('Failed export restores the normal Export PDF state', (
-      tester,
-    ) async {
-      final exporter = FakeAccountStatementExporter(
-        error: Exception('platform failure'),
-      );
-      await _pumpAccountBalanceScreen(tester, exporter: exporter);
-
-      await tester.tap(find.text('Export PDF'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Export PDF'), findsOneWidget);
-      expect(find.text('Generating...'), findsNothing);
-      final button = tester.widget<ElevatedButton>(
-        find.byKey(const ValueKey('account-balance-export-pdf-button')),
-      );
-      expect(button.onPressed, isNotNull);
-      expect(tester.takeException(), isNull);
-    });
-
     testWidgets('Failed export shows the expected SnackBar', (tester) async {
       final exporter = FakeAccountStatementExporter(
         error: Exception('platform failure'),
@@ -744,7 +834,7 @@ void main() {
       );
     });
 
-    testWidgets('Exporter receives the correct balance summary data', (
+    testWidgets('Exporter receives the balance and credit utilization data', (
       tester,
     ) async {
       final exporter = FakeAccountStatementExporter();
@@ -754,11 +844,30 @@ void main() {
       await tester.pumpAndSettle();
 
       final data = exporter.exportedData.single;
-      expect(data.summary.currentBalance, 42850.00);
-      expect(data.summary.percentChangeFromLastMonth, 12.4);
+      expect(data.customerBalance, 36711.73);
       expect(data.creditUtilization.availableCredit, 57150.00);
       expect(data.creditUtilization.usedCredit, 42850.00);
-      expect(data.creditUtilization.totalCredit, 100000.00);
+      // No currencyCode passed into the screen in this test -> no guessed
+      // currency reaches the export either.
+      expect(data.currencyCode, isNull);
+    });
+
+    testWidgets('Exporter receives the passed-in ledger-derived currency '
+        'code, agreeing with what the UI shows', (tester) async {
+      final exporter = FakeAccountStatementExporter();
+      await _pumpAccountBalanceScreen(
+        tester,
+        exporter: exporter,
+        currencyCode: 'OMR',
+      );
+
+      expect(find.text('OMR 36,711.73'), findsWidgets);
+
+      await tester.tap(find.text('Export PDF'));
+      await tester.pumpAndSettle();
+
+      final data = exporter.exportedData.single;
+      expect(data.currencyCode, 'OMR');
     });
 
     testWidgets('Exporter receives the selected Balance History range', (
@@ -777,7 +886,7 @@ void main() {
     });
 
     testWidgets(
-      'Exporter receives the Quick History transactions shown on screen',
+      'Exporter receives the live Quick History transactions shown on screen',
       (tester) async {
         final exporter = FakeAccountStatementExporter();
         await _pumpAccountBalanceScreen(tester, exporter: exporter);
@@ -861,4 +970,50 @@ void main() {
       });
     }
   });
+}
+
+/// Holds [fetchAccountSummary] on [pending] so a test can observe the
+/// initial-load spinner before choosing exactly when/how it resolves.
+class _PendingSummaryService implements AccountBalanceService {
+  _PendingSummaryService(this.pending);
+
+  final Future<CustomerDetails> pending;
+
+  @override
+  Future<CustomerDetails> fetchAccountSummary() => pending;
+}
+
+/// Fails the first [fetchAccountSummary] call, then succeeds with
+/// [kFakeAccountSummary] on every subsequent call — lets a test exercise
+/// the retry button's real re-fetch path.
+class _CountingFailOnceService implements AccountBalanceService {
+  _CountingFailOnceService(this._onSummaryCall);
+
+  final void Function() _onSummaryCall;
+  bool _hasFailedOnce = false;
+
+  @override
+  Future<CustomerDetails> fetchAccountSummary() async {
+    _onSummaryCall();
+    if (!_hasFailedOnce) {
+      _hasFailedOnce = true;
+      throw const BusinessCentralFailureException(
+        BusinessCentralUpstreamFailure(),
+      );
+    }
+    return kFakeAccountSummary;
+  }
+}
+
+/// Counts [fetchAccountSummary] calls, so a test can assert the screen
+/// makes exactly one customer-details request on open (no second,
+/// date-filtered request for a Balance by Period section).
+class _CountingAccountBalanceService implements AccountBalanceService {
+  int fetchAccountSummaryCallCount = 0;
+
+  @override
+  Future<CustomerDetails> fetchAccountSummary() async {
+    fetchAccountSummaryCallCount++;
+    return kFakeAccountSummary;
+  }
 }

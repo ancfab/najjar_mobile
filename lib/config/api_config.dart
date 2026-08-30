@@ -136,6 +136,16 @@ class ApiConfig {
   /// Business Central pagination limits.
   static const String inventoryPath = 'api/business-central/inventory';
 
+  /// Relative path (no leading slash) for the Business Central customer-
+  /// details endpoint, resolved against [baseUrl] by [AncApiClient]. Returns
+  /// a single scalar snapshot (not a paginated list) of the authenticated
+  /// customer's balance/credit figures, optionally scoped to a `date_from`/
+  /// `date_to` range — see `AncApiClient.fetchCustomerDetails`. The ANC API
+  /// scopes the result to the authenticated user server-side, so the app
+  /// never sends a customer identifier here either.
+  static const String customerDetailsPath =
+      'api/business-central/customer-details';
+
   /// authentication as every other Business Central endpoint. Shares
   /// [businessCentralDefaultPerPage]/[businessCentralMinPerPage]/
   /// [businessCentralMaxPerPage] with [ledgerEntriesPath]/[paymentsPath]/

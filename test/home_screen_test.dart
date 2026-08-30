@@ -2079,6 +2079,82 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'Passes Current Balance\'s already-loaded ledger-derived currency '
+      'code into AccountBalanceScreen',
+      (tester) async {
+        await _pumpHomeScreen(tester, 390);
+
+        await tester.tap(find.byType(BalanceCard));
+        await _pumpRouteTransition(tester);
+
+        final screen = tester.widget<AccountBalanceScreen>(
+          find.byType(AccountBalanceScreen),
+        );
+        // _sampleCurrentBalance's fixture currency — see its doc comment.
+        expect(screen.currencyCode, 'AED');
+      },
+    );
+
+    testWidgets(
+      'A blank/unresolved Current Balance currency passes null through, '
+      'never a guessed code',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            amount: const CurrentBalanceAmount(amount: 500, currencyCode: null),
+          ),
+        );
+
+        await tester.tap(find.byType(BalanceCard));
+        await _pumpRouteTransition(tester);
+
+        final screen = tester.widget<AccountBalanceScreen>(
+          find.byType(AccountBalanceScreen),
+        );
+        expect(screen.currencyCode, isNull);
+      },
+    );
+
+    testWidgets(
+      'Regression: Account Balance shows the ledger Currency_Code, never '
+      'the login country region — a login country of AE with a ledger '
+      'Currency_Code of USD must render USD, not AED',
+      (tester) async {
+        const sessionWithAeCountry = AuthSession(
+          token: 'synthetic-id|synthetic-secret',
+          userId: 7,
+          username: 'sample.user',
+          phone: '+9715xxxxxxxx',
+          country: 'AE',
+          clientId: 'ANCNAJJAR',
+          mustChangePassword: false,
+        );
+        await _pumpHomeScreen(
+          tester,
+          390,
+          authService: _authServiceFor(session: sessionWithAeCountry),
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            amount: const CurrentBalanceAmount(
+              amount: 36711.73,
+              currencyCode: 'USD',
+            ),
+          ),
+        );
+
+        await tester.tap(find.byType(BalanceCard));
+        await _pumpRouteTransition(tester);
+
+        final screen = tester.widget<AccountBalanceScreen>(
+          find.byType(AccountBalanceScreen),
+        );
+        expect(screen.currencyCode, 'USD');
+        expect(screen.currencyCode, isNot('AED'));
+      },
+    );
   });
 
   group('Current Balance demo mode', () {

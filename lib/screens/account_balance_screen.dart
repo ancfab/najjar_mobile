@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../data/mock_user.dart';
 import '../localization/translations.dart';
-import '../models/account_balance_summary.dart';
 import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
 import '../models/balance_history_range.dart';
+import '../models/business_central/customer_details.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
 import '../services/account_statement_exporter.dart';
+import '../services/balance_history_data_source.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/ledger_entry_presentation_adapter.dart';
@@ -44,24 +45,48 @@ const int _navIndexOrders = 1;
 const int _navIndexSupport = 2;
 const int _navIndexProfile = 3;
 
-/// Account Balance screen: global balance hero card, credit utilization, a
-/// Balance History chart with a 30-day/90-day/1-year range selector, and a
-/// Quick History list of recent transactions.
+/// Account Balance screen: global balance hero card and Credit Utilization,
+/// both backed by a single unfiltered Business Central customer-details
+/// request (see `AccountBalanceService`/`CustomerDetailsService`); a
+/// Balance History chart (currently demo/mock data — see
+/// `BalanceHistoryDataSource`'s doc comment); and a live Quick History list
+/// backed by the ledger-entries endpoint (see
+/// `LedgerQuickHistoryDataSource`).
 ///
-/// TODO(api): Replace mock account-balance summary and credit-utilization
-/// data after the backend endpoint and response contract are confirmed.
+/// Displayed in [currencyCode] — the ledger-entries-derived `Currency_Code`
+/// that Home's Current Balance card has *already* resolved (see
+/// `CurrentBalanceAmount.currencyCode`/`computeCurrentBalance`), passed in
+/// directly by the caller (`HomeScreen._openAccountBalance`) rather than
+/// re-resolved here. This screen must never fetch ledger entries itself for
+/// the hero/credit figures, derive currency from `AuthSession.country`, or
+/// run its own multi-currency validation — `CurrentBalanceService` already
+/// did that when Home loaded, and its result is simply reused. `customer-
+/// details` itself exposes no currency field, so [currencyCode] is a
+/// caller-supplied display-only annotation, never derived from that
+/// response.
+///
+/// The screen previously also showed a date-filtered "Balance by Period"
+/// customer-details request. Live black-box testing on 2026-08-30 confirmed
+/// that request returns identical figures for every range — only the
+/// echoed `DateFilter` changed — so the backend does not actually scope
+/// customer-details by date. Balance History below is therefore backed by
+/// [BalanceHistoryDataSource]'s demo/mock series, not that endpoint.
 class AccountBalanceScreen extends StatefulWidget {
-  const AccountBalanceScreen({
+  AccountBalanceScreen({
     super.key,
     AccountBalanceService? service,
     AccountStatementExporter? exporter,
     this.avatarController,
     this.quickHistorySource,
-  }) : service = service ?? const MockAccountBalanceService(),
-       exporter = exporter ?? const LocalAccountStatementPdfExporter();
+    BalanceHistoryDataSource? balanceHistorySource,
+    this.currencyCode,
+  }) : service = service ?? LiveAccountBalanceService(),
+       exporter = exporter ?? const LocalAccountStatementPdfExporter(),
+       balanceHistorySource =
+           balanceHistorySource ?? const MockBalanceHistoryDataSource();
 
-  /// Account balance data seam. Defaults to the mock implementation;
-  /// overridable so tests can inject a fake.
+  /// Account balance data seam. Defaults to the live customer-details-backed
+  /// implementation; overridable so tests can inject a fake.
   final AccountBalanceService service;
 
   /// Export PDF seam: generates the account statement PDF and hands it to
@@ -81,6 +106,20 @@ class AccountBalanceScreen extends StatefulWidget {
   /// ledger-entries endpoint; overridable so tests can inject a fake.
   final QuickHistoryDataSource? quickHistorySource;
 
+  /// Balance History data seam. Defaults to [MockBalanceHistoryDataSource]
+  /// — demo/mock data, not Business Central (see that class's doc comment);
+  /// overridable so tests can inject a fake.
+  final BalanceHistoryDataSource balanceHistorySource;
+
+  /// The display currency for the hero balance, Credit Utilization, and PDF
+  /// export figures — `CurrentBalanceAmount.currencyCode` from Home's
+  /// already-loaded Current Balance result, passed straight through by the
+  /// caller. `null` when Home's Current Balance hasn't resolved a currency
+  /// (still loading, errored, or every contributing ledger entry had a
+  /// blank `Currency_Code`) — `formatCurrencyOrUnknown` then renders the
+  /// existing "?" fallback, never a guessed code.
+  final String? currencyCode;
+
   @override
   State<AccountBalanceScreen> createState() => _AccountBalanceScreenState();
 }
@@ -92,9 +131,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       widget.avatarController ?? currentUserAvatarController;
   late final QuickHistoryDataSource _quickHistorySource =
       widget.quickHistorySource ?? LedgerQuickHistoryDataSource();
+  late final BalanceHistoryDataSource _balanceHistorySource =
+      widget.balanceHistorySource;
 
-  AccountBalanceSummary? _summary;
-  CreditUtilizationData? _creditUtilization;
+  CustomerDetails? _accountSummary;
   bool _isLoading = true;
   String? _error;
 
@@ -130,12 +170,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       _error = null;
     });
     try {
-      final summary = await _service.fetchSummary();
-      final utilization = await _service.fetchCreditUtilization();
+      final summary = await _service.fetchAccountSummary();
       if (!mounted) return;
       setState(() {
-        _summary = summary;
-        _creditUtilization = utilization;
+        _accountSummary = summary;
         _isLoading = false;
       });
     } catch (_) {
@@ -192,7 +230,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   Future<void> _loadHistory(BalanceHistoryRange range) async {
     setState(() => _isHistoryLoading = true);
     try {
-      final points = await _service.fetchBalanceHistory(range);
+      final points = await _balanceHistorySource.fetchBalanceHistory(range);
       if (!mounted) return;
       setState(() {
         _historyPoints = points;
@@ -249,19 +287,22 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   /// throws.
   Future<void> _exportPdf() async {
     if (_isExportingPdf) return;
-    final summary = _summary;
-    final utilization = _creditUtilization;
-    if (summary == null || utilization == null) return;
+    final summary = _accountSummary;
+    if (summary == null) return;
 
     setState(() => _isExportingPdf = true);
     try {
       await _exporter.export(
         AccountStatementData(
-          summary: summary,
-          creditUtilization: utilization,
+          customerBalance: summary.customerBalance,
+          creditUtilization: CreditUtilizationData(
+            availableCredit: summary.availableCredit,
+            usedCredit: summary.usedCredit,
+          ),
           selectedRange: _selectedRange,
           quickHistory: _quickHistory,
           generatedAt: DateTime.now(),
+          currencyCode: widget.currencyCode,
         ),
       );
     } catch (error) {
@@ -402,9 +443,8 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     if (_error != null) {
       return _buildErrorState();
     }
-    final summary = _summary;
-    final utilization = _creditUtilization;
-    if (summary == null || utilization == null) return const SizedBox.shrink();
+    final summary = _accountSummary;
+    if (summary == null) return const SizedBox.shrink();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -413,14 +453,19 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             AccountBalanceHeroCard(
-              balance: summary.currentBalance,
-              percentChange: summary.percentChangeFromLastMonth,
-              changePeriodLabel: summary.changePeriodLabel,
+              balance: summary.customerBalance,
               onExportPdf: _exportPdf,
               isExporting: _isExportingPdf,
+              currencyCode: widget.currencyCode,
             ),
             const SizedBox(height: 16),
-            CreditUtilizationCard(data: utilization),
+            CreditUtilizationCard(
+              data: CreditUtilizationData(
+                availableCredit: summary.availableCredit,
+                usedCredit: summary.usedCredit,
+              ),
+              currencyCode: widget.currencyCode,
+            ),
             const SizedBox(height: 16),
             BalanceHistoryCard(
               points: _historyPoints,

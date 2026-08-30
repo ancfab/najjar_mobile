@@ -924,11 +924,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Opens the Account Balance drill-down from the balance hero card.
+  // Opens the Account Balance drill-down from the balance hero card,
+  // passing along the already-loaded Current Balance's ledger-derived
+  // currency so Account Balance never has to re-fetch ledger entries or
+  // fall back to a region-inferred currency of its own — see
+  // AccountBalanceScreen's class-level doc comment. `null` when Current
+  // Balance hasn't resolved a currency yet (still loading, errored, or a
+  // blank Currency_Code), in which case Account Balance shows its own
+  // existing "?" unknown-currency fallback.
   void _openAccountBalance() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AccountBalanceScreen()));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AccountBalanceScreen(
+          currencyCode: _currentBalanceAmount?.currencyCode,
+        ),
+      ),
+    );
   }
 
   // Opens the Active Orders drill-down from the summary metric card.

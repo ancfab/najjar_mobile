@@ -1,6 +1,6 @@
 // Focused widget checks for AccountBalanceHeroCard, independent of the full
-// Account Balance screen: balance/percent-change rendering for both
-// positive and negative changes, the Export PDF button's tap callback, and
+// Account Balance screen: balance rendering (no hardcoded "$", via
+// formatCurrencyOrUnknown), and the Export PDF button's tap callback and
 // its Generating... loading state.
 
 import 'package:flutter/material.dart';
@@ -13,10 +13,10 @@ import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 Future<void> _pumpCard(
   WidgetTester tester, {
   required double balance,
-  required double percentChange,
   VoidCallback? onExportPdf,
   bool isExporting = false,
   double width = 390,
+  String? currencyCode,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -35,10 +35,9 @@ Future<void> _pumpCard(
       home: Scaffold(
         body: AccountBalanceHeroCard(
           balance: balance,
-          percentChange: percentChange,
-          changePeriodLabel: 'from last month',
           onExportPdf: onExportPdf ?? () {},
           isExporting: isExporting,
+          currencyCode: currencyCode,
         ),
       ),
     ),
@@ -47,29 +46,44 @@ Future<void> _pumpCard(
 }
 
 void main() {
-  group('Positive change', () {
-    testWidgets('Shows the balance, a "+" prefixed change, and an up icon', (
+  group('Balance', () {
+    testWidgets(
+      'Shows the balance with a "?" prefix (no known currency), not "\$"',
+      (tester) async {
+        await _pumpCard(tester, balance: 36711.73);
+
+        expect(find.text('? 36,711.73'), findsOneWidget);
+        expect(find.text('\$36,711.73'), findsNothing);
+      },
+    );
+
+    testWidgets('Never shows the retired mock percent-change text', (
       tester,
     ) async {
-      await _pumpCard(tester, balance: 42850.00, percentChange: 12.4);
+      await _pumpCard(tester, balance: 36711.73);
 
-      expect(find.text('\$42,850.00'), findsOneWidget);
-      expect(find.text('+12.4% from last month'), findsOneWidget);
-      expect(find.byIcon(Icons.trending_up_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.trending_down_rounded), findsNothing);
+      expect(find.textContaining('%'), findsNothing);
+      expect(find.textContaining('from last month'), findsNothing);
     });
-  });
 
-  group('Negative change', () {
-    testWidgets('Shows an unprefixed negative change and a down icon', (
+    testWidgets('Shows the passed-in currencyCode when supplied', (
       tester,
     ) async {
-      await _pumpCard(tester, balance: 10000.00, percentChange: -5.2);
+      await _pumpCard(tester, balance: 36711.73, currencyCode: 'AED');
 
-      expect(find.text('-5.2% from last month'), findsOneWidget);
-      expect(find.byIcon(Icons.trending_down_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.trending_up_rounded), findsNothing);
+      expect(find.text('AED 36,711.73'), findsOneWidget);
+      expect(find.text('? 36,711.73'), findsNothing);
     });
+
+    for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {
+      testWidgets('A $currency currencyCode renders the $currency prefix', (
+        tester,
+      ) async {
+        await _pumpCard(tester, balance: 36711.73, currencyCode: currency);
+
+        expect(find.text('$currency 36,711.73'), findsOneWidget);
+      });
+    }
   });
 
   group('Export PDF button', () {
@@ -77,8 +91,7 @@ void main() {
       var tapped = false;
       await _pumpCard(
         tester,
-        balance: 42850.00,
-        percentChange: 12.4,
+        balance: 36711.73,
         onExportPdf: () => tapped = true,
       );
 
@@ -92,12 +105,7 @@ void main() {
     testWidgets('Shows Generating... and a spinner while isExporting is true', (
       tester,
     ) async {
-      await _pumpCard(
-        tester,
-        balance: 42850.00,
-        percentChange: 12.4,
-        isExporting: true,
-      );
+      await _pumpCard(tester, balance: 36711.73, isExporting: true);
 
       expect(find.text('Generating...'), findsOneWidget);
       expect(find.text('Export PDF'), findsNothing);
@@ -114,8 +122,7 @@ void main() {
       var tapCount = 0;
       await _pumpCard(
         tester,
-        balance: 42850.00,
-        percentChange: 12.4,
+        balance: 36711.73,
         onExportPdf: () => tapCount++,
         isExporting: true,
       );
@@ -140,8 +147,7 @@ void main() {
       ) async {
         await _pumpCard(
           tester,
-          balance: 42850.00,
-          percentChange: 12.4,
+          balance: 36711.73,
           isExporting: true,
           width: width,
         );

@@ -15,6 +15,7 @@ import '../models/business_central/business_central_inventory_entry.dart';
 import '../models/business_central/business_central_invoice_line.dart';
 import '../models/business_central/business_central_item.dart';
 import '../models/business_central/business_central_item_search_group.dart';
+import '../models/business_central/customer_details.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
@@ -448,8 +449,6 @@ class AncApiClient {
       ApiConfig.businessCentralMaxPerPage,
     );
 
-    
-
     final response = await getAuthenticatedJson(
       ApiConfig.itemsPath,
       token: token,
@@ -460,22 +459,15 @@ class AncApiClient {
       },
     );
 
-    
-
     final PaginatedResponse<BusinessCentralItemSearchGroup> decoded;
     try {
       decoded = _decodeItemSearchResponse(response);
     } on AncApiException catch (error) {
-      
       rethrow;
     }
 
-    
     for (final group in decoded.data) {
-      debugPrint(
-      
-        'variations=${group.variations.length}',
-      );
+      debugPrint('variations=${group.variations.length}');
     }
 
     return decoded;
@@ -539,6 +531,47 @@ class AncApiClient {
       },
     );
     return _decodeInventoryResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/customer-details` for the
+  /// authenticated user. Never sends a customer identifier — the ANC API
+  /// scopes the result to the authenticated [token] server-side. Not
+  /// paginated: returns one [CustomerDetails] snapshot, never a
+  /// [PaginatedResponse].
+  ///
+  /// [dateFrom]/[dateTo], when supplied, are sent as the `date_from`/
+  /// `date_to` query parameters, each formatted as `yyyy-MM-dd` — the same
+  /// date-only format this client's other Business Central date fields
+  /// (`Posting_Date`/`Due_Date`/`postingDate`/`dueDate`) already use. Either
+  /// or both may be omitted (both are documented as optional); an omitted
+  /// date is never sent as an empty string.
+  Future<CustomerDetails> fetchCustomerDetails({
+    required String token,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    final formattedDateFrom = dateFrom == null
+        ? null
+        : _formatDateOnly(dateFrom);
+    final formattedDateTo = dateTo == null ? null : _formatDateOnly(dateTo);
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.customerDetailsPath,
+      token: token,
+      queryParameters: {
+        'date_from': ?formattedDateFrom,
+        'date_to': ?formattedDateTo,
+      },
+    );
+    return _decodeCustomerDetailsResponse(response);
+  }
+
+  /// Formats [date] as `yyyy-MM-dd`, matching every other date-only field
+  /// this client sends/parses.
+  static String _formatDateOnly(DateTime date) {
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${date.year.toString().padLeft(4, '0')}-'
+        '${twoDigits(date.month)}-${twoDigits(date.day)}';
   }
 
   /// Calls `POST /api/auth/logout` with the given [token] as a Bearer
@@ -1243,6 +1276,35 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API inventory request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a customer-details response. HTTP 200 is parsed as a single
+  /// [CustomerDetails] snapshot — never a [PaginatedResponse], since this
+  /// endpoint is not paginated; every other status raises [AncHttpException]
+  /// with that [statusCode] — including a parsed [ApiValidationError] for
+  /// 422 — the same shape as every other Business Central endpoint on this
+  /// client. The Business Central taxonomy (account-not-linked vs. some
+  /// other 422 cause) is decided one layer up (see `mapBusinessCentralError`),
+  /// not here.
+  CustomerDetails _decodeCustomerDetailsResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonMap(response.body);
+      try {
+        return CustomerDetails.fromJson(json);
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed customer-details response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API customer-details request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
