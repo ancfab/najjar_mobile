@@ -15,6 +15,7 @@ class LoginTextField extends StatelessWidget {
     this.obscureText = false,
     this.suffixIcon,
     this.textInputAction,
+    this.errorText,
   });
 
   final String label;
@@ -24,6 +25,11 @@ class LoginTextField extends StatelessWidget {
   final bool obscureText;
   final Widget? suffixIcon;
   final TextInputAction? textInputAction;
+
+  /// A field-level validation error to show under the input, the same
+  /// externally-driven-error pattern used by [PasswordField.errorText].
+  /// Null (the default) shows no error.
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +60,7 @@ class LoginTextField extends StatelessWidget {
                 color: AppColors.grayText,
                 fontSize: 15,
               ),
+              errorText: errorText,
               filled: true,
               fillColor: AppColors.background,
               suffixIcon: suffixIcon,

@@ -110,7 +110,11 @@
     "contactUsLink": "Need help? Contact Us",
     "footerCopyright": "© 2024 INDIGO LOOM TEXTILE PORTAL. ALL RIGHTS RESERVED.",
     "privacyPolicy": "Privacy Policy",
-    "termsOfService": "Terms of Service"
+    "termsOfService": "Terms of Service",
+    "errorDialogTitle": "Unable to Sign In",
+    "mobileNumberRequired": "Please enter your mobile number.",
+    "clientNameRequired": "Please enter your name.",
+    "passwordRequired": "Please enter your password."
   },
   "orders": {
     "unableToLoad": "Unable to load orders.",

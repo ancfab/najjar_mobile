@@ -309,7 +309,7 @@ void main() {
   });
 
   group('failure message presentation', () {
-    Future<String> submitAndReadSnackBarText(
+    Future<String> submitAndReadDialogText(
       WidgetTester tester,
       _RecordingHttpClient http_,
     ) async {
@@ -318,12 +318,27 @@ void main() {
       await tester.tap(_loginButton);
       await tester.pumpAndSettle();
 
-      final textFinder = find.descendant(
-        of: find.byType(SnackBar),
-        matching: find.byType(Text),
+      expect(find.byType(SnackBar), findsNothing);
+      final dialog = find.byKey(const ValueKey('login-error-dialog'));
+      expect(dialog, findsOneWidget);
+      expect(
+        find.descendant(of: dialog, matching: find.text('Unable to Sign In')),
+        findsOneWidget,
       );
-      expect(textFinder, findsOneWidget);
-      return tester.widget<Text>(textFinder).data!;
+      expect(
+        find.byKey(const ValueKey('login-error-dialog-ok')),
+        findsOneWidget,
+      );
+
+      final alertDialog = tester.widget<AlertDialog>(dialog);
+      final message = (alertDialog.content! as Text).data!;
+
+      // Tapping OK dismisses the dialog.
+      await tester.tap(find.byKey(const ValueKey('login-error-dialog-ok')));
+      await tester.pumpAndSettle();
+      expect(dialog, findsNothing);
+
+      return message;
     }
 
     testWidgets('invalid credentials (422 errors.username) show a neutral '
@@ -336,7 +351,7 @@ void main() {
         }, request: req),
       );
 
-      final message = await submitAndReadSnackBarText(tester, http_);
+      final message = await submitAndReadDialogText(tester, http_);
 
       expect(message, 'Please check your login details and try again.');
       expect(message, isNot(contains('username')));
@@ -355,7 +370,7 @@ void main() {
           }, request: req),
         );
 
-        final message = await submitAndReadSnackBarText(tester, http_);
+        final message = await submitAndReadDialogText(tester, http_);
 
         expect(message, 'The phone field format is invalid.');
       },
@@ -370,7 +385,7 @@ void main() {
               _jsonResponse(422, {'errors': <String, dynamic>{}}, request: req),
         );
 
-        final message = await submitAndReadSnackBarText(tester, http_);
+        final message = await submitAndReadDialogText(tester, http_);
 
         // An empty 422 errors object maps to invalidCredentials (see
         // AuthService's neutral-validation rule), not invalidPhone — the
@@ -387,7 +402,7 @@ void main() {
         (req) async => throw const SocketException('no route to host'),
       );
 
-      final message = await submitAndReadSnackBarText(tester, http_);
+      final message = await submitAndReadDialogText(tester, http_);
 
       expect(
         message,
@@ -402,7 +417,7 @@ void main() {
         (req) async => _jsonResponse(500, const {}, request: req),
       );
 
-      final message = await submitAndReadSnackBarText(tester, http_);
+      final message = await submitAndReadDialogText(tester, http_);
 
       expect(
         message,
@@ -421,14 +436,15 @@ void main() {
           ),
         );
 
-        final message = await submitAndReadSnackBarText(tester, http_);
+        final message = await submitAndReadDialogText(tester, http_);
 
         expect(message, 'We could not complete the login. Please try again.');
       },
     );
 
     testWidgets(
-      'a secure-storage failure after HTTP success shows a neutral message',
+      'a secure-storage failure after HTTP success shows a neutral message '
+      'in the dialog, not a SnackBar',
       (tester) async {
         final http_ = _RecordingHttpClient(
           (req) async =>
@@ -446,14 +462,140 @@ void main() {
         await tester.tap(_loginButton);
         await tester.pumpAndSettle();
 
+        expect(find.byType(SnackBar), findsNothing);
         expect(
-          find.text(
-            'Login succeeded, but the session could not be saved securely. '
-            'Please try again.',
+          find.descendant(
+            of: find.byKey(const ValueKey('login-error-dialog')),
+            matching: find.text(
+              'Login succeeded, but the session could not be saved securely. '
+              'Please try again.',
+            ),
           ),
           findsOneWidget,
         );
         expect(find.byType(HomeScreen), findsNothing);
+      },
+    );
+  });
+
+  group('local field validation', () {
+    testWidgets(
+      'empty mobile number shows an inline error under the mobile field, '
+      'not a dialog, and makes no API call',
+      (tester) async {
+        final http_ = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, _validLoginResponseJson(), request: req),
+        );
+        await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
+        await _enterCredentials(tester, mobile: '');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please enter your mobile number.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('login-error-dialog')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(http_.requestCount, 0);
+      },
+    );
+
+    testWidgets(
+      'empty username shows an inline error under the client name field, '
+      'not a dialog, and makes no API call',
+      (tester) async {
+        final http_ = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, _validLoginResponseJson(), request: req),
+        );
+        await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
+        await _enterCredentials(tester, username: '');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please enter your name.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('login-error-dialog')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(http_.requestCount, 0);
+      },
+    );
+
+    testWidgets(
+      'empty password shows an inline error under the password field, not '
+      'a dialog, and makes no API call',
+      (tester) async {
+        final http_ = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, _validLoginResponseJson(), request: req),
+        );
+        await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
+        await _enterCredentials(tester, password: '');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please enter your password.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('login-error-dialog')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(http_.requestCount, 0);
+      },
+    );
+
+    testWidgets(
+      'a non-digit mobile number shows the mobile-specific inline error, '
+      'not a dialog, and makes no API call',
+      (tester) async {
+        final http_ = _RecordingHttpClient(
+          (req) async =>
+              _jsonResponse(200, _validLoginResponseJson(), request: req),
+        );
+        await _pumpLoginScreen(tester, authService: _authServiceOver(http_));
+        await _enterCredentials(tester, mobile: '5O1234');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Mobile number should contain digits only.'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('login-error-dialog')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(http_.requestCount, 0);
+      },
+    );
+
+    testWidgets(
+      'editing an invalid mobile field after a failed submit clears its '
+      'inline error',
+      (tester) async {
+        await _pumpLoginScreen(tester);
+        await _enterCredentials(tester, mobile: '');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+        expect(find.text('Please enter your mobile number.'), findsOneWidget);
+
+        await tester.enterText(_mobileField, '5');
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please enter your mobile number.'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'all three fields empty shows all three inline errors at once',
+      (tester) async {
+        await _pumpLoginScreen(tester);
+        await _enterCredentials(tester, mobile: '', username: '', password: '');
+
+        await tester.tap(_loginButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Please enter your mobile number.'), findsOneWidget);
+        expect(find.text('Please enter your name.'), findsOneWidget);
+        expect(find.text('Please enter your password.'), findsOneWidget);
       },
     );
   });
@@ -594,11 +736,11 @@ void main() {
       await tester.tap(_loginButton);
       await tester.pumpAndSettle();
 
-      final textFinder = find.descendant(
-        of: find.byType(SnackBar),
-        matching: find.byType(Text),
+      expect(find.byType(SnackBar), findsNothing);
+      final dialog = tester.widget<AlertDialog>(
+        find.byKey(const ValueKey('login-error-dialog')),
       );
-      final message = tester.widget<Text>(textFinder).data!;
+      final message = (dialog.content! as Text).data!;
 
       expect(message, isNot(contains(secretPassword)));
       expect(message, isNot(contains('credentials do not match')));

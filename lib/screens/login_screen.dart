@@ -7,6 +7,7 @@ import '../models/country_code.dart';
 import '../services/auth_service.dart';
 import '../services/session_messages.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_radius.dart';
 import '../utils/responsive.dart';
 import '../widgets/country_code_picker.dart';
 import '../widgets/login/contact_us_link.dart';
@@ -61,6 +62,16 @@ class _LoginScreenState extends State<LoginScreen> {
   CountryCode _selectedCountry = kDefaultCountryCode;
   bool _isLoading = false;
 
+  // Local field-validation errors (missing/malformed input caught before
+  // AuthService.login is ever called) — shown inline under each field,
+  // never as a SnackBar or popup. Distinct from an API/login failure (see
+  // _showLoginErrorDialog), which is a dialog. Each clears itself as soon
+  // as the user edits the corresponding field again (see the controller
+  // listeners added in initState).
+  String? _mobileError;
+  String? _usernameError;
+  String? _passwordError;
+
   late final AuthService _authService;
 
   /// Whether this instance created [_authService] itself (via
@@ -82,6 +93,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _ownsAuthService = true;
     }
 
+    // Clears each field's inline validation error as soon as the user
+    // edits that field again, rather than leaving a stale error visible
+    // until the next submit attempt.
+    _mobileNumberController.addListener(_clearMobileError);
+    _usernameController.addListener(_clearUsernameError);
+    _passwordController.addListener(_clearPasswordError);
+
     final message = widget.startupMessage;
     if (message != null) {
       // Shown once, after the first frame, using the screen's normal
@@ -89,18 +107,47 @@ class _LoginScreenState extends State<LoginScreen> {
       // ScaffoldMessenger is reachable yet.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        _showMessage(_messageForStartupReason(message));
+        _showStartupMessage(_messageForStartupReason(message));
       });
     }
   }
 
   @override
   void dispose() {
+    _mobileNumberController.removeListener(_clearMobileError);
+    _usernameController.removeListener(_clearUsernameError);
+    _passwordController.removeListener(_clearPasswordError);
     _mobileNumberController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     if (_ownsAuthService) _authService.close();
     super.dispose();
+  }
+
+  void _clearMobileError() {
+    if (_mobileError != null) setState(() => _mobileError = null);
+  }
+
+  void _clearUsernameError() {
+    if (_usernameError != null) setState(() => _usernameError = null);
+  }
+
+  void _clearPasswordError() {
+    if (_passwordError != null) setState(() => _passwordError = null);
+  }
+
+  /// Local, pre-request validation for the mobile field: missing/empty
+  /// input (bundled with the always-non-empty-in-practice country isoCode
+  /// guard, since the country picker sits directly above this field) or
+  /// non-digit characters. Returns null when valid.
+  String? _validateMobile(String mobileNumber) {
+    if (_selectedCountry.isoCode.isEmpty || mobileNumber.isEmpty) {
+      return context.t('login.mobileNumberRequired');
+    }
+    if (!_digitsOnly.hasMatch(mobileNumber)) {
+      return context.t('login.validationMobileDigitsOnly');
+    }
+    return null;
   }
 
   Future<void> _handleLogin() async {
@@ -110,22 +157,33 @@ class _LoginScreenState extends State<LoginScreen> {
     final username = _usernameController.text;
     final password = _passwordController.text;
 
-    if (_selectedCountry.isoCode.isEmpty ||
-        mobileNumber.isEmpty ||
-        username.trim().isEmpty ||
-        password.isEmpty) {
-      _showMessage(context.t('login.validationRequiredFields'));
-      return;
-    }
+    final mobileError = _validateMobile(mobileNumber);
+    final usernameError = username.trim().isEmpty
+        ? context.t('login.clientNameRequired')
+        : null;
+    final passwordError = password.isEmpty
+        ? context.t('login.passwordRequired')
+        : null;
 
-    if (!_digitsOnly.hasMatch(mobileNumber)) {
-      _showMessage(context.t('login.validationMobileDigitsOnly'));
+    if (mobileError != null || usernameError != null || passwordError != null) {
+      // Local field validation only — shown inline near each field, never
+      // as a popup or SnackBar, and never sent to AuthService.login.
+      setState(() {
+        _mobileError = mobileError;
+        _usernameError = usernameError;
+        _passwordError = passwordError;
+      });
       return;
     }
 
     final phone = '${_selectedCountry.dialCode}$mobileNumber';
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _mobileError = null;
+      _usernameError = null;
+      _passwordError = null;
+    });
     final AuthLoginResult result;
     try {
       result = await _authService.login(
@@ -154,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    _showMessage(_messageFor(result as AuthLoginFailure));
+    _showLoginErrorDialog(_messageFor(result as AuthLoginFailure));
   }
 
   /// Maps each [AuthLoginFailureType] to one neutral, safe message — never
@@ -192,10 +250,53 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showMessage(String message) {
+  /// Startup/session-message presentation only (e.g. session expired,
+  /// restore failed) — the existing SnackBar style, shown once after this
+  /// screen opens. Distinct from [_showLoginErrorDialog], which is used
+  /// only for a failed login attempt.
+  void _showStartupMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Login/API-failure presentation: a centered, dismissible popup — never
+  /// a SnackBar. Dismisses the keyboard first so the dialog isn't shown
+  /// behind it.
+  Future<void> _showLoginErrorDialog(String message) {
+    FocusScope.of(context).unfocus();
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        key: const ValueKey('login-error-dialog'),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.dangerRed,
+              size: 40,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.t('login.errorDialogTitle'),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        content: Text(message, textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            key: const ValueKey('login-error-dialog-ok'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(context.t('common.ok')),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleBack() {
@@ -211,7 +312,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handlePrivacyPolicy() {
-
     // TODO: Navigate to the Privacy Policy screen once it exists.
   }
 
@@ -268,6 +368,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: AppColors.grayText,
                           fontSize: 15,
                         ),
+                        errorText: _mobileError,
                         filled: true,
                         fillColor: AppColors.background,
                         contentPadding: const EdgeInsets.symmetric(
@@ -297,9 +398,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _usernameController,
                     keyboardType: TextInputType.name,
                     textInputAction: TextInputAction.next,
+                    errorText: _usernameError,
                   ),
                   const SizedBox(height: 20),
-                  PasswordField(controller: _passwordController),
+                  PasswordField(
+                    controller: _passwordController,
+                    errorText: _passwordError,
+                  ),
                   const SizedBox(height: 32),
                   PrimaryLoginButton(
                     onPressed: _handleLogin,
