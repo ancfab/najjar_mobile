@@ -1,4 +1,4 @@
-package com.ancfabrics.app
+package com.ancfab.app
 
 import io.flutter.embedding.android.FlutterActivity
 
