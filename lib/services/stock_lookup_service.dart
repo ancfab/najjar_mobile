@@ -109,6 +109,7 @@ class StockLookupSuccess extends StockLookupResult {
     this.description,
     this.batchReference,
     this.availabilityByLocation = const [],
+    this.expectedRestockDate,
   });
 
   /// When this lookup completed, for display and for [scannedAt] on the
@@ -124,6 +125,75 @@ class StockLookupSuccess extends StockLookupResult {
   /// has no per-location breakdown to report (e.g. a fake used by a test
   /// that doesn't exercise availability display).
   final List<StockLocationAvailability> availabilityByLocation;
+
+  /// TODO(expected-restock-date): the earliest expected incoming-stock date
+  /// for this item, shown beside an out-of-stock status on the Home Check
+  /// Availability card. No ANC API endpoint exposes purchase-order /
+  /// replenishment receipt dates yet, so `ApiStockLookupService` always
+  /// leaves this `null`; populate it here (and render it in
+  /// `home_screen.dart`'s status pill) once such an endpoint exists.
+  final DateTime? expectedRestockDate;
+
+  /// A single, location-agnostic availability classification for this item,
+  /// summing every location's open remaining quantity — the Home Check
+  /// Availability card shows one status per variation, never a per-location
+  /// breakdown.
+  ///
+  /// The MT threshold rule is unchanged (see
+  /// [StockLocationAvailability.lowStockThresholdMeters]); it is applied to
+  /// the *summed* meters quantity here:
+  /// - Any meters (`MT`) entries → classify on their summed remaining
+  ///   quantity: `> 100` [StockAvailabilityLevel.available], `0 < q <= 100`
+  ///   [StockAvailabilityLevel.low], `<= 0` [StockAvailabilityLevel.outOfStock].
+  /// - No meters entries, but other units summing above zero →
+  ///   [StockAvailabilityLevel.available].
+  /// - Nothing left anywhere (no entries, or every summed quantity `<= 0`) →
+  ///   [StockAvailabilityLevel.outOfStock].
+  ///
+  /// Never exposes the underlying quantity — callers render a status label
+  /// and colour only.
+  StockAvailabilityLevel get combinedAvailabilityLevel {
+    final meters = availabilityByLocation
+        .where((entry) => entry.isMeasuredInMeters)
+        .toList(growable: false);
+    if (meters.isNotEmpty) {
+      final metersTotal = meters.fold<num>(
+        0,
+        (sum, entry) => sum + entry.remainingQuantity,
+      );
+      if (metersTotal <= 0) return StockAvailabilityLevel.outOfStock;
+      if (metersTotal <= StockLocationAvailability.lowStockThresholdMeters) {
+        return StockAvailabilityLevel.low;
+      }
+      return StockAvailabilityLevel.available;
+    }
+
+    final otherTotal = availabilityByLocation.fold<num>(
+      0,
+      (sum, entry) => sum + entry.remainingQuantity,
+    );
+    if (availabilityByLocation.isEmpty || otherTotal <= 0) {
+      return StockAvailabilityLevel.outOfStock;
+    }
+    return StockAvailabilityLevel.available;
+  }
+}
+
+/// The single, location-agnostic availability status shown per variation on
+/// the Home Check Availability card — see
+/// [StockLookupSuccess.combinedAvailabilityLevel]. Deliberately does not
+/// carry the underlying quantity: the UI renders only a label and colour.
+enum StockAvailabilityLevel {
+  /// Summed remaining quantity is above the low-stock threshold (or the item
+  /// is stocked in a non-meters unit with a positive total).
+  available,
+
+  /// Summed meters quantity is at/below the low-stock threshold but above
+  /// zero — the UI shows "contact support" copy, never the figure.
+  low,
+
+  /// Nothing remaining across any location.
+  outOfStock,
 }
 
 /// The lookup completed but found no stock record for [rawCode].

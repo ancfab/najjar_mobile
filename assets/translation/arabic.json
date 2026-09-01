@@ -57,7 +57,9 @@
     "catalogueGroupLabel": "كتالوج {code}",
     "catalogueVariationCount": "{count} صنف فرعي",
     "catalogueGroupTotalInventory": "إجمالي المجموعة: {amount}",
-    "catalogueSelectVariation": "اختر صنفًا فرعيًا"
+    "catalogueSelectVariation": "اختر صنفًا فرعيًا",
+    "checkVariationAction": "تحقق",
+    "stockOutOfStock": "نفد المخزون"
   },
   "balanceCard": {
     "label": "الرصيد الحالي",

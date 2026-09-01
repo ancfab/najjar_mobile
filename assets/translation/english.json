@@ -57,7 +57,9 @@
     "catalogueGroupLabel": "Catalogue {code}",
     "catalogueVariationCount": "{count} variations",
     "catalogueGroupTotalInventory": "Group total: {amount}",
-    "catalogueSelectVariation": "Select a variation"
+    "catalogueSelectVariation": "Select a variation",
+    "checkVariationAction": "Check",
+    "stockOutOfStock": "Out of stock"
   },
   "balanceCard": {
     "label": "CURRENT BALANCE",

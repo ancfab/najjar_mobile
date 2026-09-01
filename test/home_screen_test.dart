@@ -103,6 +103,27 @@ ItemCatalogueExactMatch _singleVariationExactMatch(
   );
 }
 
+/// Taps a variation row's inline "Check" / "Retry" button (keyed
+/// `variation-check-<itemNo>`) and settles — the interaction that runs the
+/// per-variation stock lookup now that the row itself is no longer a tap
+/// target.
+Future<void> _tapCheck(WidgetTester tester, String itemNo) async {
+  final finder = find.byKey(ValueKey('variation-check-$itemNo'));
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+/// The background colour of a resolved variation status pill — [suffix] is
+/// `'available'`, `'low'`, or `'out'`.
+Color? _pillColor(WidgetTester tester, String suffix) {
+  final container = tester.widget<Container>(
+    find.byKey(ValueKey('variation-status-$suffix')),
+  );
+  return (container.decoration as BoxDecoration?)?.color;
+}
+
 /// A canned live [PaymentEntry] matching the confirmed API contract's
 /// example payload (negative `amount`, non-USD `currencyCode`), used as the
 /// default Last Payment fixture so pre-existing Home screen tests (that
@@ -448,29 +469,21 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
 
-      expect(stockLookupService.calls, isEmpty, reason: 'not selected yet');
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('variation-TEST-ITEM-01')),
-      );
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
-      await tester.pumpAndSettle();
+      expect(stockLookupService.calls, isEmpty, reason: 'not checked yet');
+      await _tapCheck(tester, 'TEST-ITEM-01');
 
       expect(stockLookupService.calls, ['TEST-ITEM-01']);
+      // The variation's own description is shown as the row subtitle.
+      expect(find.text('Test Fabric'), findsWidgets);
+      // One combined status pill — green (150 m MT, above the threshold) —
+      // never a per-location breakdown and never the real quantity.
       expect(
-        find.byKey(const ValueKey('home-availability-description')),
+        find.byKey(const ValueKey('variation-status-available')),
         findsOneWidget,
       );
-      expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('home-availability-description')),
-            )
-            .data,
-        'Test Fabric',
-      );
-      expect(find.text('LOC-01'), findsOneWidget);
+      expect(_pillColor(tester, 'available'), AppColors.stockAvailableBg);
       expect(find.text('Available'), findsOneWidget);
+      expect(find.text('LOC-01'), findsNothing);
       expect(find.textContaining('150'), findsNothing);
     },
   );
@@ -726,12 +739,7 @@ void main() {
           await tester.enterText(find.byType(TextField), 'ITEM-A');
           await tester.tap(find.byIcon(Icons.search_rounded));
           await tester.pumpAndSettle();
-          await tester.ensureVisible(
-            find.byKey(const ValueKey('variation-ITEM-A')),
-          );
-          await tester.pump();
-          await tester.tap(find.byKey(const ValueKey('variation-ITEM-A')));
-          await tester.pumpAndSettle();
+          await _tapCheck(tester, 'ITEM-A');
 
           expect(
             find.byKey(const ValueKey('variation-ITEM-A')),
@@ -745,6 +753,10 @@ void main() {
 
           expect(find.byKey(const ValueKey('variation-ITEM-A')), findsNothing);
           expect(find.text('Available'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('variation-status-available')),
+            findsNothing,
+          );
           expect(
             find.byKey(const ValueKey('variation-ITEM-B')),
             findsOneWidget,
@@ -855,12 +867,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-1012B03')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-1012B03')));
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, '1012B03');
 
         expect(stockLookupService.calls, ['1012B03']);
       });
@@ -898,13 +905,8 @@ void main() {
         // group, and 1012A01 is visible as a variation row.
         expect(find.byKey(const ValueKey('variation-1012A01')), findsOneWidget);
 
-        // 5. Tap the visible 1012A01 row.
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-1012A01')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-1012A01')));
-        await tester.pumpAndSettle();
+        // 5. Tap the visible 1012A01 row's inline "Check" button.
+        await _tapCheck(tester, '1012A01');
 
         // 6. Catalogue search was called exactly once, with "1012" only.
         expect(catalogueSearchService.calls, ['1012']);
@@ -1027,8 +1029,8 @@ void main() {
         },
       );
 
-      testWidgets('multiple locations and different units remain separate, '
-          'never combined into one total, each its own colored row', (
+      testWidgets('locations are summed into one combined status, never a '
+          'per-location breakdown, and the quantity is never shown', (
         tester,
       ) async {
         final catalogueSearchService = FakeItemCatalogueSearchService()
@@ -1038,15 +1040,17 @@ void main() {
             rawCode,
             scannedAt: DateTime(2026, 1, 1),
             availabilityByLocation: const [
+              // Two MT locations that individually sit at/below the 100 m
+              // threshold but together (60 + 55 = 115) clear it.
               StockLocationAvailability(
                 locationCode: 'LOC-01',
-                remainingQuantity: 150,
+                remainingQuantity: 60,
                 unitOfMeasureCode: 'MT',
               ),
               StockLocationAvailability(
                 locationCode: 'LOC-02',
-                remainingQuantity: 15,
-                unitOfMeasureCode: 'YD',
+                remainingQuantity: 55,
+                unitOfMeasureCode: 'MT',
               ),
             ],
           );
@@ -1060,42 +1064,26 @@ void main() {
         await tester.enterText(find.byType(TextField), 'TEST-ITEM-01');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-TEST-ITEM-01')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-TEST-ITEM-01')));
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, 'TEST-ITEM-01');
 
-        expect(find.text('LOC-01'), findsOneWidget);
-        expect(find.text('LOC-02'), findsOneWidget);
-        expect(find.text('Available'), findsNWidgets(2));
-        expect(find.textContaining('150'), findsNothing);
-        expect(find.textContaining('15 YD'), findsNothing);
-
-        // LOC-01 is MT and above the threshold: green row background.
-        final loc01Row = tester.widget<Container>(
-          find.descendant(
-            of: find.byKey(const ValueKey('home-availability-row-0')),
-            matching: find.byType(Container),
-          ),
-        );
-        expect((loc01Row.decoration as BoxDecoration).color, AppColors.mint);
-        // LOC-02 is YD, not MT: the MT green/yellow rule must not apply —
-        // no colored Container at all, just the default plain text.
+        // One combined pill, green (summed 115 m > 100), no location codes,
+        // no numbers.
         expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('home-availability-row-1')),
-            matching: find.byType(Container),
-          ),
-          findsNothing,
+          find.byKey(const ValueKey('variation-status-available')),
+          findsOneWidget,
         );
+        expect(_pillColor(tester, 'available'), AppColors.stockAvailableBg);
+        expect(find.text('Available'), findsOneWidget);
+        expect(find.text('LOC-01'), findsNothing);
+        expect(find.text('LOC-02'), findsNothing);
+        expect(find.textContaining('60'), findsNothing);
+        expect(find.textContaining('55'), findsNothing);
       });
 
-      group('Low-stock (<= 100 m) hides the quantity', () {
-        Future<void> tapVariationWithQuantity(
+      group('combined status thresholds (quantity never shown)', () {
+        Future<void> checkWith(
           WidgetTester tester,
-          num remainingQuantity,
+          List<StockLocationAvailability> availability,
         ) async {
           final catalogueSearchService = FakeItemCatalogueSearchService()
             ..defaultResultBuilder = _singleVariationExactMatch;
@@ -1103,13 +1091,7 @@ void main() {
             ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
               rawCode,
               scannedAt: DateTime(2026, 1, 1),
-              availabilityByLocation: [
-                StockLocationAvailability(
-                  locationCode: 'LOC-01',
-                  remainingQuantity: remainingQuantity,
-                  unitOfMeasureCode: 'MT',
-                ),
-              ],
+              availabilityByLocation: availability,
             );
           await _pumpHomeScreen(
             tester,
@@ -1121,182 +1103,119 @@ void main() {
           await tester.enterText(find.byType(TextField), 'ITEM-THRESHOLD');
           await tester.tap(find.byIcon(Icons.search_rounded));
           await tester.pumpAndSettle();
-          await tester.ensureVisible(
-            find.byKey(const ValueKey('variation-ITEM-THRESHOLD')),
-          );
-          await tester.pump();
-          await tester.tap(
-            find.byKey(const ValueKey('variation-ITEM-THRESHOLD')),
-          );
-          await tester.pumpAndSettle();
+          await _tapCheck(tester, 'ITEM-THRESHOLD');
         }
 
-        Color? rowBackground(WidgetTester tester) {
-          final container = tester.widget<Container>(
-            find.descendant(
-              of: find.byKey(const ValueKey('home-availability-row-0')),
-              matching: find.byType(Container),
-            ),
-          );
-          return (container.decoration as BoxDecoration).color;
-        }
+        Future<void> checkMeters(WidgetTester tester, num quantity) =>
+            checkWith(tester, [
+              StockLocationAvailability(
+                locationCode: 'LOC-01',
+                remainingQuantity: quantity,
+                unitOfMeasureCode: 'MT',
+              ),
+            ]);
 
-        testWidgets('99 m shows the location and Contact Support, not the '
-            'quantity, with a yellow row background', (tester) async {
-          await tapVariationWithQuantity(tester, 99);
+        testWidgets('0 m → red "Out of stock" pill, no location, no number', (
+          tester,
+        ) async {
+          await checkMeters(tester, 0);
 
-          expect(find.text('LOC-01'), findsOneWidget);
+          expect(find.text('Out of stock'), findsOneWidget);
+          expect(find.text('Available'), findsNothing);
+          expect(find.text('LOC-01'), findsNothing);
+          expect(_pillColor(tester, 'out'), AppColors.stockOutBg);
+        });
+
+        testWidgets('99 m → yellow "contact support" pill, not the quantity', (
+          tester,
+        ) async {
+          await checkMeters(tester, 99);
+
           expect(find.text('Contact Support for inquiries'), findsOneWidget);
           expect(find.text('Available'), findsNothing);
           expect(find.textContaining('99'), findsNothing);
-          expect(rowBackground(tester), AppColors.warningYellow);
+          expect(find.text('LOC-01'), findsNothing);
+          expect(_pillColor(tester, 'low'), AppColors.stockLowBg);
         });
 
-        testWidgets('100 m (the boundary) shows the location and Contact '
-            'Support, not the quantity, with a yellow row background', (
+        testWidgets('100 m (the boundary) → yellow "contact support" pill', (
           tester,
         ) async {
-          await tapVariationWithQuantity(tester, 100);
+          await checkMeters(tester, 100);
 
-          expect(find.text('LOC-01'), findsOneWidget);
           expect(find.text('Contact Support for inquiries'), findsOneWidget);
           expect(find.text('Available'), findsNothing);
           expect(find.textContaining('100'), findsNothing);
-          expect(rowBackground(tester), AppColors.warningYellow);
+          expect(_pillColor(tester, 'low'), AppColors.stockLowBg);
         });
 
-        testWidgets('100.01 m shows Available without the real quantity, '
-            'with a green row background', (tester) async {
-          await tapVariationWithQuantity(tester, 100.01);
+        testWidgets('100.01 m → green "Available" pill, not the quantity', (
+          tester,
+        ) async {
+          await checkMeters(tester, 100.01);
 
-          expect(find.text('LOC-01'), findsOneWidget);
           expect(find.text('Available'), findsOneWidget);
           expect(find.textContaining('100.01'), findsNothing);
           expect(
             find.textContaining('Contact Support for inquiries'),
             findsNothing,
           );
-          expect(rowBackground(tester), AppColors.mint);
+          expect(_pillColor(tester, 'available'), AppColors.stockAvailableBg);
         });
 
-        testWidgets('150 m shows Available without the real quantity, with '
-            'a green row background', (tester) async {
-          await tapVariationWithQuantity(tester, 150);
-
-          expect(find.text('LOC-01'), findsOneWidget);
-          expect(find.text('Available'), findsOneWidget);
-          expect(find.textContaining('150'), findsNothing);
-          expect(
-            find.textContaining('Contact Support for inquiries'),
-            findsNothing,
-          );
-          expect(rowBackground(tester), AppColors.mint);
-        });
-
-        testWidgets('a non-meters unit at or below 100 still shows its '
-            'quantity, and keeps the default (no colored) row background — '
-            'the MT threshold/green-yellow visual rule must not apply to it '
-            '(the threshold is meters-specific)', (tester) async {
-          final catalogueSearchService = FakeItemCatalogueSearchService()
-            ..defaultResultBuilder = _singleVariationExactMatch;
-          final stockLookupService = FakeStockLookupService()
-            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
-              rawCode,
-              scannedAt: DateTime(2026, 1, 1),
-              availabilityByLocation: const [
-                StockLocationAvailability(
-                  locationCode: 'LOC-01',
-                  remainingQuantity: 15,
-                  unitOfMeasureCode: 'YD',
-                ),
-              ],
-            );
-          await _pumpHomeScreen(
-            tester,
-            390,
-            catalogueSearchService: catalogueSearchService,
-            checkAvailabilityService: stockLookupService,
-          );
-
-          await tester.enterText(find.byType(TextField), 'ITEM-YD');
-          await tester.tap(find.byIcon(Icons.search_rounded));
-          await tester.pumpAndSettle();
-          await tester.ensureVisible(
-            find.byKey(const ValueKey('variation-ITEM-YD')),
-          );
-          await tester.pump();
-          await tester.tap(find.byKey(const ValueKey('variation-ITEM-YD')));
-          await tester.pumpAndSettle();
-
-          expect(find.text('LOC-01'), findsOneWidget);
-          expect(find.text('Available'), findsOneWidget);
-          expect(find.text('15 YD'), findsNothing);
-          expect(
-            find.textContaining('Contact Support for inquiries'),
-            findsNothing,
-          );
-          // No MT-threshold styling: the row must not be wrapped in the
-          // colored Container that MT rows get — it must not "become
-          // green" just because it isn't low stock.
-          expect(
-            find.descendant(
-              of: find.byKey(const ValueKey('home-availability-row-0')),
-              matching: find.byType(Container),
-            ),
-            findsNothing,
-          );
-        });
-
-        testWidgets('a non-meters unit above 100 also keeps the default '
-            '(no colored) row background — never green from this feature', (
+        testWidgets('150 m → green "Available" pill, not the quantity', (
           tester,
         ) async {
-          final catalogueSearchService = FakeItemCatalogueSearchService()
-            ..defaultResultBuilder = _singleVariationExactMatch;
-          final stockLookupService = FakeStockLookupService()
-            ..defaultResultBuilder = (rawCode) => StockLookupSuccess(
-              rawCode,
-              scannedAt: DateTime(2026, 1, 1),
-              availabilityByLocation: const [
-                StockLocationAvailability(
-                  locationCode: 'LOC-01',
-                  remainingQuantity: 20,
-                  unitOfMeasureCode: 'PCS',
-                ),
-              ],
-            );
-          await _pumpHomeScreen(
-            tester,
-            390,
-            catalogueSearchService: catalogueSearchService,
-            checkAvailabilityService: stockLookupService,
-          );
+          await checkMeters(tester, 150);
 
-          await tester.enterText(find.byType(TextField), 'ITEM-PCS');
-          await tester.tap(find.byIcon(Icons.search_rounded));
-          await tester.pumpAndSettle();
-          await tester.ensureVisible(
-            find.byKey(const ValueKey('variation-ITEM-PCS')),
-          );
-          await tester.pump();
-          await tester.tap(find.byKey(const ValueKey('variation-ITEM-PCS')));
-          await tester.pumpAndSettle();
-
-          expect(find.text('LOC-01'), findsOneWidget);
           expect(find.text('Available'), findsOneWidget);
-          expect(find.textContaining('20 PCS'), findsNothing);
-          expect(
-            find.descendant(
-              of: find.byKey(const ValueKey('home-availability-row-0')),
-              matching: find.byType(Container),
+          expect(find.textContaining('150'), findsNothing);
+          expect(_pillColor(tester, 'available'), AppColors.stockAvailableBg);
+        });
+
+        testWidgets('a non-meters unit with stock → green "Available" pill, '
+            'the meters threshold does not apply and no quantity is shown', (
+          tester,
+        ) async {
+          await checkWith(tester, const [
+            StockLocationAvailability(
+              locationCode: 'LOC-01',
+              remainingQuantity: 15,
+              unitOfMeasureCode: 'YD',
             ),
+          ]);
+
+          expect(find.text('Available'), findsOneWidget);
+          expect(find.text('15 YD'), findsNothing);
+          expect(find.text('15'), findsNothing);
+          expect(find.text('LOC-01'), findsNothing);
+          expect(
+            find.textContaining('Contact Support for inquiries'),
             findsNothing,
           );
+          expect(_pillColor(tester, 'available'), AppColors.stockAvailableBg);
+        });
+
+        testWidgets('a non-meters unit summing to zero → red "Out of stock"', (
+          tester,
+        ) async {
+          await checkWith(tester, const [
+            StockLocationAvailability(
+              locationCode: 'LOC-01',
+              remainingQuantity: 0,
+              unitOfMeasureCode: 'PCS',
+            ),
+          ]);
+
+          expect(find.text('Out of stock'), findsOneWidget);
+          expect(find.text('Available'), findsNothing);
+          expect(_pillColor(tester, 'out'), AppColors.stockOutBg);
         });
       });
 
       testWidgets(
-        'duplicate submissions are prevented while a lookup is active',
+        'a second tap on the same row while its lookup is in flight does not '
+        'start a duplicate',
         (tester) async {
           final catalogueSearchService = FakeItemCatalogueSearchService()
             ..defaultResultBuilder = _singleVariationExactMatch;
@@ -1313,27 +1232,25 @@ void main() {
           await tester.tap(find.byIcon(Icons.search_rounded));
           await tester.pumpAndSettle();
 
-          final variationFinder = find.byKey(
-            const ValueKey('variation-ITEM-DUP'),
+          final checkButton = find.byKey(
+            const ValueKey('variation-check-ITEM-DUP'),
           );
-          await tester.ensureVisible(variationFinder);
+          await tester.ensureVisible(checkButton);
           await tester.pump();
-          await tester.tap(variationFinder);
-          await tester.pump();
-
-          expect(stockLookupService.callCount, 1);
-
-          // A further tap while the lookup is loading must not start a
-          // second one.
-          await tester.ensureVisible(variationFinder);
-          await tester.pump();
-          await tester.tap(variationFinder);
+          await tester.tap(checkButton);
           await tester.pump();
 
           expect(stockLookupService.callCount, 1);
+          // While loading, the inline control is a spinner, not the button.
+          expect(
+            find.byKey(const ValueKey('variation-checking-ITEM-DUP')),
+            findsOneWidget,
+          );
 
           gate.complete();
           await tester.pumpAndSettle();
+
+          expect(stockLookupService.callCount, 1);
         },
       );
 
@@ -1354,12 +1271,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'ITEM-401');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-ITEM-401')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-ITEM-401')));
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, 'ITEM-401');
 
         expect(find.text('Available'), findsNothing);
         expect(
@@ -1386,12 +1298,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'ITEM-502');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-ITEM-502')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-ITEM-502')));
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, 'ITEM-502');
 
         expect(
           find.text('Something went wrong. Please try again.'),
@@ -1416,12 +1323,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'ITEM-503');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-ITEM-503')),
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('variation-ITEM-503')));
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, 'ITEM-503');
 
         expect(find.text('Temporarily unavailable.'), findsOneWidget);
       });
@@ -1443,14 +1345,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'ITEM-MALFORMED');
         await tester.tap(find.byIcon(Icons.search_rounded));
         await tester.pumpAndSettle();
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('variation-ITEM-MALFORMED')),
-        );
-        await tester.pump();
-        await tester.tap(
-          find.byKey(const ValueKey('variation-ITEM-MALFORMED')),
-        );
-        await tester.pumpAndSettle();
+        await _tapCheck(tester, 'ITEM-MALFORMED');
 
         expect(
           find.text('Something went wrong. Please try again.'),
@@ -1477,13 +1372,7 @@ void main() {
           await tester.enterText(find.byType(TextField), 'ITEM-RETRY');
           await tester.tap(find.byIcon(Icons.search_rounded));
           await tester.pumpAndSettle();
-          final variationFinder = find.byKey(
-            const ValueKey('variation-ITEM-RETRY'),
-          );
-          await tester.ensureVisible(variationFinder);
-          await tester.pump();
-          await tester.tap(variationFinder);
-          await tester.pumpAndSettle();
+          await _tapCheck(tester, 'ITEM-RETRY');
 
           expect(stockLookupService.callCount, 1);
           expect(
@@ -1505,14 +1394,17 @@ void main() {
                   ),
                 ],
               );
-          await tester.ensureVisible(variationFinder);
-          await tester.pump();
-          await tester.tap(variationFinder);
-          await tester.pumpAndSettle();
+          // The inline control is now a "Retry" button (same key); tapping it
+          // sends a fresh request.
+          await _tapCheck(tester, 'ITEM-RETRY');
 
           expect(stockLookupService.callCount, 2);
-          expect(find.text('LOC-01'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('variation-status-available')),
+            findsOneWidget,
+          );
           expect(find.text('Available'), findsOneWidget);
+          expect(find.text('LOC-01'), findsNothing);
           expect(find.textContaining('150'), findsNothing);
           expect(
             find.text('Something went wrong. Please try again.'),
@@ -1577,12 +1469,7 @@ void main() {
           );
           expect(find.byKey(const ValueKey('variation-161012')), findsNothing);
 
-          await tester.ensureVisible(
-            find.byKey(const ValueKey('variation-110121')),
-          );
-          await tester.pump();
-          await tester.tap(find.byKey(const ValueKey('variation-110121')));
-          await tester.pumpAndSettle();
+          await _tapCheck(tester, '110121');
 
           expect(stockLookupService.calls, ['110121']);
         },

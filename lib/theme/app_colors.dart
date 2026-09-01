@@ -68,4 +68,34 @@ class AppColors {
   /// Dark amber foreground text/icon color for content on a [warningYellow]
   /// background — chosen for sufficient contrast against it.
   static const Color darkAmber = Color(0xFF7A5B00);
+
+  // --- "Check Availability" per-variation status pills (Home screen) ---
+  //
+  // A dedicated, saturated set used ONLY by the Home Check Availability
+  // status pills — intentionally not the cyan-leaning [mint]/pale
+  // [warningYellow] pairings used elsewhere (scan overlay, badges,
+  // QuickHistoryCard, ...), which keep their existing values. Each fill is
+  // paired with a foreground chosen for legible text directly on it.
+
+  /// Forest-green fill for the in-stock status (summed remaining quantity
+  /// above the low-stock threshold). Paired with [stockAvailableText].
+  static const Color stockAvailableBg = Color(0xFF2E7D32);
+
+  /// White foreground for text on [stockAvailableBg].
+  static const Color stockAvailableText = Color(0xFFFFFFFF);
+
+  /// Traffic-light yellow fill for the low-stock ("contact support") status
+  /// (summed remaining quantity at/below the threshold, but above zero).
+  /// Paired with [stockLowText].
+  static const Color stockLowBg = Color(0xFFFFC400);
+
+  /// Near-black foreground for text on [stockLowBg].
+  static const Color stockLowText = Color(0xFF3D2E00);
+
+  /// Solid red fill for the out-of-stock status (nothing remaining across
+  /// any location). Paired with [stockOutText].
+  static const Color stockOutBg = Color(0xFFD32F2F);
+
+  /// White foreground for text on [stockOutBg].
+  static const Color stockOutText = Color(0xFFFFFFFF);
 }

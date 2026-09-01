@@ -57,7 +57,9 @@
     "catalogueGroupLabel": "Catalogue {code}",
     "catalogueVariationCount": "{count} variantes",
     "catalogueGroupTotalInventory": "Total du groupe : {amount}",
-    "catalogueSelectVariation": "Sélectionnez une variante"
+    "catalogueSelectVariation": "Sélectionnez une variante",
+    "checkVariationAction": "Vérifier",
+    "stockOutOfStock": "Rupture de stock"
   },
   "balanceCard": {
     "label": "SOLDE ACTUEL",
