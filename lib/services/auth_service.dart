@@ -357,6 +357,12 @@ class AuthService implements LogoutService {
   /// navigates — the caller (see `EditProfileScreen._handleLogout`) owns
   /// all three, exactly as it already does for the local-only flow this
   /// replaces.
+  ///
+  /// Deliberately never touches this account's locally-persisted customer
+  /// profile (see `LocalCustomerProfileStore`): that store is keyed by
+  /// `userId` and is meant to survive logout, so the same account finds its
+  /// saved full name/email/company/business address restored on a later
+  /// login on this device.
   @override
   Future<void> logout() async {
     AuthSession? stored;

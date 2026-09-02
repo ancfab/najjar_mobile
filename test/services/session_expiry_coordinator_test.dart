@@ -8,13 +8,17 @@
 // auth_lifecycle_test.dart's convention) so "clears the secure session"
 // means something concrete, not just "called a fake once".
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/models/auth/auth_session.dart';
+import 'package:anc_fabrics/models/local_customer_profile.dart';
 import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
+import 'package:anc_fabrics/services/local_customer_profile_store.dart';
 import 'package:anc_fabrics/services/secure_auth_session_store.dart';
 import 'package:anc_fabrics/services/session_expiry_coordinator.dart';
 import 'package:anc_fabrics/services/session_service.dart';
@@ -199,4 +203,71 @@ void main() {
 
     expect(avatarController.clearCallCount, 1);
   });
+
+  test('does not import local_customer_profile_store.dart — '
+      'handleUnauthorized() must never clear the invalidated account\'s '
+      'locally-persisted customer profile; that store is deliberately kept '
+      'across session invalidation so the same account finds it restored the '
+      'next time it signs in on this device', () {
+    final source = File(
+      'lib/services/session_expiry_coordinator.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains("import 'local_customer_profile_store")));
+  });
+
+  testWidgets(
+    "handleUnauthorized never touches the invalidated account's local "
+    'customer profile, which remains retrievable afterward',
+    (tester) async {
+      final fakeSecureStore = FakeSecureKeyValueStore();
+      final sessionStore = SecureAuthSessionStore(secureStore: fakeSecureStore);
+      await sessionStore.save(_session());
+      final localProfileStore = SecureLocalCustomerProfileStore(
+        secureStore: FakeSecureKeyValueStore(),
+      );
+      await localProfileStore.save(
+        _session().userId,
+        const LocalCustomerProfile(
+          fullName: 'Alexander Mitchell',
+          email: 'alex.mitchell@example.com',
+          company: 'Vanguard Global Logistics',
+          businessAddress: '450 Fashion Ave, Suite 1205, New York, NY 10123',
+        ),
+      );
+      final avatarController = _FakeAvatarController();
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final coordinator = SessionExpiryCoordinator(
+        sessionService: SecureSessionService(sessionStore: sessionStore),
+        avatarController: avatarController,
+        navigatorKey: navigatorKey,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          navigatorKey: navigatorKey,
+          home: const _AuthenticatedScreen(),
+        ),
+      );
+      await tester.pump();
+
+      await coordinator.handleUnauthorized();
+      await tester.pumpAndSettle();
+
+      expect(
+        await sessionStore.read(),
+        isNull,
+        reason: 'the secure session must still be cleared',
+      );
+      final restored = await localProfileStore.load(_session().userId);
+      expect(restored?.fullName, 'Alexander Mitchell');
+    },
+  );
 }

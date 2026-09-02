@@ -23,11 +23,14 @@ import 'package:anc_fabrics/models/auth/login_failure.dart';
 import 'package:anc_fabrics/models/auth/session_validation_result.dart';
 import 'package:anc_fabrics/models/auth/update_profile_result.dart';
 import 'package:anc_fabrics/models/auth/upload_avatar_result.dart';
+import 'package:anc_fabrics/models/local_customer_profile.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
+import 'package:anc_fabrics/services/local_customer_profile_store.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 
 import '../helpers/fake_auth_session_store.dart';
+import '../helpers/fake_secure_key_value_store.dart';
 import '../helpers/recording_multipart_http_client.dart';
 import '../helpers/valid_avatar_image.dart';
 
@@ -1449,6 +1452,72 @@ void main() {
         source,
         isNot(contains("import '../services/session_expiry_coordinator")),
       );
+    });
+
+    test('does not import local_customer_profile_store.dart — logout() must '
+        'never clear this account\'s locally-persisted customer profile; that '
+        'store is deliberately kept across logout so the same account finds '
+        'it restored the next time it signs in on this device', () {
+      final source = File('lib/services/auth_service.dart').readAsStringSync();
+
+      expect(source, isNot(contains("import 'local_customer_profile_store")));
+    });
+
+    test('a saved local customer profile survives a successful logout and is '
+        'still retrievable for the same userId afterward', () async {
+      store.seed(storedSession());
+      final secureKeyValueStore = FakeSecureKeyValueStore();
+      final localProfileStore = SecureLocalCustomerProfileStore(
+        secureStore: secureKeyValueStore,
+      );
+      await localProfileStore.save(
+        7,
+        const LocalCustomerProfile(
+          fullName: 'Alexander Mitchell',
+          email: 'alex.mitchell@example.com',
+          company: 'Vanguard Global Logistics',
+          businessAddress: '450 Fashion Ave, Suite 1205, New York, NY 10123',
+        ),
+      );
+      final http = loggedOutHttpClient();
+      final service = _service(http, store);
+
+      await service.logout();
+
+      final restored = await localProfileStore.load(7);
+      expect(restored?.fullName, 'Alexander Mitchell');
+      expect(restored?.email, 'alex.mitchell@example.com');
+      expect(restored?.company, 'Vanguard Global Logistics');
+      expect(
+        restored?.businessAddress,
+        '450 Fashion Ave, Suite 1205, New York, NY 10123',
+      );
+    });
+
+    test('a saved local customer profile also survives logout when the remote '
+        'revocation call fails', () async {
+      store.seed(storedSession());
+      final secureKeyValueStore = FakeSecureKeyValueStore();
+      final localProfileStore = SecureLocalCustomerProfileStore(
+        secureStore: secureKeyValueStore,
+      );
+      await localProfileStore.save(
+        7,
+        const LocalCustomerProfile(
+          fullName: 'Alexander Mitchell',
+          email: 'alex.mitchell@example.com',
+          company: 'Vanguard Global Logistics',
+          businessAddress: '450 Fashion Ave, Suite 1205, New York, NY 10123',
+        ),
+      );
+      final http = _RecordingHttpClient(
+        (req) async => _jsonResponse(502, const {}, request: req),
+      );
+      final service = _service(http, store);
+
+      await service.logout();
+
+      expect((await localProfileStore.load(7))?.fullName, isNotNull);
     });
   });
 

@@ -21,12 +21,14 @@ import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/login_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
+import 'package:anc_fabrics/models/local_customer_profile.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/avatar_image_processor.dart';
 import 'package:anc_fabrics/services/avatar_permission_service.dart';
 import 'package:anc_fabrics/services/avatar_picker_service.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
+import 'package:anc_fabrics/services/local_customer_profile_store.dart';
 import 'package:anc_fabrics/services/profile_service.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
@@ -36,6 +38,7 @@ import 'helpers/fake_avatar_cropper_service.dart';
 import 'helpers/fake_avatar_image_processor.dart';
 import 'helpers/fake_avatar_permission_service.dart';
 import 'helpers/fake_avatar_picker_service.dart';
+import 'helpers/fake_local_customer_profile_store.dart';
 import 'helpers/fake_logout_service.dart';
 import 'helpers/fake_profile_service.dart';
 import 'helpers/recording_multipart_http_client.dart';
@@ -144,6 +147,25 @@ Map<String, dynamic> updateMeUserJson({
   'must_change_password': false,
 };
 
+/// A [LocalCustomerProfileStore] whose [load] always throws, simulating a
+/// misbehaving implementation (the real [SecureLocalCustomerProfileStore]
+/// never throws from [load] — see its doc comment) so this screen's own
+/// defensive handling (falling back to the mock defaults instead of
+/// crashing) is verified independently of that guarantee.
+class _ThrowingLoadLocalCustomerProfileStore
+    implements LocalCustomerProfileStore {
+  @override
+  Future<LocalCustomerProfile?> load(int userId) async {
+    throw Exception('local profile store unavailable');
+  }
+
+  @override
+  Future<void> save(int userId, LocalCustomerProfile profile) async {}
+
+  @override
+  Future<void> clear(int userId) async {}
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -156,6 +178,7 @@ void main() {
     FakeProfileService? service,
     FakeLogoutService? logoutService,
     AuthService? authService,
+    LocalCustomerProfileStore? localProfileStore,
     FakeAvatarPickerService? avatarPickerService,
     FakeAvatarPermissionService? avatarPermissionService,
     FakeAvatarCropperService? avatarCropperService,
@@ -180,6 +203,8 @@ void main() {
           service: service ?? FakeProfileService(),
           logoutService: logoutService ?? FakeLogoutService(),
           authService: authService ?? _authServiceFor(),
+          localProfileStore:
+              localProfileStore ?? FakeLocalCustomerProfileStore(),
           avatarPickerService: avatarPickerService ?? FakeAvatarPickerService(),
           avatarPermissionService:
               avatarPermissionService ?? FakeAvatarPermissionService(),
@@ -208,6 +233,7 @@ void main() {
     FakeProfileService? service,
     FakeLogoutService? logoutService,
     AuthService? authService,
+    LocalCustomerProfileStore? localProfileStore,
     CurrentUserAvatarController? avatarController,
   }) async {
     await tester.pumpWidget(
@@ -229,6 +255,8 @@ void main() {
                       service: service ?? FakeProfileService(),
                       logoutService: logoutService ?? FakeLogoutService(),
                       authService: authService ?? _authServiceFor(),
+                      localProfileStore:
+                          localProfileStore ?? FakeLocalCustomerProfileStore(),
                       avatarController:
                           avatarController ?? CurrentUserAvatarController(),
                     ),
@@ -987,7 +1015,7 @@ void main() {
 
           expect(
             fieldText(tester, const ValueKey('edit-profile-full-name-field')),
-            kMockUserProfile.fullName,
+            '',
           );
           expect(profileService.submittedRequests, isEmpty);
 
@@ -1113,7 +1141,8 @@ void main() {
 
   group('Form fields', () {
     testWidgets(
-      'The four mock-backed fields render with the expected initial values',
+      'The four locally-owned fields render empty when no local profile has '
+      'been saved yet — never fabricated mock values',
       (tester) async {
         await pumpEditProfile(tester);
 
@@ -1124,22 +1153,22 @@ void main() {
 
         expect(
           fieldText(tester, const ValueKey('edit-profile-full-name-field')),
-          kMockUserProfile.fullName,
+          '',
         );
         expect(
           fieldText(tester, const ValueKey('edit-profile-email-field')),
-          kMockUserProfile.email,
+          '',
         );
         expect(
           fieldText(tester, const ValueKey('edit-profile-company-field')),
-          kMockUserProfile.company,
+          '',
         );
         expect(
           fieldText(
             tester,
             const ValueKey('edit-profile-business-address-field'),
           ),
-          kMockUserProfile.businessAddress,
+          '',
         );
       },
     );
@@ -1157,6 +1186,184 @@ void main() {
 
       expect(fieldText(tester, key), 'Line one\nLine two\nLine three');
     });
+  });
+
+  group('Local customer profile persistence', () {
+    const savedProfile = LocalCustomerProfile(
+      fullName: 'Priya Natarajan',
+      email: 'priya.n@example.com',
+      company: 'Coastal Textiles LLC',
+      businessAddress: '12 Harbor Road, Muscat',
+    );
+
+    testWidgets(
+      'Loads a previously-saved local profile for the authenticated userId '
+      'instead of the mock defaults',
+      (tester) async {
+        final localProfileStore = FakeLocalCustomerProfileStore()
+          ..seed(_defaultIdentitySession().userId, savedProfile);
+        await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-full-name-field')),
+          savedProfile.fullName,
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-email-field')),
+          savedProfile.email,
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-company-field')),
+          savedProfile.company,
+        );
+        expect(
+          fieldText(
+            tester,
+            const ValueKey('edit-profile-business-address-field'),
+          ),
+          savedProfile.businessAddress,
+        );
+      },
+    );
+
+    testWidgets(
+      'A new account with no local profile yet starts with genuinely empty '
+      'fields, and nothing is written back to the store on open',
+      (tester) async {
+        final localProfileStore = FakeLocalCustomerProfileStore();
+        await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-full-name-field')),
+          '',
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-email-field')),
+          '',
+        );
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-company-field')),
+          '',
+        );
+        expect(
+          fieldText(
+            tester,
+            const ValueKey('edit-profile-business-address-field'),
+          ),
+          '',
+        );
+        expect(localProfileStore.savedUserIds, isEmpty);
+      },
+    );
+
+    testWidgets('Saving persists the edited fields locally, keyed by the '
+        'authenticated userId', (tester) async {
+      final localProfileStore = FakeLocalCustomerProfileStore();
+      await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-profile-full-name-field')),
+        'Priya Natarajan',
+      );
+      await tester.pump();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('edit-profile-save-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('edit-profile-save-button')));
+      await tester.pumpAndSettle();
+
+      final saved = await localProfileStore.load(
+        _defaultIdentitySession().userId,
+      );
+      expect(saved?.fullName, 'Priya Natarajan');
+      // The other three fields were never touched, so they persist as the
+      // genuinely empty values they started with — never a fabricated
+      // mock value.
+      expect(saved?.email, '');
+      expect(saved?.company, '');
+      expect(saved?.businessAddress, '');
+    });
+
+    testWidgets(
+      'Saving persists locally even though ProfileService (no real backend '
+      'yet) reports updates as not connected',
+      (tester) async {
+        final localProfileStore = FakeLocalCustomerProfileStore();
+        await pumpEditProfile(
+          tester,
+          service: FakeProfileService(result: ProfileUpdateResult.unavailable),
+          localProfileStore: localProfileStore,
+        );
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-company-field')),
+          'Sterling Freight Co.',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Profile updates are not connected yet.'),
+          findsOneWidget,
+        );
+        final saved = await localProfileStore.load(
+          _defaultIdentitySession().userId,
+        );
+        expect(saved?.company, 'Sterling Freight Co.');
+      },
+    );
+
+    testWidgets(
+      'Reopening the screen after a save shows the previously saved local '
+      'values, not the mock defaults',
+      (tester) async {
+        final localProfileStore = FakeLocalCustomerProfileStore();
+        await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+        await tester.enterText(
+          find.byKey(const ValueKey('edit-profile-full-name-field')),
+          'Priya Natarajan',
+        );
+        await tester.pump();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('edit-profile-save-button')),
+        );
+        await tester.pumpAndSettle();
+
+        // Simulates leaving and reopening Edit Profile: a fresh screen
+        // instance backed by the same (persistent) local profile store.
+        await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-full-name-field')),
+          'Priya Natarajan',
+        );
+      },
+    );
+
+    testWidgets(
+      'A local profile store that fails to load does not crash and leaves '
+      'the fields empty (never falling back to fabricated mock data)',
+      (tester) async {
+        final localProfileStore = _ThrowingLoadLocalCustomerProfileStore();
+        await pumpEditProfile(tester, localProfileStore: localProfileStore);
+
+        expect(tester.takeException(), isNull);
+        expect(
+          fieldText(tester, const ValueKey('edit-profile-full-name-field')),
+          '',
+        );
+      },
+    );
   });
 
   group('Identity fields (username/phone)', () {
@@ -1545,10 +1752,14 @@ void main() {
       expect(service.submittedRequests, hasLength(1));
       final request = service.submittedRequests.single;
       expect(request.fullName, 'Alexandra Mitchell');
-      expect(request.email, kMockUserProfile.email);
+      // Untouched fields are submitted as the genuinely empty values they
+      // started with — never a fabricated mock value. `phone` is the one
+      // exception: it is not a locally-owned customer field, so it still
+      // comes from widget.profile (see the class doc comment).
+      expect(request.email, '');
       expect(request.phone, kMockUserProfile.phone);
-      expect(request.company, kMockUserProfile.company);
-      expect(request.businessAddress, kMockUserProfile.businessAddress);
+      expect(request.company, '');
+      expect(request.businessAddress, '');
     });
 
     testWidgets(
@@ -1557,9 +1768,12 @@ void main() {
         final service = FakeProfileService();
         await pumpEditProfile(tester, service: service);
 
+        // Whitespace-only, which trims to '' — the field's empty baseline
+        // (no local profile saved yet) — so this must not count as a
+        // change.
         await tester.enterText(
           find.byKey(const ValueKey('edit-profile-full-name-field')),
-          '  ${kMockUserProfile.fullName}  ',
+          '   ',
         );
         await tester.pump();
         await tester.ensureVisible(
@@ -1575,14 +1789,15 @@ void main() {
     );
 
     testWidgets(
-      'Blocks submission and shows an error when Full Name is empty',
+      'Full Name is optional — leaving it empty does not block submission '
+      '(no local profile means it legitimately starts blank)',
       (tester) async {
         final service = FakeProfileService();
         await pumpEditProfile(tester, service: service);
 
         await tester.enterText(
-          find.byKey(const ValueKey('edit-profile-full-name-field')),
-          '',
+          find.byKey(const ValueKey('edit-profile-company-field')),
+          'Sterling Freight Co.',
         );
         await tester.pump();
         await tester.ensureVisible(
@@ -1593,8 +1808,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Please enter your full name.'), findsOneWidget);
-        expect(service.submittedRequests, isEmpty);
+        expect(find.text('Please enter your full name.'), findsNothing);
+        expect(service.submittedRequests, hasLength(1));
+        expect(service.submittedRequests.single.fullName, '');
       },
     );
 
@@ -1678,7 +1894,9 @@ void main() {
 
         await tester.enterText(find.byKey(key), 'Someone Else');
         await tester.pump();
-        await tester.enterText(find.byKey(key), kMockUserProfile.fullName);
+        // Restores to '' — the field's empty baseline (no local profile
+        // saved yet).
+        await tester.enterText(find.byKey(key), '');
         await tester.pump();
 
         await tester.ensureVisible(

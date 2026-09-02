@@ -8,6 +8,7 @@ import '../localization/translations.dart';
 import '../models/auth/update_profile_result.dart';
 import '../models/auth/upload_avatar_result.dart';
 import '../models/country_code.dart';
+import '../models/local_customer_profile.dart';
 import '../models/user_profile.dart';
 import '../services/avatar_cropper_service.dart';
 import '../services/avatar_image_processor.dart';
@@ -15,6 +16,7 @@ import '../services/avatar_permission_service.dart';
 import '../services/avatar_picker_service.dart';
 import '../services/auth_service.dart';
 import '../services/current_user_avatar_controller.dart';
+import '../services/local_customer_profile_store.dart';
 import '../services/logout_service.dart';
 import '../services/profile_service.dart';
 import '../services/session_storage_exception.dart';
@@ -44,7 +46,15 @@ const int _navIndexProfile = 3;
 /// (ANC ID + last-updated label), a prefilled editable form, a full-width
 /// "Save Changes" action, and a "Logout" action.
 ///
-/// [kMockUserProfile]) once the profile API/backend contract is confirmed.
+/// The full name/email/company/business-address fields are locally-owned
+/// display data (see [LocalCustomerProfile]/[LocalCustomerProfileStore]):
+/// no confirmed backend endpoint returns or accepts them yet. They start
+/// genuinely empty and are populated only from a profile already saved
+/// locally for the signed-in account (see
+/// [_EditProfileScreenState._loadIdentity]) — never from [kMockUserProfile]
+/// or any other fabricated value, so demo data can never appear as, or be
+/// saved as, real customer information. Once the user saves, the local
+/// store is the sole source of truth for these fields going forward.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({
     super.key,
@@ -52,6 +62,7 @@ class EditProfileScreen extends StatefulWidget {
     ProfileService? service,
     this.logoutService,
     this.authService,
+    this.localProfileStore,
     AvatarPickerService? avatarPickerService,
     AvatarPermissionService? avatarPermissionService,
     AvatarCropperService? avatarCropperService,
@@ -68,18 +79,26 @@ class EditProfileScreen extends StatefulWidget {
        avatarImageProcessor =
            avatarImageProcessor ?? const DefaultAvatarImageProcessor();
 
-  /// Display/prefill data for the mock-backed form fields (full name,
-  /// email, company, business address). Defaults to the isolated mock
-  /// profile; overridable so tests can inject fixed values. Does not carry
-  /// username/phone — those are real, authenticated-identity fields
-  /// prefilled from [AuthService.currentSession] instead (see
-  /// [_EditProfileScreenState._loadIdentity]).
+  /// Display-only values for this screen's client-info section (the "ANC
+  /// ID: #..." label and the "Profile updated ... ago" caption — see
+  /// [_buildAvatarSection]) and for the fixed `phone` value forwarded to
+  /// [ProfileService.updateProfile]. Deliberately **not** used to prefill
+  /// the full name/email/company/business-address fields — those are
+  /// locally-owned customer data (see [LocalCustomerProfile]) and must
+  /// never be seeded from mock/fabricated values (see
+  /// [_EditProfileScreenState._loadIdentity]). Defaults to the isolated
+  /// mock profile; overridable so tests can inject fixed values. Does not
+  /// carry username/phone for the editable identity fields — those are
+  /// real, authenticated-identity fields prefilled from
+  /// [AuthService.currentSession] instead.
   final UserProfile profile;
 
-  /// Save-changes seam for the mock-backed fields (full name, email,
-  /// company, business address) only. Defaults to the explicitly
-  /// non-production [UnavailableProfileService]; overridable so tests can
-  /// inject a fake.
+  /// Remote save-changes seam for the full name/email/company/business-
+  /// address fields only — no confirmed backend endpoint exists yet, so
+  /// this always reports [ProfileUpdateOutcome.unavailable] in production;
+  /// [LocalCustomerProfileStore] (via [localProfileStore]) is these
+  /// fields' actual persistence. Defaults to the explicitly non-production
+  /// [UnavailableProfileService]; overridable so tests can inject a fake.
   final ProfileService service;
 
   /// Explicit-logout seam: attempts best-effort remote revocation, then
@@ -98,6 +117,14 @@ class EditProfileScreen extends StatefulWidget {
   /// instead of making a real network call or touching real secure
   /// storage.
   final AuthService? authService;
+
+  /// Local-persistence seam for the full name/email/company/business-
+  /// address fields, scoped per authenticated `userId` (see
+  /// [LocalCustomerProfileStore]). Defaults (lazily, in State — see
+  /// [_EditProfileScreenState]) to a real [SecureLocalCustomerProfileStore];
+  /// overridable so tests can inject a fake instead of touching real secure
+  /// storage.
+  final LocalCustomerProfileStore? localProfileStore;
 
   /// Camera/gallery selection seam. Overridable so tests can inject a fake
   /// instead of invoking the real platform picker.
@@ -136,18 +163,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  late final _fullNameController = TextEditingController(
-    text: widget.profile.fullName,
-  );
-  late final _emailController = TextEditingController(
-    text: widget.profile.email,
-  );
-  late final _companyController = TextEditingController(
-    text: widget.profile.company,
-  );
-  late final _businessAddressController = TextEditingController(
-    text: widget.profile.businessAddress,
-  );
+  // Locally-owned customer fields — prefilled asynchronously from
+  // LocalCustomerProfileStore (see _loadIdentity), never from
+  // widget.profile/kMockUserProfile: fabricated demo data must never appear
+  // as if it were this customer's real information, nor be savable back
+  // into their local profile. Start empty; a signed-in account with no
+  // locally-saved profile yet is expected to see genuinely empty fields
+  // until they enter their own values.
+  final _fullNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _companyController = TextEditingController();
+  final _businessAddressController = TextEditingController();
 
   final _usernameFocusNode = FocusNode();
   final _phoneFocusNode = FocusNode();
@@ -172,6 +198,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // tracking never falsely trips during the brief load.
   String _initialUsername = '';
   String _initialPhoneDigits = '';
+
+  // The authenticated userId, populated once by _loadIdentity() — the key
+  // LocalCustomerProfileStore scopes this account's full name/email/
+  // company/business-address fields under. Null until that load completes
+  // or if it never does (e.g. no session), in which case Save Changes
+  // skips local persistence rather than guessing a key.
+  int? _currentUserId;
 
   // The authenticated user's country, resolved from AuthSession.country —
   // fixed/read-only on this screen (see the class doc comment); only used
@@ -203,6 +236,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // mirrors LoginScreen's AuthService.production ownership pattern rather
   // than instantiating one per build().
   late final AuthService _authService;
+
+  // Local-persistence seam for full name/email/company/business address,
+  // resolved lazily the same way _avatarController is (the production
+  // default is a real SecureLocalCustomerProfileStore, not a const value).
+  late final LocalCustomerProfileStore _localProfileStore =
+      widget.localProfileStore ?? SecureLocalCustomerProfileStore();
 
   // Explicit-logout seam. Defaults to _authService itself (AuthService
   // implements LogoutService) unless a narrower fake is injected via
@@ -239,9 +278,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _businessAddressController,
   ];
 
-  // Whether the mock-backed fields (full name, email, company, business
-  // address) differ from their loaded baseline — gates whether Save
-  // Changes attempts the existing ProfileService call.
+  // Whether the locally-owned customer fields (full name, email, company,
+  // business address) differ from their loaded baseline — gates whether
+  // Save Changes attempts the existing ProfileService call. Name kept as
+  // "MockProfile" to match ProfileService/UnavailableProfileService's
+  // existing naming for this same seam, not because the field values
+  // themselves are mock-derived (they are not — see _loadIdentity).
   bool get _isMockProfileDirty {
     return _fullNameController.text.trim() != _initialFullName ||
         _emailController.text.trim() != _initialEmail ||
@@ -265,10 +307,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _initialFullName = widget.profile.fullName.trim();
-    _initialEmail = widget.profile.email.trim();
-    _initialCompany = widget.profile.company.trim();
-    _initialBusinessAddress = widget.profile.businessAddress.trim();
+    // Genuinely empty — not widget.profile/kMockUserProfile — until
+    // _loadIdentity's LocalCustomerProfileStore lookup resolves (see its
+    // doc comment). Kept in sync with the also-empty controllers above so
+    // _isDirty never falsely trips before that load completes.
+    _initialFullName = '';
+    _initialEmail = '';
+    _initialCompany = '';
+    _initialBusinessAddress = '';
     for (final controller in _formControllers) {
       controller.addListener(_handleFormChanged);
     }
@@ -294,6 +340,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // dial code itself is rendered read-only (see _buildFormFields) and is
   // re-attached exactly once, at submit time (see _composePhoneForSubmit),
   // so it can never be double-prefixed.
+  //
+  // Also loads this account's locally-persisted profile (full name/email/
+  // company/business address — see LocalCustomerProfileStore), keyed by
+  // the session's userId. The production LocalCustomerProfileStore never
+  // throws from load() (see its doc comment) — no profile saved yet for
+  // this account resolves to null, in which case the fields stay exactly
+  // as initState left them: genuinely empty, never a mock/fabricated
+  // value. The try/catch below is defense-in-depth against any other
+  // implementation (e.g. a test double) that doesn't honor that contract:
+  // this screen must never crash over the local profile lookup.
   Future<void> _loadIdentity() async {
     final session = await _authService.currentSession();
     if (!mounted || session == null) return;
@@ -306,12 +362,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ? session.phone.substring(country.dialCode.length)
         : session.phone;
 
+    LocalCustomerProfile? localProfile;
+    try {
+      localProfile = await _localProfileStore.load(session.userId);
+    } catch (error) {
+      debugPrint('Failed to load local customer profile: $error');
+    }
+    if (!mounted) return;
+
     setState(() {
       _selectedCountry = country;
       _usernameController.text = session.username;
       _phoneController.text = phoneDigits;
       _initialUsername = session.username;
       _initialPhoneDigits = phoneDigits;
+      _currentUserId = session.userId;
+
+      if (localProfile != null) {
+        _fullNameController.text = localProfile.fullName;
+        _emailController.text = localProfile.email;
+        _companyController.text = localProfile.company;
+        _businessAddressController.text = localProfile.businessAddress;
+        _initialFullName = localProfile.fullName.trim();
+        _initialEmail = localProfile.email.trim();
+        _initialCompany = localProfile.company.trim();
+        _initialBusinessAddress = localProfile.businessAddress.trim();
+      }
     });
   }
 
@@ -740,12 +816,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  // Runs the mock-backed profile save (full name/email/company/address, if
+  // Runs the local-profile save (full name/email/company/address, if
   // dirty) and the real identity PATCH (username/phone, if dirty)
   // independently — each only fires the request its own fields actually
   // need, so an unchanged identity never sends an empty PATCH and an
-  // unchanged mock section never calls ProfileService pointlessly. Both
+  // unchanged profile section never calls ProfileService pointlessly. Both
   // share one Save Changes button/loading state, per the existing design.
+  //
+  // The full name/email/company/business-address fields are persisted to
+  // LocalCustomerProfileStore unconditionally whenever they're dirty —
+  // independent of ProfileService's outcome. ProfileService has no
+  // confirmed real backend yet (see UnavailableProfileService), so local
+  // storage — not that call — is these fields' actual source of truth;
+  // the ProfileService call/message is preserved unchanged alongside it
+  // for whenever a real endpoint exists.
   Future<void> _handleSave() async {
     if (_isSaving || !_isDirty) return;
 
@@ -781,14 +865,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         if (!mounted) return;
         switch (result.outcome) {
           case ProfileUpdateOutcome.success:
-            // Moves the dirty-state baseline forward to what was just
-            // saved, so the form reads as clean again instead of still
-            // reporting (and warning on back navigation about) changes
-            // already saved.
-            _initialFullName = request.fullName;
-            _initialEmail = request.email;
-            _initialCompany = request.company;
-            _initialBusinessAddress = request.businessAddress;
             resultMessage =
                 result.message ?? context.t('editProfile.profileUpdated');
           case ProfileUpdateOutcome.failure:
@@ -802,6 +878,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         debugPrint('Profile update failed: $error');
         if (!mounted) return;
         resultMessage = context.t('editProfile.profileSaveFailed');
+      }
+
+      // Persisted regardless of ProfileService's outcome above — see this
+      // method's doc comment. Moves the dirty-state baseline forward to
+      // what was just saved, so the form reads as clean again instead of
+      // still reporting (and warning on back navigation about) changes
+      // already saved locally.
+      final userId = _currentUserId;
+      if (userId != null) {
+        try {
+          await _localProfileStore.save(
+            userId,
+            LocalCustomerProfile(
+              fullName: request.fullName,
+              email: request.email,
+              company: request.company,
+              businessAddress: request.businessAddress,
+            ),
+          );
+          _initialFullName = request.fullName;
+          _initialEmail = request.email;
+          _initialCompany = request.company;
+          _initialBusinessAddress = request.businessAddress;
+        } catch (error) {
+          debugPrint('Failed to persist local customer profile: $error');
+        }
       }
     }
 
@@ -1246,10 +1348,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _emailFocusNode.requestFocus(),
-            validator: (value) => validateRequiredField(
-              value,
-              context.t('editProfile.fullNameFieldError'),
-            ),
+            // Optional, not required: this field legitimately starts blank
+            // for any account with no locally-saved profile yet (see the
+            // class doc comment), and leaving it blank must never block
+            // saving an unrelated identity-only (username/phone) change.
+            validator: (_) => null,
           ),
         ),
         const SizedBox(height: 20),
@@ -1264,7 +1367,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _companyFocusNode.requestFocus(),
-            validator: (value) => validateEmailField(context, value),
+            // Optional (see the full name field's validator comment above):
+            // blank is valid, but a non-blank value is still checked for a
+            // plausible email shape.
+            validator: _validateOptionalEmail,
           ),
         ),
         const SizedBox(height: 20),
@@ -1279,10 +1385,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
             onFieldSubmitted: (_) => _businessAddressFocusNode.requestFocus(),
-            validator: (value) => validateRequiredField(
-              value,
-              context.t('editProfile.companyFieldError'),
-            ),
+            // Optional — see the full name field's validator comment above.
+            validator: (_) => null,
           ),
         ),
         const SizedBox(height: 20),
@@ -1299,14 +1403,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             maxLines: 5,
             style: const TextStyle(fontSize: 15, color: AppColors.textNavy),
             decoration: _fieldDecoration(),
-            validator: (value) => validateRequiredField(
-              value,
-              context.t('editProfile.addressFieldError'),
-            ),
+            // Optional — see the full name field's validator comment above.
+            validator: (_) => null,
           ),
         ),
       ],
     );
+  }
+
+  // Validates the email field only when it's non-blank — it is optional
+  // (see _buildFormFields' full name validator comment), but a value the
+  // user did enter is still checked for a plausible email shape, using the
+  // same pattern validateEmailField applies elsewhere in the app.
+  String? _validateOptionalEmail(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    if (!emailPattern.hasMatch(trimmed)) {
+      return context.t('validators.emailInvalid');
+    }
+    return null;
   }
 
   // [errorText], when non-null, surfaces a backend-vetted field error (see

@@ -32,6 +32,11 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 /// - Show an endpoint error toast or error card; the whole point of routing
 ///   through here is that Login appears instead, with no error state left
 ///   behind on the screen the user was just on.
+/// - Clear this account's locally-persisted customer profile (see
+///   `LocalCustomerProfileStore`): that store is keyed by `userId` and is
+///   deliberately kept across session invalidation, so the same account
+///   finds its saved full name/email/company/business address restored the
+///   next time it signs in on this device.
 class SessionExpiryCoordinator {
   SessionExpiryCoordinator({
     SessionService? sessionService,
