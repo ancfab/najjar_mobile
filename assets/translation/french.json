@@ -310,6 +310,35 @@
     "oman": "Oman",
     "lebanon": "Liban"
   },
+  "supportCity": {
+    "sharjah": "Charjah",
+    "damascus": "Damas",
+    "aleppo": "Alep",
+    "erbil": "Erbil",
+    "sulaymaniyah": "Souleimaniye",
+    "muscat": "Mascate",
+    "seeb": "Seeb",
+    "beirut": "Beyrouth"
+  },
+  "supportAddress": {
+    "uaeSharjah": "Zone industrielle, zone 18",
+    "syriaDamascus": "Route de l'aéroport international de Damas, ANC Najjar Fabric",
+    "lebanonOffice": "Route de l'aéroport - ANC Najjar Fabric",
+    "lebanonBeirut": "À côté de l'ambassade du Koweït"
+  },
+  "supportArea": {
+    "daraaSweida": "Deraa - Soueida",
+    "idlib": "Idlib",
+    "cityCenterWesternGhouta": "Centre-ville et Ghouta occidentale",
+    "easternGhouta": "Ghouta orientale",
+    "homsHama": "Homs - Hama",
+    "coast": "La côte",
+    "allGovernorates": "Tous les gouvernorats",
+    "damascus": "Damas"
+  },
+  "supportAvailability": {
+    "sixPmToNinePm": "De 18h00 à 21h00"
+  },
   "contactUs": {
     "title": "Contactez-nous",
     "tag": "CENTRE D'ASSISTANCE",

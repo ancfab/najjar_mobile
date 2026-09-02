@@ -33,6 +33,32 @@ import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 const _syntheticToken = 'synthetic-id|synthetic-secret';
 
+// English translations for the addresses that now have confirmed
+// translation keys (see assets/translation/english.json under
+// supportAddress) — Support renders these instead of the raw stored
+// literal once a key is set. Addresses left unconfirmed (Aleppo, Erbil,
+// Sulaymaniyah, Oman) keep rendering their raw stored literal untouched.
+const _uaeSharjahAddressEn = 'Industrial City, Zone 18';
+const _syriaDamascusAddressEn =
+    'Damascus International Airport Road, ANC Najjar Fabric';
+const _lebanonBeirutAddressEn = 'Next to the Kuwaiti Embassy';
+
+/// The confirmed English address translation for a region's office
+/// location, or its raw stored [SupportOfficeLocation.address] when that
+/// location's wording is still unconfirmed.
+String _expectedAddressEn(SupportOfficeLocation location) {
+  switch (location.city) {
+    case 'Sharjah':
+      return _uaeSharjahAddressEn;
+    case 'Damascus':
+      return _syriaDamascusAddressEn;
+    case 'Beirut':
+      return _lebanonBeirutAddressEn;
+    default:
+      return location.address;
+  }
+}
+
 /// An authenticated session with [country] as its login country, otherwise
 /// filled with unremarkable sample identity data — mirrors the shape
 /// `AuthSession.fromLoginResponse` would produce after a real login.
@@ -71,6 +97,23 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         home: SupportScreen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> pumpSupportLocale(WidgetTester tester, Locale locale) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: locale,
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const SupportScreen(),
       ),
     );
     await tester.pumpAndSettle();
@@ -145,7 +188,7 @@ void main() {
     // region) falls back.
     for (final location in lebanon.officeLocations) {
       expect(find.text(location.city), findsOneWidget);
-      expect(find.text(location.address), findsOneWidget);
+      expect(find.text(_expectedAddressEn(location)), findsOneWidget);
     }
     expect(
       find.text(
@@ -182,7 +225,7 @@ void main() {
         } else {
           for (final location in region.officeLocations) {
             expect(find.text(location.city), findsOneWidget);
-            expect(find.text(location.address), findsOneWidget);
+            expect(find.text(_expectedAddressEn(location)), findsOneWidget);
           }
         }
         expect(
@@ -398,11 +441,10 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
         await tester.pumpAndSettle();
 
+        // The message interpolates the localized country name for
+        // testRegion.id (UAE), not its custom test-only displayName.
         expect(
-          find.text(
-            "Couldn't open WhatsApp for ${testRegion.displayName}. Please "
-            'try again later.',
-          ),
+          find.text("Couldn't open WhatsApp for UAE. Please try again later."),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
@@ -428,11 +470,11 @@ void main() {
         await tester.pump();
 
         expect(client.attemptedUris, isEmpty);
+        // The message interpolates the localized country name for
+        // unavailableRegion.id (Syria), not its custom test-only
+        // displayName.
         expect(
-          find.text(
-            'WhatsApp support is not available for '
-            '${unavailableRegion.displayName} yet.',
-          ),
+          find.text('WhatsApp support is not available for Syria yet.'),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
@@ -471,7 +513,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text(regionB.displayName));
+        // The pill renders the localized country name for regionB.id
+        // (Lebanon), not its custom test-only displayName.
+        await tester.tap(find.text('Lebanon'));
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
@@ -614,7 +658,7 @@ void main() {
         expect(sharjah.phone, isNull);
 
         expect(find.text(sharjah.city), findsOneWidget);
-        expect(find.text(sharjah.address), findsOneWidget);
+        expect(find.text(_uaeSharjahAddressEn), findsOneWidget);
         // No verified phone for Sharjah, so no tappable call row is
         // rendered for that office location (the Direct Hotline card
         // below still has its own unrelated call icon).
@@ -919,7 +963,9 @@ void main() {
         regionB,
       ], PhoneLauncher(client: client));
 
-      await tester.tap(find.text(regionB.displayName));
+      // The pill renders the localized country name for regionB.id
+      // (Lebanon), not its custom test-only displayName.
+      await tester.tap(find.text('Lebanon'));
       await tester.pumpAndSettle();
 
       await tapHotlineNumber(tester, regionB.hotlineNumbers.first);
@@ -947,12 +993,14 @@ void main() {
           regionB,
         ], PhoneLauncher(client: client));
 
+        // Both pills render the localized country name for their id (UAE,
+        // Lebanon), not their custom test-only displayName.
         for (var i = 0; i < 3; i++) {
-          await tester.tap(find.text(regionB.displayName));
+          await tester.tap(find.text('Lebanon'));
           await tester.pumpAndSettle();
           expect(hotlineFinder(regionA.hotlineNumbers.first), findsNothing);
 
-          await tester.tap(find.text(regionA.displayName));
+          await tester.tap(find.text('UAE'));
           await tester.pumpAndSettle();
           expect(hotlineFinder(regionB.hotlineNumbers.first), findsNothing);
         }
@@ -1119,7 +1167,14 @@ void main() {
           find.byKey(const ValueKey('support-regions-loading')),
           findsNothing,
         );
-        expect(find.text('OverrideLand'), findsOneWidget);
+        // The pill renders the localized country name for the override
+        // region's id (UAE), not its custom test-only displayName — so the
+        // override is instead confirmed via the selector's own region list.
+        final selector = tester.widget<SupportRegionSelector>(
+          find.byType(SupportRegionSelector),
+        );
+        expect(selector.regions, [region]);
+        expect(find.text('UAE'), findsOneWidget);
       },
     );
   });
@@ -1388,6 +1443,207 @@ void main() {
       );
     });
   });
+
+  group('Localization', () {
+    testWidgets('Region selector pills render the localized country name in '
+        'English, Arabic, and French', (tester) async {
+      await pumpSupportLocale(tester, const Locale('en'));
+      for (final name in ['UAE', 'Syria', 'Iraq', 'Oman', 'Lebanon']) {
+        expect(find.text(name), findsOneWidget);
+      }
+
+      await pumpSupportLocale(tester, const Locale('ar'));
+      for (final name in [
+        'الإمارات العربية المتحدة',
+        'سوريا',
+        'العراق',
+        'عُمان',
+        'لبنان',
+      ]) {
+        expect(find.text(name), findsOneWidget);
+      }
+      // None of the raw English country names leak through in Arabic.
+      for (final name in ['UAE', 'Syria', 'Iraq', 'Oman', 'Lebanon']) {
+        expect(find.text(name), findsNothing);
+      }
+      final arContext = tester.element(find.byType(SupportScreen));
+      expect(Directionality.of(arContext), TextDirection.rtl);
+
+      await pumpSupportLocale(tester, const Locale('fr'));
+      for (final name in [
+        'Émirats arabes unis',
+        'Syrie',
+        'Irak',
+        'Oman',
+        'Liban',
+      ]) {
+        expect(find.text(name), findsOneWidget);
+      }
+      // None of the raw English country names leak through in French
+      // (Oman is spelled the same in EN/FR, so it's excluded here).
+      for (final name in ['UAE', 'Syria', 'Iraq', 'Lebanon']) {
+        expect(find.text(name), findsNothing);
+      }
+      final frContext = tester.element(find.byType(SupportScreen));
+      expect(Directionality.of(frContext), TextDirection.ltr);
+
+      await pumpSupportLocale(tester, const Locale('en'));
+      final enContext = tester.element(find.byType(SupportScreen));
+      expect(Directionality.of(enContext), TextDirection.ltr);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Live language switch EN -> AR -> FR updates the region '
+        'selector without navigating away or remounting the screen', (
+      tester,
+    ) async {
+      final hostKey = GlobalKey<_LocaleHostState>();
+      await tester.pumpWidget(
+        _LocaleHost(key: hostKey, child: const SupportScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Lebanon'), findsOneWidget);
+      expect(find.text('لبنان'), findsNothing);
+      expect(
+        Directionality.of(tester.element(find.byType(SupportScreen))),
+        TextDirection.ltr,
+      );
+
+      hostKey.currentState!.setLocale(const Locale('ar'));
+      await tester.pumpAndSettle();
+      expect(find.text('لبنان'), findsOneWidget);
+      expect(find.text('Lebanon'), findsNothing);
+      expect(
+        Directionality.of(tester.element(find.byType(SupportScreen))),
+        TextDirection.rtl,
+      );
+
+      hostKey.currentState!.setLocale(const Locale('fr'));
+      await tester.pumpAndSettle();
+      expect(find.text('Liban'), findsOneWidget);
+      expect(find.text('لبنان'), findsNothing);
+      expect(
+        Directionality.of(tester.element(find.byType(SupportScreen))),
+        TextDirection.ltr,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Arabic: hotline phone numbers stay LTR-readable even while '
+        'the rest of the screen is RTL', (tester) async {
+      final client = FakeUrlLauncherClient();
+      final region = SupportRegionData(
+        id: SupportRegionId.lebanon,
+        displayName: 'Lebanon',
+        hotlineNumbers: const ['+961 79 303 551', '+961 81 107 942'],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(
+            regions: [region],
+            phoneLauncher: PhoneLauncher(client: client),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screenContext = tester.element(find.byType(SupportScreen));
+      expect(Directionality.of(screenContext), TextDirection.rtl);
+
+      for (final number in region.hotlineNumbers) {
+        final numberContext = tester.element(find.text(number));
+        expect(Directionality.of(numberContext), TextDirection.ltr);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("Lebanon's Corporate Office city/address switch language "
+        'with the selected locale; the phone numbers below do not', (
+      tester,
+    ) async {
+      final lebanon = kSupportRegions.firstWhere(
+        (region) => region.id == SupportRegionId.lebanon,
+      );
+
+      await pumpSupportLocale(tester, const Locale('en'));
+      final enPill = find.text('Lebanon');
+      await tester.ensureVisible(enPill);
+      await tester.tap(enPill);
+      await tester.pumpAndSettle();
+      expect(find.text('Beirut'), findsOneWidget);
+      expect(find.text(_lebanonBeirutAddressEn), findsOneWidget);
+
+      await pumpSupportLocale(tester, const Locale('ar'));
+      final arPill = find.text('لبنان');
+      await tester.ensureVisible(arPill);
+      await tester.tap(arPill);
+      await tester.pumpAndSettle();
+      expect(find.text('بيروت'), findsOneWidget);
+      expect(find.text('بجانب السفارة الكويتية'), findsOneWidget);
+      for (final number in lebanon.hotlineNumbers) {
+        expect(find.text(number), findsOneWidget);
+      }
+
+      await pumpSupportLocale(tester, const Locale('fr'));
+      final frPill = find.text('Liban');
+      await tester.ensureVisible(frPill);
+      await tester.tap(frPill);
+      await tester.pumpAndSettle();
+      expect(find.text('Beyrouth'), findsOneWidget);
+      expect(find.text("À côté de l'ambassade du Koweït"), findsOneWidget);
+      for (final number in lebanon.hotlineNumbers) {
+        expect(find.text(number), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  });
+}
+
+/// Hosts [child] under a [MaterialApp] whose `locale` can be switched live
+/// via [_LocaleHostState.setLocale], without ever calling `pumpWidget`
+/// again — unlike `pumpSupportLocale`, which tears down and rebuilds the
+/// whole tree on every call. This is the only way to catch a region label
+/// that resolves correctly on first build but fails to update when the
+/// app's language is switched mid-session (the real app's actual
+/// language-switch mechanism: `LocaleController.setLocale` notifies a
+/// `ListenableBuilder` that rebuilds `MaterialApp` in place).
+class _LocaleHost extends StatefulWidget {
+  const _LocaleHost({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LocaleHost> createState() => _LocaleHostState();
+}
+
+class _LocaleHostState extends State<_LocaleHost> {
+  Locale _locale = const Locale('en');
+
+  void setLocale(Locale locale) => setState(() => _locale = locale);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      locale: _locale,
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: widget.child,
+    );
+  }
 }
 
 /// Fake [SupportRegionService] whose fetch stays pending until the caller

@@ -310,6 +310,35 @@
     "oman": "Oman",
     "lebanon": "Lebanon"
   },
+  "supportCity": {
+    "sharjah": "Sharjah",
+    "damascus": "Damascus",
+    "aleppo": "Aleppo",
+    "erbil": "Erbil",
+    "sulaymaniyah": "Sulaymaniyah",
+    "muscat": "Muscat",
+    "seeb": "Seeb",
+    "beirut": "Beirut"
+  },
+  "supportAddress": {
+    "uaeSharjah": "Industrial City, Zone 18",
+    "syriaDamascus": "Damascus International Airport Road, ANC Najjar Fabric",
+    "lebanonOffice": "Airport Road - ANC Najjar Fabric",
+    "lebanonBeirut": "Next to the Kuwaiti Embassy"
+  },
+  "supportArea": {
+    "daraaSweida": "Daraa - Sweida",
+    "idlib": "Idlib",
+    "cityCenterWesternGhouta": "City Center & Western Ghouta",
+    "easternGhouta": "Eastern Ghouta",
+    "homsHama": "Homs - Hama",
+    "coast": "The Coast",
+    "allGovernorates": "All Governorates",
+    "damascus": "Damascus"
+  },
+  "supportAvailability": {
+    "sixPmToNinePm": "From 6:00 PM to 9:00 PM"
+  },
   "contactUs": {
     "title": "Contact Us",
     "tag": "SUPPORT CENTER",

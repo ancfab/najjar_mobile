@@ -27,7 +27,7 @@ class SupportRegionSelector extends StatelessWidget {
           for (final region in regions) ...[
             _RegionPill(
               key: ValueKey('support-region-${region.id.name}'),
-              label: region.displayName,
+              label: region.id.localizedName(context),
               selected: region.id == selectedRegionId,
               onTap: () => onRegionSelected(region.id),
             ),

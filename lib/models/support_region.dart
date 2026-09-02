@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import '../localization/translations.dart';
+
 /// Static identifier for each region offered in the Support screen's region
 /// selector.
 enum SupportRegionId {
@@ -31,11 +35,64 @@ enum SupportRegionId {
         return null;
     }
   }
+
+  /// Translation key for this region's localized country name (e.g.
+  /// `supportRegion.uae`), matching the enum's own `name` 1:1 with the
+  /// `supportRegion.*` keys in the translation JSON files.
+  String get translationKey => 'supportRegion.$name';
+}
+
+/// Single centralized resolver for a region's user-facing country name,
+/// mirroring the `ContactSubjectLabel.localizedLabel` pattern. Every screen
+/// that shows a country name to the user (region selector pills, fallback
+/// messages that interpolate the region name, etc.) must call this instead
+/// of re-deriving the translation key inline or reading
+/// [SupportRegionData.displayName] — [displayName] is English-only and
+/// exists solely for internal/non-UI use (log messages, test fixture
+/// identity, `orElse` fallbacks).
+extension SupportRegionIdLabel on SupportRegionId {
+  String localizedName(BuildContext context) => context.t(translationKey);
 }
 
 /// Which product line a [SupportRegionalContact] represents, used to group
 /// Syria's regional representatives on the Contact Us screen.
 enum SupportContactCategory { upholsteryFabrics, curtains }
+
+/// Stable identifier for a verified office city, used to look up its
+/// localized display name under the `supportCity.*` translation keys.
+/// [SupportOfficeLocation.cityIds] is empty for a city that hasn't been
+/// added here yet, in which case callers fall back to the raw
+/// [SupportOfficeLocation.city] string.
+enum SupportCityId {
+  sharjah,
+  damascus,
+  aleppo,
+  erbil,
+  sulaymaniyah,
+  muscat,
+  seeb,
+  beirut;
+
+  String get translationKey => 'supportCity.$name';
+}
+
+/// Stable identifier for a Syria regional-contact's coverage area, used to
+/// look up its localized display name under the `supportArea.*`
+/// translation keys. Null on a [SupportRegionalContact] whose area text
+/// hasn't been confirmed for translation yet, in which case callers fall
+/// back to the raw [SupportRegionalContact.area] string.
+enum SupportAreaId {
+  daraaSweida,
+  idlib,
+  cityCenterWesternGhouta,
+  easternGhouta,
+  homsHama,
+  coast,
+  allGovernorates,
+  damascus;
+
+  String get translationKey => 'supportArea.$name';
+}
 
 /// A single named regional support representative for a region (currently
 /// only populated for Syria), shown in the Contact Us screen's "Regional
@@ -50,19 +107,31 @@ class SupportRegionalContact {
     required this.name,
     required this.category,
     required this.area,
+    this.areaId,
     this.phone,
     this.availability,
+    this.availabilityKey,
   });
 
   final String name;
   final SupportContactCategory category;
   final String area;
+
+  /// Stable id for [area]'s localized display text. Null when this area's
+  /// wording hasn't been confirmed for translation yet, in which case the
+  /// UI falls back to the raw [area] string unchanged.
+  final SupportAreaId? areaId;
   final String? phone;
 
   /// Human-readable availability window (e.g. "6pm-9pm"), when this
   /// representative is only reachable during specific hours. Null when not
   /// applicable.
   final String? availability;
+
+  /// Translation key for [availability]'s localized text. Null when
+  /// [availability] hasn't been confirmed for translation yet, in which
+  /// case the UI falls back to the raw [availability] string unchanged.
+  final String? availabilityKey;
 }
 
 /// A single verified physical office/location for a region, shown in the
@@ -74,12 +143,26 @@ class SupportOfficeLocation {
   const SupportOfficeLocation({
     required this.city,
     required this.address,
+    this.cityIds = const [],
+    this.addressKey,
     this.name,
     this.phone,
   });
 
   final String city;
   final String address;
+
+  /// Stable id(s) for [city]'s localized display text — more than one
+  /// (e.g. Oman's combined "Muscat / Seeb") when the raw [city] string
+  /// itself combines more than one place name. Empty when this city hasn't
+  /// been added for translation yet, in which case the UI falls back to
+  /// the raw [city] string unchanged.
+  final List<SupportCityId> cityIds;
+
+  /// Translation key for [address]'s localized text. Null when this
+  /// address's wording hasn't been confirmed for translation yet, in which
+  /// case the UI falls back to the raw [address] string unchanged.
+  final String? addressKey;
 
   /// Business/location name for this specific office (e.g. "ANC Najjar
   /// Fabric" for Sharjah). Null when no verified name exists for this
@@ -107,6 +190,7 @@ class SupportRegionData {
     this.whatsappNumber,
     this.supportEmail,
     this.officeAddress,
+    this.officeAddressKey,
     this.officeLocations = const [],
     this.hotlineNumbers = const [],
     this.supportHours,
@@ -132,6 +216,11 @@ class SupportRegionData {
   /// [officeLocations] instead, since a region may have more than one
   /// verified office.
   final String? officeAddress;
+
+  /// Translation key for [officeAddress]'s localized text. Null when this
+  /// address's wording hasn't been confirmed for translation yet, in which
+  /// case the UI falls back to the raw [officeAddress] string unchanged.
+  final String? officeAddressKey;
 
   /// Every verified physical office/location for this region, shown in the
   /// Contact Us screen's "Locations" section. Empty until verified location

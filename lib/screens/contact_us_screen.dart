@@ -196,7 +196,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       _showSnackBar(
         context.t(
           'contactUs.emailUnavailableForRegion',
-          params: {'region': _region.displayName},
+          params: {'region': _region.id.localizedName(context)},
         ),
       );
       return;
@@ -473,9 +473,20 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     );
   }
 
+  /// Localized "Main Office" address text, or the raw
+  /// [SupportRegionData.officeAddress] string when this address's wording
+  /// hasn't been confirmed for translation yet. Null when no office
+  /// address is verified for this region at all.
+  String? _officeAddressText(BuildContext context) {
+    final office = _region.officeAddress;
+    if (office == null) return null;
+    final key = _region.officeAddressKey;
+    return key == null ? office : context.t(key);
+  }
+
   Widget _buildContactSummary() {
     final email = _region.supportEmail;
-    final office = _region.officeAddress;
+    final office = _officeAddressText(context);
     final hotlineNumbers = _region.hotlineNumbers;
 
     return Column(
@@ -496,13 +507,16 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 key: const ValueKey('contact-email-us-action'),
                 onTap: _onEmailUsTap,
                 borderRadius: BorderRadius.circular(8),
-                child: Text(
-                  email,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primaryNavy,
-                    height: 1.4,
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(
+                    email,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryNavy,
+                      height: 1.4,
+                    ),
                   ),
                 ),
               ),
@@ -547,12 +561,15 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                       onTap: () => _onCallTap(number),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Text(
-                          number,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primaryNavy,
+                        child: Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(
+                            number,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryNavy,
+                            ),
                           ),
                         ),
                       ),

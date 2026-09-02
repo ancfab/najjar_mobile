@@ -33,6 +33,24 @@ class SupportOfficeLocationTile extends StatelessWidget {
   /// Support copy for this label differs slightly per-locale.
   final String callNumberLabelKey;
 
+  /// Localized city display text: the joined translation of every id in
+  /// [SupportOfficeLocation.cityIds] (e.g. Oman's "Muscat / Seeb" from two
+  /// ids), or the raw [SupportOfficeLocation.city] string when no city id
+  /// has been added yet.
+  String _cityText(BuildContext context) {
+    final ids = location.cityIds;
+    if (ids.isEmpty) return location.city;
+    return ids.map((id) => context.t(id.translationKey)).join(' / ');
+  }
+
+  /// Localized address display text, or the raw
+  /// [SupportOfficeLocation.address] string when this address's wording
+  /// hasn't been confirmed for translation yet.
+  String _addressText(BuildContext context) {
+    final key = location.addressKey;
+    return key == null ? location.address : context.t(key);
+  }
+
   @override
   Widget build(BuildContext context) {
     final phone = location.phone;
@@ -42,7 +60,7 @@ class SupportOfficeLocationTile extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          location.city,
+          _cityText(context),
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -62,7 +80,7 @@ class SupportOfficeLocationTile extends StatelessWidget {
         ],
         const SizedBox(height: 4),
         Text(
-          location.address,
+          _addressText(context),
           style: const TextStyle(fontSize: 13, color: AppColors.grayText),
         ),
         if (phone != null) ...[
@@ -85,12 +103,15 @@ class SupportOfficeLocationTile extends StatelessWidget {
                       color: AppColors.primaryNavy,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      phone,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryNavy,
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(
+                        phone,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryNavy,
+                        ),
                       ),
                     ),
                   ],

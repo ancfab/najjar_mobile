@@ -23,6 +23,27 @@ import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 import 'helpers/fake_url_launcher_client.dart';
 
+// English translations for the addresses/areas/availability that now have
+// confirmed translation keys (see assets/translation/english.json under
+// supportAddress/supportArea/supportAvailability) — these screens render
+// these values instead of the raw stored literal once a key is set.
+const _lebanonOfficeAddressEn = 'Airport Road - ANC Najjar Fabric';
+const _uaeSharjahAddressEn = 'Industrial City, Zone 18';
+const _syriaDamascusAddressEn =
+    'Damascus International Airport Road, ANC Najjar Fabric';
+const _lebanonBeirutAddressEn = 'Next to the Kuwaiti Embassy';
+const _ezzAvailabilityEn = 'From 6:00 PM to 9:00 PM';
+const _syriaAreaTranslationsEn = {
+  'درعا - السويداء': 'Daraa - Sweida',
+  'إدلب': 'Idlib',
+  'مركز المدينة وغوطة غربية': 'City Center & Western Ghouta',
+  'غوطة شرقية': 'Eastern Ghouta',
+  'حمص - حماة': 'Homs - Hama',
+  'الساحل': 'The Coast',
+  'جميع المحافظات': 'All Governorates',
+  'دمشق': 'Damascus',
+};
+
 void main() {
   SupportRegionData region(SupportRegionId id) =>
       kSupportRegions.firstWhere((r) => r.id == id);
@@ -149,7 +170,7 @@ void main() {
       );
       expect(contactUsScreen.region?.id, lebanon.id);
       expect(find.text(lebanon.supportEmail!), findsOneWidget);
-      expect(find.text(lebanon.officeAddress!), findsOneWidget);
+      expect(find.text(_lebanonOfficeAddressEn), findsOneWidget);
       expect(
         find.byKey(const ValueKey('contact-region-selector')),
         findsNothing,
@@ -244,7 +265,7 @@ void main() {
       await pumpContactUs(tester, region: lebanon);
 
       expect(find.text(lebanon.supportEmail!), findsOneWidget);
-      expect(find.text(lebanon.officeAddress!), findsOneWidget);
+      expect(find.text(_lebanonOfficeAddressEn), findsOneWidget);
       expect(lebanon.hotlineNumbers, hasLength(3));
       expect(
         find.byKey(const ValueKey('contact-call-us-card')),
@@ -363,13 +384,22 @@ void main() {
       expect(find.text('Upholstery Fabrics'), findsOneWidget);
       expect(find.text('Curtains'), findsOneWidget);
 
-      // Every representative's area is shown.
+      // Every representative's area is shown, translated (all Syria areas
+      // have a confirmed supportArea.* translation key).
       for (final contact in syria.regionalContacts) {
-        expect(find.text(contact.area), findsWidgets);
+        final translatedArea = _syriaAreaTranslationsEn[contact.area];
+        expect(
+          translatedArea,
+          isNotNull,
+          reason:
+              'no EN translation stubbed '
+              'in this test for area "${contact.area}"',
+        );
+        expect(find.text(translatedArea!), findsWidgets);
       }
 
       // عز has no phone of its own: no call action for it, but its
-      // availability window is shown.
+      // availability window is shown, translated.
       final ezz = syria.regionalContacts.firstWhere((c) => c.name == 'عز');
       expect(
         find.byKey(
@@ -380,7 +410,7 @@ void main() {
         ),
         findsNothing,
       );
-      expect(find.text(ezz.availability!), findsOneWidget);
+      expect(find.text(_ezzAvailabilityEn), findsOneWidget);
 
       // A representative with a phone shows the number as call action.
       final rawiaIdlib = syria.regionalContacts.firstWhere(
@@ -420,7 +450,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(lebanon.supportEmail!), findsOneWidget);
-      expect(find.text(lebanon.officeAddress!), findsOneWidget);
+      expect(find.text(_lebanonOfficeAddressEn), findsOneWidget);
       expect(find.text(uae.hotlineNumbers.single), findsNothing);
     });
 
@@ -578,9 +608,24 @@ void main() {
       );
       expect(find.text('LOCATIONS'), findsOneWidget);
       expect(syria.officeLocations, hasLength(2));
+      final aleppo = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Aleppo',
+      );
+      // Damascus has a confirmed address translation; Aleppo's wording is
+      // still unconfirmed, so it keeps rendering the raw stored literal.
+      // Scoped to the Locations section: "Damascus" is also حلا's Curtains
+      // area translation, rendered separately in Regional Contacts.
+      final locationsSection = find.byKey(
+        const ValueKey('contact-locations-section'),
+      );
+      expect(
+        find.descendant(of: locationsSection, matching: find.text('Damascus')),
+        findsOneWidget,
+      );
+      expect(find.text(_syriaDamascusAddressEn), findsOneWidget);
+      expect(find.text('Aleppo'), findsOneWidget);
+      expect(find.text(aleppo.address), findsOneWidget);
       for (final location in syria.officeLocations) {
-        expect(find.text(location.city), findsOneWidget);
-        expect(find.text(location.address), findsOneWidget);
         expect(location.phone, isNull);
         expect(location.name, isNull);
       }
@@ -594,7 +639,7 @@ void main() {
       final beirut = lebanon.officeLocations.single;
       expect(beirut.city, 'Beirut');
       expect(find.text(beirut.city), findsOneWidget);
-      expect(find.text(beirut.address), findsOneWidget);
+      expect(find.text(_lebanonBeirutAddressEn), findsOneWidget);
     });
 
     testWidgets(
@@ -610,7 +655,7 @@ void main() {
         expect(sharjah.address, 'المدينة الصناعية، منطقة 18');
         expect(sharjah.name, 'ANC Najjar Fabric');
         expect(find.text(sharjah.city), findsOneWidget);
-        expect(find.text(sharjah.address), findsOneWidget);
+        expect(find.text(_uaeSharjahAddressEn), findsOneWidget);
         expect(find.text(sharjah.name!), findsOneWidget);
       },
     );
@@ -688,8 +733,16 @@ void main() {
       await tester.tap(find.text('Syria'));
       await tester.pumpAndSettle();
 
+      // Scoped to the Locations section: "Damascus" is also حلا's Curtains
+      // area translation, rendered separately in Regional Contacts.
+      final locationsSection = find.byKey(
+        const ValueKey('contact-locations-section'),
+      );
       expect(find.text('Sharjah'), findsNothing);
-      expect(find.text('Damascus'), findsOneWidget);
+      expect(
+        find.descendant(of: locationsSection, matching: find.text('Damascus')),
+        findsOneWidget,
+      );
       expect(find.text('Aleppo'), findsOneWidget);
     });
   });
@@ -1279,7 +1332,305 @@ void main() {
       expect(Directionality.of(context), TextDirection.ltr);
       expect(tester.takeException(), isNull);
     });
+
+    // The country name itself is only ever rendered by the region selector
+    // pills, which the screen hides whenever a region is supplied directly
+    // (the hand-off flow from Support) — see _showRegionSelector. So
+    // country-name translation is verified here via the selector, and
+    // city/address/area/availability translation is verified separately
+    // below via a directly-supplied region (which is how Support hands off
+    // to Contact Us in production).
+    group('Region selector: country name switches language', () {
+      testWidgets('English, Arabic, and French pills', (tester) async {
+        await pumpContactUs(tester, locale: const Locale('en'));
+        for (final name in ['UAE', 'Syria', 'Iraq', 'Oman', 'Lebanon']) {
+          expect(find.text(name), findsOneWidget);
+        }
+
+        await pumpContactUs(tester, locale: const Locale('ar'));
+        for (final name in [
+          'الإمارات العربية المتحدة',
+          'سوريا',
+          'العراق',
+          'عُمان',
+          'لبنان',
+        ]) {
+          expect(find.text(name), findsOneWidget);
+        }
+        // None of the raw English country names leak through in Arabic.
+        for (final name in ['UAE', 'Syria', 'Iraq', 'Oman', 'Lebanon']) {
+          expect(find.text(name), findsNothing);
+        }
+
+        await pumpContactUs(tester, locale: const Locale('fr'));
+        for (final name in [
+          'Émirats arabes unis',
+          'Syrie',
+          'Irak',
+          'Oman',
+          'Liban',
+        ]) {
+          expect(find.text(name), findsOneWidget);
+        }
+        // None of the raw English country names leak through in French
+        // (Oman happens to be spelled the same in EN/FR, so it's excluded
+        // from this negative check).
+        for (final name in ['UAE', 'Syria', 'Iraq', 'Lebanon']) {
+          expect(find.text(name), findsNothing);
+        }
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('Lebanon and UAE specifically: English shows "Lebanon", '
+          'Arabic shows "لبنان" (never "Lebanon"), French shows "Liban" '
+          '(never "Lebanon")', (tester) async {
+        await pumpContactUs(tester, locale: const Locale('en'));
+        expect(find.text('Lebanon'), findsOneWidget);
+
+        await pumpContactUs(tester, locale: const Locale('ar'));
+        expect(find.text('لبنان'), findsOneWidget);
+        expect(find.text('Lebanon'), findsNothing);
+        expect(find.text('الإمارات العربية المتحدة'), findsOneWidget);
+
+        await pumpContactUs(tester, locale: const Locale('fr'));
+        expect(find.text('Liban'), findsOneWidget);
+        expect(find.text('Lebanon'), findsNothing);
+        expect(find.text('Émirats arabes unis'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('Live language switch EN -> AR -> FR -> EN updates the '
+          'region selector without navigating away or remounting the '
+          'screen', (tester) async {
+        final hostKey = GlobalKey<_LocaleHostState>();
+        await tester.pumpWidget(
+          _LocaleHost(key: hostKey, child: const ContactUsScreen()),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Lebanon'), findsOneWidget);
+        expect(find.text('لبنان'), findsNothing);
+        expect(
+          Directionality.of(tester.element(find.byType(ContactUsScreen))),
+          TextDirection.ltr,
+        );
+
+        hostKey.currentState!.setLocale(const Locale('ar'));
+        await tester.pumpAndSettle();
+        expect(find.text('لبنان'), findsOneWidget);
+        expect(find.text('Lebanon'), findsNothing);
+        expect(
+          Directionality.of(tester.element(find.byType(ContactUsScreen))),
+          TextDirection.rtl,
+        );
+
+        hostKey.currentState!.setLocale(const Locale('fr'));
+        await tester.pumpAndSettle();
+        expect(find.text('Liban'), findsOneWidget);
+        expect(find.text('لبنان'), findsNothing);
+        expect(
+          Directionality.of(tester.element(find.byType(ContactUsScreen))),
+          TextDirection.ltr,
+        );
+
+        hostKey.currentState!.setLocale(const Locale('en'));
+        await tester.pumpAndSettle();
+        expect(find.text('Lebanon'), findsOneWidget);
+        expect(find.text('Liban'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    });
+
+    testWidgets('Arabic: phone numbers and the email address stay '
+        'LTR-readable even while the rest of the screen is RTL', (
+      tester,
+    ) async {
+      final lebanon = region(SupportRegionId.lebanon);
+      await pumpContactUs(tester, region: lebanon, locale: const Locale('ar'));
+
+      final screenContext = tester.element(find.byType(ContactUsScreen));
+      expect(Directionality.of(screenContext), TextDirection.rtl);
+
+      final emailContext = tester.element(find.text(lebanon.supportEmail!));
+      expect(Directionality.of(emailContext), TextDirection.ltr);
+
+      for (final number in lebanon.hotlineNumbers) {
+        final numberContext = tester.element(find.text(number));
+        expect(Directionality.of(numberContext), TextDirection.ltr);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    group('Lebanon: city/address switch language, phone/email do not', () {
+      testWidgets('English', (tester) async {
+        final lebanon = region(SupportRegionId.lebanon);
+        await pumpContactUs(
+          tester,
+          region: lebanon,
+          locale: const Locale('en'),
+        );
+
+        expect(find.text('LOCATIONS'), findsOneWidget);
+        expect(find.text('Beirut'), findsOneWidget);
+        expect(find.text(_lebanonBeirutAddressEn), findsOneWidget);
+        expect(find.text(_lebanonOfficeAddressEn), findsOneWidget);
+        expect(find.text(lebanon.supportEmail!), findsOneWidget);
+        for (final number in lebanon.hotlineNumbers) {
+          expect(find.text(number), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('Arabic', (tester) async {
+        final lebanon = region(SupportRegionId.lebanon);
+        await pumpContactUs(
+          tester,
+          region: lebanon,
+          locale: const Locale('ar'),
+        );
+
+        expect(find.text('بيروت'), findsOneWidget);
+        expect(find.text('بجانب السفارة الكويتية'), findsOneWidget);
+        expect(find.text('طريق المطار - شركة النجار'), findsOneWidget);
+        // Phone/email are never translated.
+        expect(find.text(lebanon.supportEmail!), findsOneWidget);
+        for (final number in lebanon.hotlineNumbers) {
+          expect(find.text(number), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('French', (tester) async {
+        final lebanon = region(SupportRegionId.lebanon);
+        await pumpContactUs(
+          tester,
+          region: lebanon,
+          locale: const Locale('fr'),
+        );
+
+        expect(find.text('Beyrouth'), findsOneWidget);
+        expect(find.text("À côté de l'ambassade du Koweït"), findsOneWidget);
+        expect(
+          find.text("Route de l'aéroport - ANC Najjar Fabric"),
+          findsOneWidget,
+        );
+        expect(find.text(lebanon.supportEmail!), findsOneWidget);
+        for (final number in lebanon.hotlineNumbers) {
+          expect(find.text(number), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    });
+
+    testWidgets('UAE (non-Lebanon) in Arabic: city and confirmed address '
+        'switch language; email/phone stay as-is', (tester) async {
+      final uae = region(SupportRegionId.uae);
+      await pumpContactUs(tester, region: uae, locale: const Locale('ar'));
+
+      expect(find.text('الشارقة'), findsOneWidget);
+      expect(find.text('المدينة الصناعية، منطقة 18'), findsOneWidget);
+      expect(find.text('ANC Najjar Fabric'), findsOneWidget);
+      expect(find.text(uae.supportEmail!), findsOneWidget);
+      expect(find.text(uae.hotlineNumbers.single), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Syria (non-Lebanon) in French: city, confirmed Damascus '
+        'address, regional area, and availability all switch language; the '
+        'still-unconfirmed Aleppo address does not', (tester) async {
+      final syria = region(SupportRegionId.syria);
+      await pumpContactUs(tester, region: syria, locale: const Locale('fr'));
+
+      // Scoped to the Locations section: the city "Damas" (Damascus) and
+      // حلا's Curtains area (also "دمشق") translate to the same French
+      // word, so an unscoped lookup would be ambiguous.
+      final locationsSection = find.byKey(
+        const ValueKey('contact-locations-section'),
+      );
+      expect(
+        find.descendant(of: locationsSection, matching: find.text('Damas')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          "Route de l'aéroport international de Damas, ANC Najjar Fabric",
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Alep'), findsOneWidget);
+      // Aleppo's address wording isn't confirmed yet, so it stays as the
+      // original stored Arabic literal even in French.
+      final aleppo = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Aleppo',
+      );
+      expect(find.text(aleppo.address), findsOneWidget);
+
+      // روى (Idlib)'s area is translated.
+      expect(find.text('Idlib'), findsOneWidget);
+      // عز's availability window is translated.
+      expect(find.text('De 18h00 à 21h00'), findsOneWidget);
+      // Category grouping labels are translated too.
+      expect(find.text("Tissus d'ameublement"), findsOneWidget);
+      expect(find.text('Rideaux'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Syria in Arabic: regional area and availability render '
+        'their (unchanged) Arabic wording, category labels are localized', (
+      tester,
+    ) async {
+      final syria = region(SupportRegionId.syria);
+      await pumpContactUs(tester, region: syria, locale: const Locale('ar'));
+
+      final rawiaIdlib = syria.regionalContacts.firstWhere(
+        (c) => c.name == 'روى' && c.area == 'إدلب',
+      );
+      expect(find.text(rawiaIdlib.area), findsWidgets);
+      final ezz = syria.regionalContacts.firstWhere((c) => c.name == 'عز');
+      expect(find.text(ezz.availability!), findsOneWidget);
+      expect(find.text('أقمشة التنجيد'), findsOneWidget);
+      expect(find.text('الستائر'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
+}
+
+/// Hosts [child] under a [MaterialApp] whose `locale` can be switched live
+/// via [_LocaleHostState.setLocale], without ever calling `pumpWidget`
+/// again — unlike `pumpContactUs(..., locale: ...)`, which tears down and
+/// rebuilds the whole tree on every call. This is the only way to catch a
+/// region label that resolves correctly on first build but fails to update
+/// when the app's language is switched mid-session (the real app's actual
+/// language-switch mechanism: `LocaleController.setLocale` notifies a
+/// `ListenableBuilder` that rebuilds `MaterialApp` in place).
+class _LocaleHost extends StatefulWidget {
+  const _LocaleHost({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LocaleHost> createState() => _LocaleHostState();
+}
+
+class _LocaleHostState extends State<_LocaleHost> {
+  Locale _locale = const Locale('en');
+
+  void setLocale(Locale locale) => setState(() => _locale = locale);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      locale: _locale,
+      supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+      localizationsDelegates: const [
+        AppTranslationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: widget.child,
+    );
+  }
 }
 
 /// Fake [UrlLauncherClient] with a mutable outcome, used by the retry test
