@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import 'anc_api_client.dart';
@@ -113,10 +111,6 @@ class LedgerEntriesService {
     _isLoadingFirstPage = true;
     final myGeneration = ++_generation;
 
-    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-    // diagnosed.
-    debugPrint('[CURRENT BALANCE] page request: 1');
-
     try {
       final token = await _requireToken();
       final page = await _apiClient.fetchLedgerEntries(
@@ -128,29 +122,33 @@ class LedgerEntriesService {
 
       _validatePagination(page, previousCurrentPage: 0);
 
-      debugPrint('[CURRENT BALANCE] HTTP status: 200 (page 1)');
-      debugPrint('[CURRENT BALANCE] raw rows: ${page.data.length}');
-      debugPrint(
-        '[CURRENT BALANCE] page parsed successfully: '
-        'page ${page.currentPage}/${page.lastPage}, '
-        'hasNextPage: ${page.currentPage < page.lastPage}',
-      );
-      // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-      // diagnosed. next_page_url is a server-generated pagination link
-      // (never contains the bearer token or customer data) — safe to log.
-      // Logged only; never used to construct the next request (see the
-      // class-level doc comment).
-      debugPrint('[CURRENT BALANCE] next_page_url: ${page.nextPageUrl}');
-
       _entries = _deduplicated(page.data, against: const []);
       _currentPage = page.currentPage;
       _lastPage = page.lastPage;
     } on AncApiException catch (error) {
       if (myGeneration != _generation) return; // stale failure, ignore
-      _logDiagnosticFailure(page: 1, error: error);
       await _handleFailure(error);
     } finally {
       _isLoadingFirstPage = false;
+    }
+  }
+
+  /// Loads every page starting from page 1, up to [maxPages] — the same
+  /// pagination-safety cap [CurrentBalanceService] applies to its own
+  /// full-history loop, extracted here so any other caller that needs every
+  /// ledger entry (e.g. `LedgerBalanceHistoryDataSource`, which filters
+  /// locally by `Posting_Date` since the endpoint has no confirmed
+  /// server-side date filter) shares this loop instead of duplicating it.
+  /// Throws the same exceptions as [loadFirstPage]/[loadNextPage]; on
+  /// failure, [entries] holds whatever pages loaded successfully before the
+  /// failing request, per [loadNextPage]'s own preserve-on-failure
+  /// behavior.
+  Future<void> loadAllPages({int maxPages = 500}) async {
+    await loadFirstPage();
+    var pagesLoaded = 1;
+    while (hasNextPage && pagesLoaded < maxPages) {
+      await loadNextPage();
+      pagesLoaded++;
     }
   }
 
@@ -167,10 +165,6 @@ class LedgerEntriesService {
     final myGeneration = _generation;
     final requestedPage = _currentPage + 1;
 
-    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-    // diagnosed.
-    debugPrint('[CURRENT BALANCE] page request: $requestedPage');
-
     try {
       final token = await _requireToken();
       final page = await _apiClient.fetchLedgerEntries(
@@ -182,22 +176,11 @@ class LedgerEntriesService {
 
       _validatePagination(page, previousCurrentPage: _currentPage);
 
-      debugPrint(
-        '[CURRENT BALANCE] HTTP status: 200 (page ${page.currentPage})',
-      );
-      debugPrint('[CURRENT BALANCE] raw rows: ${page.data.length}');
-      debugPrint(
-        '[CURRENT BALANCE] page parsed successfully: '
-        'page ${page.currentPage}/${page.lastPage}, '
-        'hasNextPage: ${page.currentPage < page.lastPage}',
-      );
-
       _entries = [..._entries, ..._deduplicated(page.data, against: _entries)];
       _currentPage = page.currentPage;
       _lastPage = page.lastPage;
     } on AncApiException catch (error) {
       if (myGeneration != _generation) return;
-      _logDiagnosticFailure(page: requestedPage, error: error);
       await _handleFailure(error); // _entries is untouched above on failure
     } finally {
       _isLoadingMore = false;
@@ -228,24 +211,6 @@ class LedgerEntriesService {
     }
   }
 
-  /// TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-  /// diagnosed. Logs only developer-facing, non-sensitive fields: the
-  /// requested page number, the exception's runtime type, its [message]
-  /// (already scrubbed of response bodies/tokens by [AncApiClient] — see
-  /// `_decodeLedgerEntriesResponse`), and the HTTP status code when present.
-  /// Never logs the bearer token, response body, or customer data.
-  void _logDiagnosticFailure({
-    required int page,
-    required AncApiException error,
-  }) {
-    debugPrint('[CURRENT BALANCE] failure stage: HTTP/parsing (page $page)');
-    debugPrint('[CURRENT BALANCE] exception type: ${error.runtimeType}');
-    debugPrint('[CURRENT BALANCE] exception message: ${error.message}');
-    if (error is AncHttpException) {
-      debugPrint('[CURRENT BALANCE] HTTP status: ${error.statusCode}');
-    }
-  }
-
   List<LedgerEntry> _deduplicated(
     List<LedgerEntry> incoming, {
     required List<LedgerEntry> against,
@@ -273,9 +238,6 @@ class LedgerEntriesService {
 
   Future<void> _handleFailure(AncApiException error) async {
     final outcome = mapBusinessCentralError(error);
-    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-    // diagnosed.
-    debugPrint('[CURRENT BALANCE] mapped failure: ${outcome.runtimeType}');
     if (outcome is BusinessCentralUnauthorized) {
       await _coordinator.handleUnauthorized();
       throw const SessionExpiredException();

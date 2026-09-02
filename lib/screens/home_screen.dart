@@ -482,14 +482,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (error) {
       // Covers CurrentBalanceInconsistentCurrencyException and any other
       // unexpected failure with the same generic, safe retry copy.
-      // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-      // diagnosed. error.toString() here is a developer-facing Dart
-      // exception description (type + constructor args), never a backend
-      // response body or token.
-      debugPrint(
-        '[CURRENT BALANCE] unclassified failure reached HomeScreen: '
-        '${error.runtimeType}: $error',
-      );
       if (!mounted || requestId != _currentBalanceRequestId) return;
       setState(() {
         _currentBalanceOutcome = null;

@@ -429,12 +429,11 @@
   },
   "balanceHistory": {
     "heading": "Balance History",
-    "subtitle": "Trend analysis for {start} - {end}"
-  },
-  "balanceHistoryRange": {
-    "days30": "30 Days",
-    "days90": "90 Days",
-    "year1": "1 Year"
+    "subtitle": "Transactions from {start} to {end}",
+    "fromLabel": "From",
+    "toLabel": "To",
+    "emptyRange": "No transactions in this date range.",
+    "multipleCurrencies": "This period includes multiple currencies and can't be shown as a single balance graph."
   },
   "creditUtilization": {
     "heading": "Credit Utilization",

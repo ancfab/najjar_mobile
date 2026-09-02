@@ -1,9 +1,12 @@
 // Widget checks for the Account Balance screen: hero card balance, Credit
-// Utilization figures/progress bars, the Balance History range selector/
-// chart (demo/mock data), the Quick History list (live ledger-adapted
-// rows), the Export PDF flow, bottom navigation, narrow-width overflow
-// safety, and that retired mock content (the old $42,850/+12.4%/Oct-12
-// note) never returns.
+// Utilization figures/progress bars, the graph-only Balance History section
+// (From/To picker plus the real reconstructed-balance graph — no
+// transaction list, no transaction-details navigation; live ledger data via
+// LedgerBalanceHistoryDataSource), the Quick History list (live
+// ledger-adapted rows — the one place individual ledger transactions are
+// shown), the Export PDF flow, bottom navigation, narrow-width overflow
+// safety, and that retired mock content (the old $42,850/+12.4%/Oct-12 note,
+// and the 30/90/365-day preset selector) never returns.
 //
 // Display currency is not resolved by this screen at all (no AuthService/
 // AuthSession.country region mapping): AccountBalanceScreen only accepts a
@@ -20,21 +23,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/models/account_transaction.dart';
-import 'package:anc_fabrics/models/balance_history_range.dart';
+import 'package:anc_fabrics/models/balance_history_point.dart';
 import 'package:anc_fabrics/models/business_central/customer_details.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/account_balance_service.dart';
+import 'package:anc_fabrics/services/balance_history_data_source.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/avatar_initials_badge.dart';
+import 'package:anc_fabrics/widgets/balance_history_date_range_picker.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_balance_history_data_source.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
@@ -74,6 +80,20 @@ final _quickHistoryRows = [
   ),
 ];
 
+// Balance History's default fixture graph points.
+final _balanceHistoryPoints = [
+  BalanceHistoryPoint(
+    date: DateTime.utc(2026, 1, 8),
+    balance: 5000.00,
+    currencyCode: 'AED',
+  ),
+  BalanceHistoryPoint(
+    date: DateTime.utc(2026, 1, 10),
+    balance: 5200.00,
+    currencyCode: 'AED',
+  ),
+];
+
 Future<void> _pumpAccountBalanceScreen(
   WidgetTester tester, {
   double width = 390,
@@ -82,6 +102,7 @@ Future<void> _pumpAccountBalanceScreen(
   CurrentUserAvatarController? avatarController,
   String? currencyCode,
   FakeQuickHistoryDataSource? quickHistorySource,
+  BalanceHistoryDataSource? balanceHistorySource,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -105,21 +126,16 @@ Future<void> _pumpAccountBalanceScreen(
         quickHistorySource:
             quickHistorySource ??
             FakeQuickHistoryDataSource(rows: _quickHistoryRows),
+        balanceHistorySource:
+            balanceHistorySource ??
+            FakeBalanceHistoryDataSource(
+              points: _balanceHistoryPoints,
+              currencyCode: 'AED',
+            ),
       ),
     ),
   );
-  // Balance History's mock data source has its own fixed ~400ms delay,
-  // independent of the account summary. When the summary fetch fails, the
-  // screen renders only the error state — BalanceHistoryCard (and its
-  // animating spinner) is never mounted, so nothing keeps `pumpAndSettle`
-  // pumping long enough to reach that 400ms mark on its own. A zero-
-  // duration pump first lets the translation delegate's async asset load
-  // resolve (so the screen actually mounts and initState's fetches begin),
-  // then an explicit fixed-duration pump guarantees the mock delay is
-  // always flushed — matching `_settleFetch`'s pattern in
-  // responsive_layout_test.dart.
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
 }
 
@@ -229,6 +245,9 @@ void main() {
             exporter: FakeAccountStatementExporter(),
             quickHistorySource: FakeQuickHistoryDataSource(
               rows: _quickHistoryRows,
+            ),
+            balanceHistorySource: FakeBalanceHistoryDataSource(
+              points: _balanceHistoryPoints,
             ),
           ),
         ),
@@ -437,18 +456,41 @@ void main() {
 
   group('Balance History card', () {
     testWidgets(
-      'Renders below Credit Utilization, with all three range options and '
-      '30 Days selected initially',
+      'Renders below Credit Utilization, with From/To fields and the real '
+      'balance-history graph only — never the retired 30/90/365-day preset '
+      'selector, and never a transaction list',
       (tester) async {
         await _pumpAccountBalanceScreen(tester);
 
-        expect(find.text('30 Days'), findsOneWidget);
-        expect(find.text('90 Days'), findsOneWidget);
-        expect(find.text('1 Year'), findsOneWidget);
         expect(
-          find.text('Trend analysis for Oct 1 - Oct 30, 2023'),
+          find.byKey(const ValueKey('balance-history-from-field')),
           findsOneWidget,
         );
+        expect(
+          find.byKey(const ValueKey('balance-history-to-field')),
+          findsOneWidget,
+        );
+        // The graph is restored and renders real, calculated points.
+        expect(
+          find.byKey(const ValueKey('balance-history-chart')),
+          findsOneWidget,
+        );
+        // Balance History is graph-only — no transaction list beneath it.
+        // Quick History (covered by its own group below) is the only place
+        // individual ledger transactions render.
+        expect(
+          find.byKey(const ValueKey('balance-history-list')),
+          findsNothing,
+        );
+
+        expect(find.text('30 Days'), findsNothing);
+        expect(find.text('90 Days'), findsNothing);
+        expect(find.text('1 Year'), findsNothing);
+        expect(find.textContaining('Trend analysis'), findsNothing);
+        // The retired mock series' fabricated balances must never appear.
+        expect(find.text('\$38,100.00'), findsNothing);
+        expect(find.text('\$42,850.00'), findsNothing);
+        expect(find.text('\$24,500.00'), findsNothing);
 
         final creditCardTop = tester.getTopLeft(
           find.byKey(const ValueKey('credit-utilization-card')),
@@ -460,65 +502,313 @@ void main() {
       },
     );
 
-    testWidgets('30 Days segment uses the dark navy selected treatment', (
-      tester,
-    ) async {
-      await _pumpAccountBalanceScreen(tester);
+    testWidgets(
+      'Defaults to the previous 30 days ending today (inclusive), sent as '
+      'the From/To request to the data source',
+      (tester) async {
+        final source = FakeBalanceHistoryDataSource(
+          points: _balanceHistoryPoints,
+        );
+        await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
 
-      final container = tester.widget<Container>(
-        find.descendant(
-          of: find.byKey(const ValueKey('balance-history-range-thirtyDays')),
-          matching: find.byType(Container),
-        ),
+        final now = DateTime.now();
+        final expectedTo = DateTime(now.year, now.month, now.day);
+        final expectedFrom = expectedTo.subtract(const Duration(days: 29));
+
+        expect(source.requestedRanges, hasLength(1));
+        expect(source.requestedRanges.single.to, expectedTo);
+        expect(source.requestedRanges.single.from, expectedFrom);
+      },
+    );
+
+    testWidgets('Changing the From date reloads Balance History with the '
+        'new range', (tester) async {
+      final source = FakeBalanceHistoryDataSource(
+        points: _balanceHistoryPoints,
       );
-      final decoration = container.decoration as BoxDecoration;
-      expect(decoration.color, AppColors.primaryNavy);
+      await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+      final callsBefore = source.callCount;
+
+      final picker = tester.widget<BalanceHistoryDateRangePicker>(
+        find.byType(BalanceHistoryDateRangePicker),
+      );
+      final newFrom = picker.to.subtract(const Duration(days: 5));
+      picker.onFromChanged(newFrom);
+      await tester.pumpAndSettle();
+
+      expect(source.callCount, callsBefore + 1);
+      expect(source.requestedRanges.last.from, newFrom);
+      expect(source.requestedRanges.last.to, picker.to);
     });
 
-    testWidgets('Selecting 90 Days updates the selected state and dataset', (
+    testWidgets('Changing From/To re-renders the chart with the newly fetched '
+        'points — the graph itself recalculates, not only the request', (
       tester,
     ) async {
-      await _pumpAccountBalanceScreen(tester);
+      final source = _RangeAwareBalanceHistorySource();
+      await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
 
-      await tester.tap(find.text('90 Days'));
+      expect(source.callCount, 1);
+
+      final picker = tester.widget<BalanceHistoryDateRangePicker>(
+        find.byType(BalanceHistoryDateRangePicker),
+      );
+      picker.onFromChanged(picker.to.subtract(const Duration(days: 3)));
+      await tester.pumpAndSettle();
+
+      expect(source.callCount, 2);
+      // The chart is still present and reflects the second call's points
+      // (a different length series) — proves the graph itself was
+      // recalculated and re-rendered, not just the underlying request.
+      final chart = tester.widget<SizedBox>(
+        find.byKey(const ValueKey('balance-history-chart')),
+      );
+      expect(chart, isNotNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Changing the To date reloads Balance History with the new '
+        'range', (tester) async {
+      final source = FakeBalanceHistoryDataSource(
+        points: _balanceHistoryPoints,
+      );
+      await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+      final callsBefore = source.callCount;
+
+      final picker = tester.widget<BalanceHistoryDateRangePicker>(
+        find.byType(BalanceHistoryDateRangePicker),
+      );
+      final newTo = picker.from.add(const Duration(days: 3));
+      picker.onToChanged(newTo);
+      await tester.pumpAndSettle();
+
+      expect(source.callCount, callsBefore + 1);
+      expect(source.requestedRanges.last.to, newTo);
+      expect(source.requestedRanges.last.from, picker.from);
+    });
+
+    testWidgets(
+      'Picking a From date after the current To date clamps To to match — '
+      'never sends an invalid (From after To) range',
+      (tester) async {
+        final source = FakeBalanceHistoryDataSource(
+          points: _balanceHistoryPoints,
+        );
+        await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+
+        final picker = tester.widget<BalanceHistoryDateRangePicker>(
+          find.byType(BalanceHistoryDateRangePicker),
+        );
+        final invalidFrom = picker.to.add(const Duration(days: 10));
+        picker.onFromChanged(invalidFrom);
+        await tester.pumpAndSettle();
+
+        final lastRange = source.requestedRanges.last;
+        expect(lastRange.from, invalidFrom);
+        expect(lastRange.to, invalidFrom);
+        expect(lastRange.to.isBefore(lastRange.from), isFalse);
+      },
+    );
+
+    testWidgets('Picking a To date before the current From date clamps From to '
+        'match — never sends an invalid (To before From) range', (
+      tester,
+    ) async {
+      final source = FakeBalanceHistoryDataSource(
+        points: _balanceHistoryPoints,
+      );
+      await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+
+      final picker = tester.widget<BalanceHistoryDateRangePicker>(
+        find.byType(BalanceHistoryDateRangePicker),
+      );
+      final invalidTo = picker.from.subtract(const Duration(days: 10));
+      picker.onToChanged(invalidTo);
+      await tester.pumpAndSettle();
+
+      final lastRange = source.requestedRanges.last;
+      expect(lastRange.to, invalidTo);
+      expect(lastRange.from, invalidTo);
+      expect(lastRange.to.isBefore(lastRange.from), isFalse);
+    });
+
+    testWidgets('Shows the loading spinner while fetching, then the real '
+        'graph — never mock data first', (tester) async {
+      final pending = Completer<BalanceHistoryData>();
+      final source = FakeBalanceHistoryDataSource(
+        pendingFuture: pending.future,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: AccountBalanceScreen(
+            service: FakeAccountBalanceService(),
+            exporter: FakeAccountStatementExporter(),
+            quickHistorySource: FakeQuickHistoryDataSource(
+              rows: _quickHistoryRows,
+            ),
+            balanceHistorySource: source,
+          ),
+        ),
+      );
+      // Two pumps: the first flushes the translation delegate's async asset
+      // load (so the screen actually mounts and initState's fetches begin
+      // — see `_pumpAccountBalanceScreen`'s original comment on this same
+      // requirement); the second flushes fetchAccountSummary's/Quick
+      // History's own immediately-resolving fakes, so the screen is fully
+      // past the outer whole-screen loading state and Balance History's own
+      // section-level loading state (the assertion below) is reachable.
+      // Balance History's own future is a manually controlled Completer, so
+      // it never resolves on its own no matter how many times this pumps.
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('balance-history-loading')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('balance-history-chart')), findsNothing);
+
+      pending.complete(
+        BalanceHistoryData(
+          points: _balanceHistoryPoints,
+          currencyCode: 'AED',
+          hasMultipleCurrencies: false,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Trend analysis for Aug 2 - Oct 30, 2023'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Trend analysis for Oct 1 - Oct 30, 2023'),
+        find.byKey(const ValueKey('balance-history-loading')),
         findsNothing,
       );
-
-      final selected = tester.widget<Container>(
-        find.descendant(
-          of: find.byKey(const ValueKey('balance-history-range-ninetyDays')),
-          matching: find.byType(Container),
-        ),
-      );
       expect(
-        (selected.decoration as BoxDecoration).color,
-        AppColors.primaryNavy,
-      );
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('Selecting 1 Year updates the selected state and dataset', (
-      tester,
-    ) async {
-      await _pumpAccountBalanceScreen(tester);
-
-      await tester.tap(find.text('1 Year'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('Trend analysis for Oct 30, 2022 - Oct 30, 2023'),
+        find.byKey(const ValueKey('balance-history-chart')),
         findsOneWidget,
       );
-      expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      'Points non-empty -> Balance History is loaded (renders the graph), '
+      'even though there is no transaction list to key the state off of '
+      'anymore',
+      (tester) async {
+        await _pumpAccountBalanceScreen(
+          tester,
+          balanceHistorySource: FakeBalanceHistoryDataSource(
+            points: _balanceHistoryPoints,
+          ),
+        );
+
+        expect(
+          find.byKey(const ValueKey('balance-history-chart')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('balance-history-empty')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Points empty -> Balance History shows the empty state — regression '
+      'coverage for the section state no longer being derived from the '
+      'removed transaction list',
+      (tester) async {
+        await _pumpAccountBalanceScreen(
+          tester,
+          balanceHistorySource: FakeBalanceHistoryDataSource(points: const []),
+        );
+
+        expect(
+          find.byKey(const ValueKey('balance-history-empty')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('No transactions in this date range.'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('balance-history-chart')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'A multi-currency response (points always empty) still shows the '
+      'multi-currency explanatory state, never the generic empty state',
+      (tester) async {
+        await _pumpAccountBalanceScreen(
+          tester,
+          balanceHistorySource: FakeBalanceHistoryDataSource(
+            hasMultipleCurrencies: true,
+          ),
+        );
+
+        expect(
+          find.byKey(const ValueKey('balance-history-multi-currency')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('balance-history-empty')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Shows an error state with retry on an API failure — never mock or '
+      'stale data',
+      (tester) async {
+        final source = FakeBalanceHistoryDataSource(
+          error: const BusinessCentralFailureException(
+            BusinessCentralUpstreamFailure(),
+          ),
+        );
+        await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+
+        expect(
+          find.byKey(const ValueKey('balance-history-error')),
+          findsOneWidget,
+        );
+        expect(find.text("Couldn't load data right now."), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('balance-history-chart')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Retrying after a Balance History failure re-invokes the data source',
+      (tester) async {
+        final source = FakeBalanceHistoryDataSource(
+          error: const BusinessCentralFailureException(
+            BusinessCentralUpstreamFailure(),
+          ),
+        );
+        await _pumpAccountBalanceScreen(tester, balanceHistorySource: source);
+        final callsBefore = source.callCount;
+
+        final retryButton = find.descendant(
+          of: find.byKey(const ValueKey('balance-history-error')),
+          matching: find.text('Retry'),
+        );
+        await tester.ensureVisible(retryButton);
+        await tester.tap(retryButton);
+        await tester.pumpAndSettle();
+
+        expect(source.callCount, callsBefore + 1);
+      },
+    );
   });
 
   group('Quick History card', () {
@@ -561,6 +851,9 @@ void main() {
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
             quickHistorySource: source,
+            balanceHistorySource: FakeBalanceHistoryDataSource(
+              points: _balanceHistoryPoints,
+            ),
           ),
         ),
       );
@@ -770,6 +1063,9 @@ void main() {
             quickHistorySource: FakeQuickHistoryDataSource(
               error: const SessionExpiredException(),
             ),
+            balanceHistorySource: FakeBalanceHistoryDataSource(
+              points: _balanceHistoryPoints,
+            ),
           ),
         ),
       );
@@ -870,19 +1166,31 @@ void main() {
       expect(data.currencyCode, 'OMR');
     });
 
-    testWidgets('Exporter receives the selected Balance History range', (
-      tester,
-    ) async {
+    testWidgets('Exporter receives the selected Balance History From/To '
+        'range', (tester) async {
       final exporter = FakeAccountStatementExporter();
-      await _pumpAccountBalanceScreen(tester, exporter: exporter);
+      final balanceHistorySource = FakeBalanceHistoryDataSource(
+        points: _balanceHistoryPoints,
+      );
+      await _pumpAccountBalanceScreen(
+        tester,
+        exporter: exporter,
+        balanceHistorySource: balanceHistorySource,
+      );
 
-      await tester.tap(find.text('90 Days'));
+      final picker = tester.widget<BalanceHistoryDateRangePicker>(
+        find.byType(BalanceHistoryDateRangePicker),
+      );
+      final newFrom = picker.to.subtract(const Duration(days: 89));
+      picker.onFromChanged(newFrom);
       await tester.pumpAndSettle();
+
       await tester.tap(find.text('Export PDF'));
       await tester.pumpAndSettle();
 
       final data = exporter.exportedData.single;
-      expect(data.selectedRange, BalanceHistoryRange.ninetyDays);
+      expect(data.historyFrom, newFrom);
+      expect(data.historyTo, picker.to);
     });
 
     testWidgets(
@@ -1015,5 +1323,36 @@ class _CountingAccountBalanceService implements AccountBalanceService {
   Future<CustomerDetails> fetchAccountSummary() async {
     fetchAccountSummaryCallCount++;
     return kFakeAccountSummary;
+  }
+}
+
+/// A [BalanceHistoryDataSource] whose returned points differ each call —
+/// unlike [FakeBalanceHistoryDataSource]'s fixed canned data — so a test can
+/// prove the chart actually re-renders with a *new* series after From/To
+/// changes, not merely that a new request was sent.
+class _RangeAwareBalanceHistorySource implements BalanceHistoryDataSource {
+  int callCount = 0;
+
+  @override
+  Future<BalanceHistoryData> fetchBalanceHistory({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    callCount++;
+    // A different point count each call, so re-rendering with stale data
+    // would be structurally detectable (not just value-detectable).
+    final points = [
+      for (var i = 0; i < callCount; i++)
+        BalanceHistoryPoint(
+          date: from.add(Duration(days: i)),
+          balance: 1000.0 * callCount + i,
+          currencyCode: 'AED',
+        ),
+    ];
+    return BalanceHistoryData(
+      points: points,
+      currencyCode: 'AED',
+      hasMultipleCurrencies: false,
+    );
   }
 }

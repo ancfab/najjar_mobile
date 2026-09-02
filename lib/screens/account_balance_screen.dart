@@ -5,7 +5,6 @@ import '../localization/translations.dart';
 import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
 import '../models/balance_history_point.dart';
-import '../models/balance_history_range.dart';
 import '../models/business_central/customer_details.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
@@ -36,6 +35,37 @@ import 'support_screen.dart';
 /// `_AccountBalanceScreenState._loadQuickHistory`).
 enum _QuickHistoryState { loading, loaded, empty, error }
 
+/// Balance History load state, tracked independently of Quick History and
+/// the hero/credit summary for the same reason [_QuickHistoryState] is: a
+/// ledger failure in one section must never blank out the others, and a 401
+/// never shows any local error (see [_QuickHistoryState]'s doc comment).
+enum _BalanceHistoryState { loading, loaded, empty, error }
+
+/// Strips the time-of-day component so From/To comparisons and defaults are
+/// always calendar-date-only — matches
+/// `LedgerBalanceHistoryDataSource`'s own `_dateOnly` normalization.
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+/// Controlled, safe user-facing copy for a `BusinessCentralOutcome` — shared
+/// by Quick History's and Balance History's error states so the two
+/// ledger-backed sections never drift into different wording for the same
+/// failure kind. The backend's raw `message` is never shown directly (see
+/// `BusinessCentralOutcome`'s doc comments).
+String _businessCentralOutcomeMessage(
+  BuildContext context,
+  BusinessCentralOutcome? outcome,
+) {
+  return switch (outcome) {
+    BusinessCentralAccountNotLinked() => context.t(
+      'accountBalance.errorAccountNotSetUp',
+    ),
+    BusinessCentralTemporarilyUnavailable() => context.t(
+      'accountBalance.errorTemporarilyUnavailable',
+    ),
+    _ => context.t('accountBalance.errorGeneric'),
+  };
+}
+
 // Bottom tab bar indexes, matching HomeScreen's. Account Balance itself
 // isn't one of the four tabs — it's a drill-down reached from the Home
 // balance card — so Home is kept as the selected tab, the natural "parent"
@@ -48,10 +78,14 @@ const int _navIndexProfile = 3;
 /// Account Balance screen: global balance hero card and Credit Utilization,
 /// both backed by a single unfiltered Business Central customer-details
 /// request (see `AccountBalanceService`/`CustomerDetailsService`); a
-/// Balance History chart (currently demo/mock data — see
-/// `BalanceHistoryDataSource`'s doc comment); and a live Quick History list
-/// backed by the ledger-entries endpoint (see
-/// `LedgerQuickHistoryDataSource`).
+/// graph-only Balance History section (heading, From/To range, and the real
+/// reconstructed-balance chart — no transaction list, see
+/// `BalanceHistoryCard`'s doc comment) for a user-selected From/To range,
+/// backed by real ledger entries filtered locally by `Posting_Date` (see
+/// `LedgerBalanceHistoryDataSource`'s doc comment); and a live Quick History
+/// list backed by the same ledger-entries endpoint (see
+/// `LedgerQuickHistoryDataSource`) — Quick History, not Balance History, is
+/// where individual ledger transactions are shown.
 ///
 /// Displayed in [currencyCode] — the ledger-entries-derived `Currency_Code`
 /// that Home's Current Balance card has *already* resolved (see
@@ -63,14 +97,17 @@ const int _navIndexProfile = 3;
 /// did that when Home loaded, and its result is simply reused. `customer-
 /// details` itself exposes no currency field, so [currencyCode] is a
 /// caller-supplied display-only annotation, never derived from that
-/// response.
+/// response. Quick History's own rows keep each entry's own `Currency_Code`
+/// individually (see `adaptLedgerEntryToAccountTransaction`) rather than
+/// using [currencyCode].
 ///
 /// The screen previously also showed a date-filtered "Balance by Period"
 /// customer-details request. Live black-box testing on 2026-08-30 confirmed
 /// that request returns identical figures for every range — only the
 /// echoed `DateFilter` changed — so the backend does not actually scope
-/// customer-details by date. Balance History below is therefore backed by
-/// [BalanceHistoryDataSource]'s demo/mock series, not that endpoint.
+/// customer-details by date. Balance History is therefore never backed by
+/// that endpoint; see [BalanceHistoryDataSource]'s doc comment for why it is
+/// backed by locally-filtered ledger entries instead.
 class AccountBalanceScreen extends StatefulWidget {
   AccountBalanceScreen({
     super.key,
@@ -83,7 +120,7 @@ class AccountBalanceScreen extends StatefulWidget {
   }) : service = service ?? LiveAccountBalanceService(),
        exporter = exporter ?? const LocalAccountStatementPdfExporter(),
        balanceHistorySource =
-           balanceHistorySource ?? const MockBalanceHistoryDataSource();
+           balanceHistorySource ?? LedgerBalanceHistoryDataSource();
 
   /// Account balance data seam. Defaults to the live customer-details-backed
   /// implementation; overridable so tests can inject a fake.
@@ -106,9 +143,10 @@ class AccountBalanceScreen extends StatefulWidget {
   /// ledger-entries endpoint; overridable so tests can inject a fake.
   final QuickHistoryDataSource? quickHistorySource;
 
-  /// Balance History data seam. Defaults to [MockBalanceHistoryDataSource]
-  /// — demo/mock data, not Business Central (see that class's doc comment);
-  /// overridable so tests can inject a fake.
+  /// Balance History data seam. Defaults to [LedgerBalanceHistoryDataSource]
+  /// — the live Business Central ledger-entries endpoint, filtered locally
+  /// by `Posting_Date` (see that class's doc comment); overridable so tests
+  /// can inject a fake.
   final BalanceHistoryDataSource balanceHistorySource;
 
   /// The display currency for the hero balance, Credit Utilization, and PDF
@@ -147,9 +185,21 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   /// than "account not linked"/"temporarily unavailable".
   BusinessCentralOutcome? _quickHistoryOutcome;
 
-  BalanceHistoryRange _selectedRange = BalanceHistoryRange.thirtyDays;
+  /// The selected Balance History range's To date, defaulting to today, and
+  /// From date, defaulting to the 30 days (inclusive) ending on [_historyTo]
+  /// — a sensible default in the absence of any other product rule, and the
+  /// same effective span the retired 30-day preset covered.
+  late DateTime _historyTo = _dateOnly(DateTime.now());
+  late DateTime _historyFrom = _historyTo.subtract(const Duration(days: 29));
+
+  _BalanceHistoryState _historyState = _BalanceHistoryState.loading;
   List<BalanceHistoryPoint> _historyPoints = const [];
-  bool _isHistoryLoading = true;
+  bool _historyHasMultipleCurrencies = false;
+
+  /// Set only when [_historyState] is [_BalanceHistoryState.error] from a
+  /// [BusinessCentralFailureException] — `null` for a generic/unexpected
+  /// failure, same convention as [_quickHistoryOutcome].
+  BusinessCentralOutcome? _historyOutcome;
 
   /// Whether the account statement PDF is currently being generated and
   /// handed to the native share sheet, so the Export PDF button can show a
@@ -160,7 +210,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   void initState() {
     super.initState();
     _loadSummary();
-    _loadHistory(_selectedRange);
+    _loadHistory();
     _loadQuickHistory();
   }
 
@@ -227,25 +277,70 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     }
   }
 
-  Future<void> _loadHistory(BalanceHistoryRange range) async {
-    setState(() => _isHistoryLoading = true);
+  /// Loads Balance History for the currently selected [_historyFrom]/
+  /// [_historyTo] range, independently of [_loadSummary]/[_loadQuickHistory]
+  /// for the same reason [_loadQuickHistory] is independent of them — see
+  /// that method's doc comment.
+  Future<void> _loadHistory() async {
+    setState(() {
+      _historyState = _BalanceHistoryState.loading;
+      _historyOutcome = null;
+    });
     try {
-      final points = await _balanceHistorySource.fetchBalanceHistory(range);
+      final data = await _balanceHistorySource.fetchBalanceHistory(
+        from: _historyFrom,
+        to: _historyTo,
+      );
       if (!mounted) return;
       setState(() {
-        _historyPoints = points;
-        _isHistoryLoading = false;
+        _historyPoints = data.points;
+        _historyHasMultipleCurrencies = data.hasMultipleCurrencies;
+        _historyState = data.points.isEmpty && !data.hasMultipleCurrencies
+            ? _BalanceHistoryState.empty
+            : _BalanceHistoryState.loaded;
+      });
+    } on SessionExpiredException {
+      // The centralized session coordinator has already cleared the
+      // session and is navigating to Login — show nothing here.
+    } on BusinessCentralFailureException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _historyOutcome = error.outcome;
+        _historyState = _BalanceHistoryState.error;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isHistoryLoading = false);
+      setState(() {
+        _historyOutcome = null;
+        _historyState = _BalanceHistoryState.error;
+      });
     }
   }
 
-  void _handleRangeChanged(BalanceHistoryRange range) {
-    if (range == _selectedRange) return;
-    setState(() => _selectedRange = range);
-    _loadHistory(range);
+  /// Applies a newly picked From date: normalized to date-only, and never
+  /// left after the current To date (defensive — `BalanceHistoryDateRangePicker`
+  /// already constrains its From picker's `lastDate` to [_historyTo], but
+  /// this guarantees the invariant regardless of picker platform behavior).
+  void _handleFromChanged(DateTime picked) {
+    final normalized = _dateOnly(picked);
+    if (normalized == _historyFrom) return;
+    setState(() {
+      _historyFrom = normalized;
+      if (_historyTo.isBefore(_historyFrom)) _historyTo = _historyFrom;
+    });
+    _loadHistory();
+  }
+
+  /// Applies a newly picked To date: normalized to date-only, and never left
+  /// before the current From date (defensive — see [_handleFromChanged]).
+  void _handleToChanged(DateTime picked) {
+    final normalized = _dateOnly(picked);
+    if (normalized == _historyTo) return;
+    setState(() {
+      _historyTo = normalized;
+      if (_historyFrom.isAfter(_historyTo)) _historyFrom = _historyTo;
+    });
+    _loadHistory();
   }
 
   void _openProfile() {
@@ -299,7 +394,8 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             availableCredit: summary.availableCredit,
             usedCredit: summary.usedCredit,
           ),
-          selectedRange: _selectedRange,
+          historyFrom: _historyFrom,
+          historyTo: _historyTo,
           quickHistory: _quickHistory,
           generatedAt: DateTime.now(),
           currencyCode: widget.currencyCode,
@@ -468,10 +564,22 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             ),
             const SizedBox(height: 16),
             BalanceHistoryCard(
+              from: _historyFrom,
+              to: _historyTo,
+              onFromChanged: _handleFromChanged,
+              onToChanged: _handleToChanged,
+              state: switch (_historyState) {
+                _BalanceHistoryState.loading => BalanceHistoryLoadState.loading,
+                _BalanceHistoryState.loaded => BalanceHistoryLoadState.loaded,
+                _BalanceHistoryState.empty => BalanceHistoryLoadState.empty,
+                _BalanceHistoryState.error => BalanceHistoryLoadState.error,
+              },
               points: _historyPoints,
-              selectedRange: _selectedRange,
-              onRangeChanged: _handleRangeChanged,
-              isLoading: _isHistoryLoading,
+              hasMultipleCurrencies: _historyHasMultipleCurrencies,
+              errorMessage: _historyState == _BalanceHistoryState.error
+                  ? _businessCentralOutcomeMessage(context, _historyOutcome)
+                  : null,
+              onRetry: _loadHistory,
             ),
             const SizedBox(height: 16),
             _buildQuickHistorySection(),
@@ -501,7 +609,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       case _QuickHistoryState.error:
         return _QuickHistorySectionShell(
           key: const ValueKey('quick-history-error'),
-          message: _quickHistoryErrorMessage(),
+          message: _businessCentralOutcomeMessage(
+            context,
+            _quickHistoryOutcome,
+          ),
           onRetry: _loadQuickHistory,
         );
       case _QuickHistoryState.loaded:
@@ -511,21 +622,6 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
           onSeeAll: _openFullTransactionHistory,
         );
     }
-  }
-
-  /// Maps [_quickHistoryOutcome] to controlled, safe user-facing copy — the
-  /// backend's raw `message` is never shown directly (see
-  /// `BusinessCentralOutcome`'s doc comments).
-  String _quickHistoryErrorMessage() {
-    return switch (_quickHistoryOutcome) {
-      BusinessCentralAccountNotLinked() => context.t(
-        'accountBalance.errorAccountNotSetUp',
-      ),
-      BusinessCentralTemporarilyUnavailable() => context.t(
-        'accountBalance.errorTemporarilyUnavailable',
-      ),
-      _ => context.t('accountBalance.errorGeneric'),
-    };
   }
 
   Widget _buildErrorState() {

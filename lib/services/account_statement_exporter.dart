@@ -6,7 +6,6 @@ import 'package:printing/printing.dart';
 
 import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
-import '../models/balance_history_range.dart';
 import '../utils/currency.dart';
 import '../utils/date_time_format.dart';
 import '../utils/filename.dart';
@@ -126,7 +125,9 @@ pw.Widget _buildHistoryRangeSection(AccountStatementData data) {
     children: [
       _sectionLabel('BALANCE HISTORY RANGE'),
       pw.SizedBox(height: 4),
-      pw.Text(data.selectedRange.label),
+      pw.Text(
+        '${formatDateOnly(data.historyFrom)} - ${formatDateOnly(data.historyTo)}',
+      ),
     ],
   );
 }

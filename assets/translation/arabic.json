@@ -429,12 +429,11 @@
   },
   "balanceHistory": {
     "heading": "سجل الرصيد",
-    "subtitle": "تحليل الاتجاه من {start} إلى {end}"
-  },
-  "balanceHistoryRange": {
-    "days30": "30 يومًا",
-    "days90": "90 يومًا",
-    "year1": "سنة واحدة"
+    "subtitle": "المعاملات من {start} إلى {end}",
+    "fromLabel": "من",
+    "toLabel": "إلى",
+    "emptyRange": "لا توجد معاملات في هذا النطاق الزمني.",
+    "multipleCurrencies": "تحتوي هذه الفترة على أكثر من عملة، ولا يمكن عرضها كرسم بياني واحد للرصيد."
   },
   "creditUtilization": {
     "heading": "استخدام الائتمان",

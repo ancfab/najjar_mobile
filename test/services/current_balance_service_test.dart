@@ -311,6 +311,120 @@ void main() {
     });
   });
 
+  group('isCurrentBalanceRelevantDocumentType', () {
+    test('a single-space blank Document_Type is relevant', () {
+      expect(isCurrentBalanceRelevantDocumentType(' '), isTrue);
+    });
+
+    test('a multi-space whitespace-only Document_Type is relevant', () {
+      expect(isCurrentBalanceRelevantDocumentType('   '), isTrue);
+    });
+
+    for (final type in kCurrentBalanceRelevantDocumentTypes) {
+      test('the named type "$type" is relevant', () {
+        expect(isCurrentBalanceRelevantDocumentType(type), isTrue);
+      });
+    }
+
+    test('a named type with surrounding whitespace is relevant after '
+        'normalization', () {
+      expect(isCurrentBalanceRelevantDocumentType(' Payment '), isTrue);
+    });
+
+    test('an unknown nonblank type is not relevant', () {
+      expect(isCurrentBalanceRelevantDocumentType('Unexpected Type'), isFalse);
+    });
+  });
+
+  group('computeCurrentBalance — Business Central blank Document_Type', () {
+    test(
+      'an open blank-type ("  ") entry contributes its Remaining_Amount',
+      () {
+        final entries = [
+          _entry(1, documentType: ' ', open: true, remainingAmount: 124.90),
+        ];
+        expect(computeCurrentBalance(entries).amount, closeTo(124.90, 1e-9));
+      },
+    );
+
+    test('an open multi-space blank-type entry contributes like the '
+        'single-space case', () {
+      final entries = [
+        _entry(1, documentType: '   ', open: true, remainingAmount: 124.90),
+      ];
+      expect(computeCurrentBalance(entries).amount, closeTo(124.90, 1e-9));
+    });
+
+    test('a closed blank-type entry does not contribute (Open == false '
+        'still wins)', () {
+      final entries = [
+        _entry(1, documentType: ' ', open: false, remainingAmount: 124.90),
+      ];
+      expect(computeCurrentBalance(entries).amount, 0.0);
+    });
+
+    test(
+      'a blank-type entry combines with named-type entries under the '
+      'exact production identity: 76.04 (named) + 124.90 (blank) = 200.94',
+      () {
+        final entries = [
+          _entry(1, documentType: 'Invoice', remainingAmount: 76.04),
+          _entry(2, documentType: ' ', remainingAmount: 124.90),
+        ];
+        expect(computeCurrentBalance(entries).amount, closeTo(200.94, 1e-9));
+      },
+    );
+  });
+
+  group('Reconciliation: computeCurrentBalance vs. historical Amount sum', () {
+    // Guards against the blank Business Central Document_Type ever being
+    // recognized by one balance calculation (Current Balance) but not the
+    // other (Balance History's historical reconstruction, which walks
+    // signed `Amount` across open *and* closed relevant entries) — see
+    // isCurrentBalanceRelevantDocumentType's shared use in both
+    // current_balance_service.dart and balance_history_data_source.dart.
+    test('computeCurrentBalance (Remaining_Amount over open entries) equals '
+        'the sum of signed Amount over every relevant entry, open or '
+        'closed, when closed entries net to zero — including a blank-type '
+        'entry among the open, contributing ones', () {
+      final closedSettledInvoice = LedgerEntry.fromJson(
+        _entryJson(1, documentType: 'Invoice', amount: 1000.0, open: false),
+      );
+      final closedSettledPayment = LedgerEntry.fromJson(
+        _entryJson(2, documentType: 'Payment', amount: -1000.0, open: false),
+      );
+      final openCreditMemo = _entry(
+        3,
+        documentType: 'Credit Memo',
+        amount: -50.0,
+        remainingAmount: -50.0,
+      );
+      final openBlankType = _entry(
+        4,
+        documentType: ' ',
+        amount: 124.90,
+        remainingAmount: 124.90,
+      );
+      final entries = [
+        closedSettledInvoice,
+        closedSettledPayment,
+        openCreditMemo,
+        openBlankType,
+      ];
+
+      final currentBalance = computeCurrentBalance(entries).amount;
+      final historicalAmountSum = [
+        for (final entry in entries)
+          if (isCurrentBalanceRelevantDocumentType(entry.documentType))
+            entry.amount,
+      ].fold(0.0, (sum, amount) => sum + amount);
+
+      expect(currentBalance, closeTo(74.90, 1e-9));
+      expect(historicalAmountSum, closeTo(74.90, 1e-9));
+      expect(currentBalance, closeTo(historicalAmountSum, 1e-9));
+    });
+  });
+
   group('CurrentBalanceService.fetchCurrentBalance', () {
     test(
       'requests page 1 of GET /api/business-central/ledger-entries',

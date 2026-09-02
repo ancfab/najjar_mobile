@@ -37,6 +37,7 @@ import 'package:anc_fabrics/widgets/scan_fabric_button.dart';
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_auth_session_store.dart';
+import 'helpers/fake_balance_history_data_source.dart';
 import 'helpers/fake_current_balance_data_source.dart';
 import 'helpers/fake_invoice_lookup_data_source.dart';
 import 'helpers/fake_last_payment_data_source.dart';
@@ -742,16 +743,17 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          // Quick History defaults to the live Business Central
-          // ledger-entries endpoint (real HTTP/secure storage), which never
-          // resolves in this widget-test sandbox — inject a fake so
-          // _settleFetch's pumpAndSettle doesn't wait forever on its
-          // loading spinner (these layout checks don't exercise Quick
-          // History data specifically).
+          // Quick History and Balance History both default to the live
+          // Business Central ledger-entries endpoint (real HTTP/secure
+          // storage), which never resolves in this widget-test sandbox —
+          // inject fakes for both so _settleFetch's pumpAndSettle doesn't
+          // wait forever on either section's loading spinner (these layout
+          // checks don't exercise either section's data specifically).
           home: AccountBalanceScreen(
             service: FakeAccountBalanceService(),
             exporter: FakeAccountStatementExporter(),
             quickHistorySource: FakeQuickHistoryDataSource(),
+            balanceHistorySource: FakeBalanceHistoryDataSource(),
           ),
         ),
       );

@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:anc_fabrics/models/account_statement_data.dart';
 import 'package:anc_fabrics/models/account_transaction.dart';
-import 'package:anc_fabrics/models/balance_history_range.dart';
 import 'package:anc_fabrics/models/credit_utilization_data.dart';
 import 'package:anc_fabrics/services/account_statement_exporter.dart';
 
@@ -17,7 +16,8 @@ void main() {
       availableCredit: 57150.00,
       usedCredit: 42850.00,
     ),
-    selectedRange: BalanceHistoryRange.thirtyDays,
+    historyFrom: DateTime.utc(2023, 10, 1),
+    historyTo: DateTime.utc(2023, 10, 30),
     generatedAt: DateTime.utc(2023, 10, 30),
   );
 
@@ -72,14 +72,16 @@ void main() {
       expect(text, isNot(contains('(Limit)')));
     });
 
-    test('includes the selected Balance History range as a label only, '
-        'with no chart figures (the chart itself is demo/mock data)', () async {
+    test('includes the selected Balance History From/To range as a label '
+        'only — Balance History rows themselves are never duplicated into '
+        'the statement', () async {
       final bytes = await buildAccountStatementPdfBytes(data);
       final text = String.fromCharCodes(bytes);
 
       expect(text, contains('(HISTORY)'));
-      expect(text, contains('(30)'));
-      expect(text, contains('(Days)'));
+      expect(text, contains('(Oct)'));
+      expect(text, contains('(1,)'));
+      expect(text, contains('(30,)'));
     });
 
     test(
@@ -96,7 +98,8 @@ void main() {
       final dataWithHistory = AccountStatementData(
         customerBalance: data.customerBalance,
         creditUtilization: data.creditUtilization,
-        selectedRange: data.selectedRange,
+        historyFrom: data.historyFrom,
+        historyTo: data.historyTo,
         quickHistory: [
           AccountTransaction(
             id: 'ledger-entry-1001',
@@ -125,7 +128,8 @@ void main() {
       final aeData = AccountStatementData(
         customerBalance: data.customerBalance,
         creditUtilization: data.creditUtilization,
-        selectedRange: data.selectedRange,
+        historyFrom: data.historyFrom,
+        historyTo: data.historyTo,
         generatedAt: data.generatedAt,
         currencyCode: 'AED',
       );
@@ -147,7 +151,8 @@ void main() {
           final currencyData = AccountStatementData(
             customerBalance: data.customerBalance,
             creditUtilization: data.creditUtilization,
-            selectedRange: data.selectedRange,
+            historyFrom: data.historyFrom,
+            historyTo: data.historyTo,
             generatedAt: data.generatedAt,
             currencyCode: currency,
           );

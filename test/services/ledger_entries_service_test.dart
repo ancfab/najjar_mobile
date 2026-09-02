@@ -112,6 +112,32 @@ class _ScriptedHttpClient extends http.BaseClient {
   void close() {}
 }
 
+/// Always answers with a fresh next page, simulating a backend pagination
+/// bug where the reported `last_page` never catches up to `current_page` —
+/// used to prove [LedgerEntriesService.loadAllPages]'s `maxPages` cap stops
+/// an otherwise-unbounded fetch.
+class _InfiniteLoopHttpClient extends http.BaseClient {
+  int requestCount = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final req = request as http.Request;
+    requestCount++;
+    return _jsonResponse(
+      200,
+      _envelope(
+        entryNumbers: [requestCount],
+        currentPage: requestCount,
+        lastPage: requestCount + 1,
+      ),
+      request: req,
+    );
+  }
+
+  @override
+  void close() {}
+}
+
 void main() {
   group('LedgerEntriesService.loadFirstPage', () {
     test('loads the first page correctly', () async {
@@ -502,6 +528,93 @@ void main() {
       }
 
       expect(service.entries, isEmpty);
+    });
+  });
+
+  group('LedgerEntriesService.loadAllPages', () {
+    test('loads every page and combines all entries', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1001], lastPage: 3),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1002], currentPage: 2, lastPage: 3),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1003], currentPage: 3, lastPage: 3),
+          request: req,
+        ),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadAllPages();
+
+      expect(service.entries.map((e) => e.entryNo), [1001, 1002, 1003]);
+      expect(fakeHttp.requestCount, 3);
+      expect(service.hasNextPage, isFalse);
+    });
+
+    test('a single-page result makes only one request', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async =>
+            _jsonResponse(200, _envelope(entryNumbers: [1001]), request: req),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadAllPages();
+
+      expect(fakeHttp.requestCount, 1);
+      expect(service.entries.map((e) => e.entryNo), [1001]);
+    });
+
+    test('stops at maxPages as a defensive cap against a pagination loop bug '
+        '— never fetches unbounded', () async {
+      final fakeHttp = _InfiniteLoopHttpClient();
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await service.loadAllPages(maxPages: 3);
+
+      expect(fakeHttp.requestCount, 3);
+    });
+
+    test('a failure partway through preserves already-loaded pages and '
+        'rethrows', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(entryNumbers: [1001], lastPage: 2),
+          request: req,
+        ),
+        (req) async => _jsonResponse(502, const {}, request: req),
+      ]);
+      final service = LedgerEntriesService(
+        apiClient: AncApiClient(httpClient: fakeHttp),
+        sessionStore: FakeAuthSessionStore()..seed(_session()),
+        coordinator: FakeSessionExpiryCoordinator(),
+      );
+
+      await expectLater(
+        service.loadAllPages(),
+        throwsA(isA<BusinessCentralFailureException>()),
+      );
+      expect(service.entries.map((e) => e.entryNo), [1001]);
     });
   });
 

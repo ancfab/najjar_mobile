@@ -1,16 +1,17 @@
 import 'account_transaction.dart';
-import 'balance_history_range.dart';
 import 'credit_utilization_data.dart';
 
 /// Snapshot of currently available Account Balance screen data, assembled
 /// when Export PDF is tapped so the generated statement reflects exactly
 /// what's on screen at that moment (the global balance, credit utilization,
-/// the selected Balance History range, and live Quick History transactions).
+/// the selected Balance History From/To range, and live Quick History
+/// transactions).
 class AccountStatementData {
   const AccountStatementData({
     required this.customerBalance,
     required this.creditUtilization,
-    required this.selectedRange,
+    required this.historyFrom,
+    required this.historyTo,
     this.quickHistory = const [],
     required this.generatedAt,
     this.currencyCode,
@@ -22,11 +23,13 @@ class AccountStatementData {
 
   final CreditUtilizationData creditUtilization;
 
-  /// The Balance History range selected on screen when export was tapped —
-  /// included as a label only (e.g. "30 Days"); the underlying chart
-  /// figures are demo/mock data (see `BalanceHistoryDataSource`) and are
-  /// deliberately never included in the exported document.
-  final BalanceHistoryRange selectedRange;
+  /// The Balance History From/To range selected on screen when export was
+  /// tapped — included as a label only (e.g. "Oct 1, 2023 - Oct 30, 2023");
+  /// Balance History's own (real, ledger-derived) transaction rows are not
+  /// duplicated into the statement — only Quick History's rows are, per the
+  /// existing [quickHistory] field.
+  final DateTime historyFrom;
+  final DateTime historyTo;
 
   /// Live Quick History rows (from `LedgerQuickHistoryDataSource`) shown on
   /// screen at export time.

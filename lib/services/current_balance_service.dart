@@ -1,11 +1,16 @@
-import 'package:flutter/foundation.dart';
-
 import '../models/business_central/ledger_entry.dart';
 import 'ledger_entries_service.dart';
 
-/// Confirmed Business Central `Document_Type` values that contribute to
-/// Current Balance — this exact set only. Any other value (including one
-/// this app has simply never seen before) is excluded, never guessed at.
+/// Confirmed nonblank Business Central `Document_Type` values that
+/// contribute to Current Balance. Business Central's `Gen. Journal Document
+/// Type` enum also defines a valid blank (whitespace-only, e.g. `" "`)
+/// document type for general transactions — live ledger data has confirmed
+/// entries using it that must also count toward the balance. That blank case
+/// is deliberately not a member of this Set (an invisible `' '` string here
+/// would be easy for a future maintainer to miss); use
+/// [isCurrentBalanceRelevantDocumentType], which recognizes both this named
+/// set and the blank case, rather than checking membership in this Set
+/// directly.
 const Set<String> kCurrentBalanceRelevantDocumentTypes = {
   'Invoice',
   'Payment',
@@ -14,6 +19,18 @@ const Set<String> kCurrentBalanceRelevantDocumentTypes = {
   'Finance Charge Memo',
   'Reminder',
 };
+
+/// Whether [documentType] is a Business Central `Document_Type` that
+/// contributes to Current Balance / Balance History: one of the named
+/// [kCurrentBalanceRelevantDocumentTypes], or blank/whitespace-only (Business
+/// Central's confirmed blank `Gen. Journal Document Type`, e.g. `" "`). An
+/// unrecognized nonblank value (including one this app has simply never seen
+/// before) is not relevant — never guessed at.
+bool isCurrentBalanceRelevantDocumentType(String documentType) {
+  final normalized = documentType.trim();
+  return normalized.isEmpty ||
+      kCurrentBalanceRelevantDocumentTypes.contains(normalized);
+}
 
 /// One customer's Current Balance, derived from their open ledger entries.
 ///
@@ -52,7 +69,8 @@ class CurrentBalanceInconsistentCurrencyException implements Exception {
 /// Computes Current Balance from already-fetched ledger [entries], per the
 /// confirmed rule: sum `Remaining_Amount` (sign preserved exactly — never
 /// `Amount`, never `Due_Date`) over every entry where `Open == true` and
-/// `Document_Type` is one of [kCurrentBalanceRelevantDocumentTypes]. Pure —
+/// `Document_Type` is balance-relevant per
+/// [isCurrentBalanceRelevantDocumentType]. Pure —
 /// performs no I/O and never pages itself; see [CurrentBalanceService] for
 /// the full-pagination fetch this is applied to.
 ///
@@ -65,9 +83,7 @@ CurrentBalanceAmount computeCurrentBalance(List<LedgerEntry> entries) {
 
   for (final entry in entries) {
     if (!entry.isOpen) continue;
-    if (!kCurrentBalanceRelevantDocumentTypes.contains(entry.documentType)) {
-      continue;
-    }
+    if (!isCurrentBalanceRelevantDocumentType(entry.documentType)) continue;
     total += entry.remainingAmount;
     final code = entry.currencyCode.trim();
     if (code.isNotEmpty) currencyCodes.add(code);
@@ -116,22 +132,13 @@ class CurrentBalanceService {
   /// load-more failure, but this method still throws rather than reducing
   /// them, since a partial page set is not a confirmed complete balance.
   Future<CurrentBalanceAmount> fetchCurrentBalance() async {
-    // TEMPORARY DIAGNOSTIC — Current Balance investigation. Remove once
-    // diagnosed.
-    debugPrint('[CURRENT BALANCE] load started');
     await _ledgerEntriesService.loadFirstPage();
     var pagesLoaded = 1;
     while (_ledgerEntriesService.hasNextPage && pagesLoaded < maxPages) {
       await _ledgerEntriesService.loadNextPage();
       pagesLoaded++;
     }
-    debugPrint(
-      '[CURRENT BALANCE] all pages loaded: $pagesLoaded, '
-      'total entries: ${_ledgerEntriesService.entries.length}',
-    );
-    final result = computeCurrentBalance(_ledgerEntriesService.entries);
-    debugPrint('[CURRENT BALANCE] calculation succeeded');
-    return result;
+    return computeCurrentBalance(_ledgerEntriesService.entries);
   }
 
   /// Closes the underlying [LedgerEntriesService]'s HTTP client, but only

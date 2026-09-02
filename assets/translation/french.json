@@ -429,12 +429,11 @@
   },
   "balanceHistory": {
     "heading": "Historique du solde",
-    "subtitle": "Analyse de tendance du {start} au {end}"
-  },
-  "balanceHistoryRange": {
-    "days30": "30 jours",
-    "days90": "90 jours",
-    "year1": "1 an"
+    "subtitle": "Transactions du {start} au {end}",
+    "fromLabel": "Du",
+    "toLabel": "Au",
+    "emptyRange": "Aucune transaction sur cette période.",
+    "multipleCurrencies": "Cette période inclut plusieurs devises et ne peut pas être affichée comme un seul graphique de solde."
   },
   "creditUtilization": {
     "heading": "Utilisation du crédit",
