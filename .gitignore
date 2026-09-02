@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local signing secrets
+android/key.properties
+
+# Claude local session files
+.claude/scheduled_tasks.lock
