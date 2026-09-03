@@ -232,7 +232,7 @@ class _SupportScreenState extends State<SupportScreen> {
       _showSnackBar(
         context.t(
           'support.whatsappUnavailable',
-          params: {'region': region.displayName},
+          params: {'region': region.id.localizedName(context)},
         ),
       );
       return;
@@ -246,7 +246,7 @@ class _SupportScreenState extends State<SupportScreen> {
         _showSnackBar(
           context.t(
             'support.whatsappOpenFailed',
-            params: {'region': region.displayName},
+            params: {'region': region.id.localizedName(context)},
           ),
         );
       }
@@ -377,7 +377,11 @@ class _SupportScreenState extends State<SupportScreen> {
                               _selectedRegion.supportHours ??
                               context.t(
                                 'support.hoursFallback',
-                                params: {'region': _selectedRegion.displayName},
+                                params: {
+                                  'region': _selectedRegion.id.localizedName(
+                                    context,
+                                  ),
+                                },
                               ),
                         ),
                         const SizedBox(height: 24),
@@ -466,7 +470,7 @@ class _SupportScreenState extends State<SupportScreen> {
       return Text(
         context.t(
           'support.officeDetailsFallback',
-          params: {'region': _selectedRegion.displayName},
+          params: {'region': _selectedRegion.id.localizedName(context)},
         ),
         style: const TextStyle(
           fontSize: 14,
@@ -498,7 +502,7 @@ class _SupportScreenState extends State<SupportScreen> {
       return Text(
         context.t(
           'support.hotlineFallback',
-          params: {'region': _selectedRegion.displayName},
+          params: {'region': _selectedRegion.id.localizedName(context)},
         ),
         style: const TextStyle(
           fontSize: 14,
@@ -519,12 +523,15 @@ class _SupportScreenState extends State<SupportScreen> {
               onTap: () => _onCallHotline(number),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  number,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textNavy,
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(
+                    number,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textNavy,
+                    ),
                   ),
                 ),
               ),

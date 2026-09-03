@@ -315,6 +315,35 @@
     "oman": "عُمان",
     "lebanon": "لبنان"
   },
+  "supportCity": {
+    "sharjah": "الشارقة",
+    "damascus": "دمشق",
+    "aleppo": "حلب",
+    "erbil": "أربيل",
+    "sulaymaniyah": "السليمانية",
+    "muscat": "مسقط",
+    "seeb": "السيب",
+    "beirut": "بيروت"
+  },
+  "supportAddress": {
+    "uaeSharjah": "المدينة الصناعية، منطقة 18",
+    "syriaDamascus": "طريق مطار دمشق الدولي، شركة النجار",
+    "lebanonOffice": "طريق المطار - شركة النجار",
+    "lebanonBeirut": "بجانب السفارة الكويتية"
+  },
+  "supportArea": {
+    "daraaSweida": "درعا - السويداء",
+    "idlib": "إدلب",
+    "cityCenterWesternGhouta": "مركز المدينة وغوطة غربية",
+    "easternGhouta": "غوطة شرقية",
+    "homsHama": "حمص - حماة",
+    "coast": "الساحل",
+    "allGovernorates": "جميع المحافظات",
+    "damascus": "دمشق"
+  },
+  "supportAvailability": {
+    "sixPmToNinePm": "من الساعة 6 مساءً وحتى الساعة 9 مساءً"
+  },
   "contactUs": {
     "title": "تواصل معنا",
     "tag": "مركز الدعم",

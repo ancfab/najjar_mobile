@@ -17,6 +17,24 @@ class SupportRegionalContactTile extends StatelessWidget {
   final SupportRegionalContact contact;
   final ValueChanged<String> onCallTap;
 
+  /// Localized area display text, or the raw
+  /// [SupportRegionalContact.area] string when this area's wording hasn't
+  /// been confirmed for translation yet.
+  String _areaText(BuildContext context) {
+    final id = contact.areaId;
+    return id == null ? contact.area : context.t(id.translationKey);
+  }
+
+  /// Localized availability display text, or the raw
+  /// [SupportRegionalContact.availability] string when it hasn't been
+  /// confirmed for translation yet. Null when this contact has no
+  /// availability window at all.
+  String? _availabilityText(BuildContext context) {
+    final key = contact.availabilityKey;
+    if (key != null) return context.t(key);
+    return contact.availability;
+  }
+
   @override
   Widget build(BuildContext context) {
     final phone = contact.phone;
@@ -70,12 +88,15 @@ class SupportRegionalContactTile extends StatelessWidget {
                             color: AppColors.primaryNavy,
                           ),
                           const SizedBox(width: 4),
-                          Text(
-                            phone,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primaryNavy,
+                          Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Text(
+                              phone,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryNavy,
+                              ),
                             ),
                           ),
                         ],
@@ -87,13 +108,13 @@ class SupportRegionalContactTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            contact.area,
+            _areaText(context),
             style: const TextStyle(fontSize: 13, color: AppColors.grayText),
           ),
-          if (contact.availability != null) ...[
+          if (_availabilityText(context) != null) ...[
             const SizedBox(height: 4),
             Text(
-              contact.availability!,
+              _availabilityText(context)!,
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.grayText,

@@ -259,4 +259,101 @@ void main() {
       );
     }
   });
+
+  group('Translation keys', () {
+    test('SupportRegionId.translationKey matches supportRegion.<name> for '
+        'every region', () {
+      for (final id in SupportRegionId.values) {
+        expect(id.translationKey, 'supportRegion.${id.name}');
+      }
+    });
+
+    test('SupportCityId.translationKey matches supportCity.<name> for '
+        'every city', () {
+      for (final id in SupportCityId.values) {
+        expect(id.translationKey, 'supportCity.${id.name}');
+      }
+    });
+
+    test('SupportAreaId.translationKey matches supportArea.<name> for '
+        'every area', () {
+      for (final id in SupportAreaId.values) {
+        expect(id.translationKey, 'supportArea.${id.name}');
+      }
+    });
+  });
+
+  group('Localization keys/ids on verified data', () {
+    test('every office location has a cityId (city names are all '
+        'confirmed for translation)', () {
+      for (final region in kSupportRegions) {
+        for (final location in region.officeLocations) {
+          expect(
+            location.cityIds,
+            isNotEmpty,
+            reason:
+                '${region.displayName}/${location.city} has no '
+                'cityIds',
+          );
+        }
+      }
+    });
+
+    test('only the confirmed office addresses carry an addressKey; the '
+        'still-unconfirmed ones do not', () {
+      final uae = region(SupportRegionId.uae);
+      expect(
+        uae.officeLocations.single.addressKey,
+        'supportAddress.uaeSharjah',
+      );
+
+      final syria = region(SupportRegionId.syria);
+      final damascus = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Damascus',
+      );
+      final aleppo = syria.officeLocations.firstWhere(
+        (l) => l.city == 'Aleppo',
+      );
+      expect(damascus.addressKey, 'supportAddress.syriaDamascus');
+      expect(aleppo.addressKey, isNull);
+
+      final iraq = region(SupportRegionId.iraq);
+      for (final location in iraq.officeLocations) {
+        expect(location.addressKey, isNull);
+      }
+
+      final oman = region(SupportRegionId.oman);
+      expect(oman.officeLocations.single.addressKey, isNull);
+
+      final lebanon = region(SupportRegionId.lebanon);
+      expect(lebanon.officeAddressKey, 'supportAddress.lebanonOffice');
+      expect(
+        lebanon.officeLocations.single.addressKey,
+        'supportAddress.lebanonBeirut',
+      );
+    });
+
+    test('every Syria regional contact has an areaId', () {
+      final syria = region(SupportRegionId.syria);
+      for (final contact in syria.regionalContacts) {
+        expect(
+          contact.areaId,
+          isNotNull,
+          reason: '${contact.name} (${contact.area}) has no areaId',
+        );
+      }
+    });
+
+    test('only عز carries an availabilityKey, matching its raw availability '
+        'text', () {
+      final syria = region(SupportRegionId.syria);
+      final ezz = syria.regionalContacts.firstWhere((c) => c.name == 'عز');
+      expect(ezz.availabilityKey, 'supportAvailability.sixPmToNinePm');
+
+      for (final contact in syria.regionalContacts) {
+        if (contact.name == 'عز') continue;
+        expect(contact.availabilityKey, isNull);
+      }
+    });
+  });
 }
