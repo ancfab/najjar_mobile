@@ -72,23 +72,26 @@ void main() {
       );
     });
 
-    test('shows "?" instead of "\$" when currencyCode is null', () {
-      expect(formatCurrencyOrUnknown(100.5, currencyCode: null), '? 100.50');
+    test('shows the plain amount, no prefix, when currencyCode is null', () {
+      expect(formatCurrencyOrUnknown(100.5, currencyCode: null), '100.50');
     });
 
-    test('shows "?" when currencyCode is empty', () {
-      expect(formatCurrencyOrUnknown(100.5, currencyCode: ''), '? 100.50');
+    test('shows the plain amount, no prefix, when currencyCode is empty', () {
+      expect(formatCurrencyOrUnknown(100.5, currencyCode: ''), '100.50');
     });
 
-    test('shows "?" when currencyCode is whitespace-only', () {
-      expect(formatCurrencyOrUnknown(100.5, currencyCode: '   '), '? 100.50');
-    });
+    test(
+      'shows the plain amount, no prefix, when currencyCode is '
+      'whitespace-only',
+      () {
+        expect(formatCurrencyOrUnknown(100.5, currencyCode: '   '), '100.50');
+      },
+    );
 
-    test('never silently defaults an unknown currency to "\$"', () {
-      expect(
-        formatCurrencyOrUnknown(100.5, currencyCode: null),
-        isNot(contains('\$')),
-      );
+    test('never silently defaults an unknown currency to "\$" or "?"', () {
+      final result = formatCurrencyOrUnknown(100.5, currencyCode: null);
+      expect(result, isNot(contains('\$')));
+      expect(result, isNot(contains('?')));
     });
 
     test('formats zero and preserves thousands grouping/decimals', () {
@@ -99,10 +102,10 @@ void main() {
       );
     });
 
-    test('a negative amount shows a leading minus before the prefix, known or '
-        'unknown currency alike', () {
+    test('a negative amount shows a leading minus before the prefix (known '
+        'currency) or the plain amount (unknown currency)', () {
       expect(formatCurrencyOrUnknown(-42.5, currencyCode: 'AED'), '-AED 42.50');
-      expect(formatCurrencyOrUnknown(-42.5, currencyCode: null), '-? 42.50');
+      expect(formatCurrencyOrUnknown(-42.5, currencyCode: null), '-42.50');
     });
   });
 }

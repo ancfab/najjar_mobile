@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_user.dart';
 import '../localization/translations.dart';
 import '../models/account_statement_data.dart';
 import '../models/account_transaction.dart';
@@ -9,10 +8,12 @@ import '../models/business_central/customer_details.dart';
 import '../models/credit_utilization_data.dart';
 import '../services/account_balance_service.dart';
 import '../services/account_statement_exporter.dart';
+import '../services/auth_service.dart';
 import '../services/balance_history_data_source.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/current_user_avatar_controller.dart';
 import '../services/ledger_entry_presentation_adapter.dart';
+import '../services/local_customer_profile_store.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../utils/user_initials.dart';
@@ -117,6 +118,8 @@ class AccountBalanceScreen extends StatefulWidget {
     this.quickHistorySource,
     BalanceHistoryDataSource? balanceHistorySource,
     this.currencyCode,
+    this.authService,
+    this.localProfileStore,
   }) : service = service ?? LiveAccountBalanceService(),
        exporter = exporter ?? const LocalAccountStatementPdfExporter(),
        balanceHistorySource =
@@ -158,6 +161,19 @@ class AccountBalanceScreen extends StatefulWidget {
   /// existing "?" fallback, never a guessed code.
   final String? currencyCode;
 
+  /// Header-initials identity seam — used only to read the current session
+  /// (display only, never to decide authentication), mirroring
+  /// `HomeScreen.authService`'s exact pattern. Left `null` here and resolved
+  /// lazily in State; overridable so tests can inject a fake instead of
+  /// touching real secure storage.
+  final AuthService? authService;
+
+  /// Local customer-profile seam: the signed-in account's real name (seeded
+  /// at login from their own BC Customer Details row, or saved by them on
+  /// Edit Profile) feeds the header initials. Overridable so tests can
+  /// inject a fake instead of touching real secure storage.
+  final LocalCustomerProfileStore? localProfileStore;
+
   @override
   State<AccountBalanceScreen> createState() => _AccountBalanceScreenState();
 }
@@ -171,6 +187,21 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       widget.quickHistorySource ?? LedgerQuickHistoryDataSource();
   late final BalanceHistoryDataSource _balanceHistorySource =
       widget.balanceHistorySource;
+  late final LocalCustomerProfileStore _localProfileStore =
+      widget.localProfileStore ?? SecureLocalCustomerProfileStore();
+
+  /// Header-identity seam actually used by [_loadHeaderIdentity] — an owned
+  /// production default is closed on dispose, a caller-injected one left
+  /// alone (mirroring `HomeScreen`'s pattern).
+  late final AuthService _authService;
+  AuthService? _ownedAuthService;
+
+  /// The signed-in account's display name for the header initials: the
+  /// locally-stored customer profile's full name (real BC customer data or
+  /// the user's own edit) when present, else the session username. `null`
+  /// until [_loadHeaderIdentity] resolves (or when there is no session) —
+  /// rendered as a neutral placeholder, never a fabricated name.
+  String? _displayName;
 
   CustomerDetails? _accountSummary;
   bool _isLoading = true;
@@ -209,9 +240,45 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   @override
   void initState() {
     super.initState();
+    final injectedAuthService = widget.authService;
+    if (injectedAuthService != null) {
+      _authService = injectedAuthService;
+    } else {
+      final owned = AuthService.production();
+      _ownedAuthService = owned;
+      _authService = owned;
+    }
+    _loadHeaderIdentity();
     _loadSummary();
     _loadHistory();
     _loadQuickHistory();
+  }
+
+  @override
+  void dispose() {
+    _ownedAuthService?.close();
+    super.dispose();
+  }
+
+  /// Loads the header's display identity from the persisted session and the
+  /// account's locally-stored customer profile — real data only; a missing
+  /// session/profile leaves [_displayName] null and the badge shows a
+  /// neutral placeholder instead of a fabricated name.
+  Future<void> _loadHeaderIdentity() async {
+    final session = await _authService.currentSession();
+    if (!mounted || session == null) return;
+
+    String name = session.username;
+    try {
+      final profile = await _localProfileStore.load(session.userId);
+      final fullName = profile?.fullName.trim() ?? '';
+      if (fullName.isNotEmpty) name = fullName;
+    } catch (_) {
+      // Local profile lookup is display-only; the username fallback above
+      // already covers it.
+    }
+    if (!mounted) return;
+    setState(() => _displayName = name);
   }
 
   Future<void> _loadSummary() async {
@@ -399,6 +466,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
           quickHistory: _quickHistory,
           generatedAt: DateTime.now(),
           currencyCode: widget.currencyCode,
+          clientName: _displayName,
         ),
       );
     } catch (error) {
@@ -480,7 +548,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             listenable: _avatarController,
             builder: (context, _) => AvatarInitialsBadge(
               key: const ValueKey('account-balance-avatar'),
-              initials: userInitials(kCurrentUserName),
+              // Real identity only (local profile name or session
+              // username) — a neutral placeholder until it resolves,
+              // never a fabricated demo name.
+              initials: userInitials(_displayName ?? '', fallback: '·'),
               image: _avatarController.imageProvider,
               onTap: _openProfile,
             ),
@@ -490,9 +561,12 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     );
   }
 
-  // "Indigo Loom" brand mark, matching the IL badge convention used on the
-  // Invoice Details screen's header.
+  // Real client identity in the header — the signed-in customer's own name
+  // ([_displayName], resolved in [_loadHeaderIdentity]), never a fabricated
+  // brand. Blank while [_displayName] hasn't resolved yet, matching
+  // [userInitials]'s own neutral-placeholder convention below.
   Widget _buildBrandTitle() {
+    final name = _displayName ?? '';
     return Row(
       children: [
         Container(
@@ -503,9 +577,9 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
-          child: const Text(
-            'IL',
-            style: TextStyle(
+          child: Text(
+            userInitials(name, fallback: '·'),
+            style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -513,12 +587,12 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
           ),
         ),
         const SizedBox(width: 10),
-        const Expanded(
+        Expanded(
           child: Text(
-            'Indigo Loom',
+            name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
               color: AppColors.textNavy,

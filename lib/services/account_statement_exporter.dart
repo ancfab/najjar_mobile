@@ -71,13 +71,18 @@ Future<Uint8List> buildAccountStatementPdfBytes(
 }
 
 pw.Widget _buildHeader(AccountStatementData data) {
+  final clientName = data.clientName;
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
-      pw.Text(
-        'Indigo Loom',
-        style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-      ),
+      // The real signed-in customer's own name — never a fabricated
+      // company brand. Omitted entirely (not a placeholder) when not yet
+      // resolved at export time.
+      if (clientName != null && clientName.isNotEmpty)
+        pw.Text(
+          clientName,
+          style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+        ),
       pw.SizedBox(height: 4),
       pw.Text(
         'Account Statement',

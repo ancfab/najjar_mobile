@@ -1,8 +1,7 @@
 // Fake LastPaymentDataSource for HomeScreen tests: returns a canned
-// PaymentEntry (or none, or throws) without exercising real HTTP or secure
-// storage.
+// LastPaymentSummary (or none, or throws) without exercising real HTTP or
+// secure storage.
 
-import 'package:anc_fabrics/models/business_central/payment_entry.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
 
 class FakeLastPaymentDataSource implements LastPaymentDataSource {
@@ -10,7 +9,7 @@ class FakeLastPaymentDataSource implements LastPaymentDataSource {
 
   /// Returned from [fetchLatestPayment] when set; `null` means "no
   /// payments" unless [error] or [pendingFuture] is set.
-  final PaymentEntry? entry;
+  final LastPaymentSummary? entry;
 
   /// When set, thrown from [fetchLatestPayment] instead of returning
   /// [entry].
@@ -19,12 +18,12 @@ class FakeLastPaymentDataSource implements LastPaymentDataSource {
   /// When set, awaited instead of resolving immediately — lets a test
   /// observe the loading state before controlling exactly when/how the
   /// call completes.
-  final Future<PaymentEntry?>? pendingFuture;
+  final Future<LastPaymentSummary?>? pendingFuture;
 
   int callCount = 0;
 
   @override
-  Future<PaymentEntry?> fetchLatestPayment() async {
+  Future<LastPaymentSummary?> fetchLatestPayment() async {
     callCount++;
     if (pendingFuture != null) return pendingFuture!;
     if (error != null) throw error!;

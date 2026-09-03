@@ -34,6 +34,7 @@ class DemoInvoiceLookupDataSource implements InvoiceLookupDataSource {
       amount: 4800.00,
       amountIncludingVat: 5040.00,
       orderNo: 'SO-100234',
+      currencyCode: 'USD',
     ),
     BusinessCentralInvoiceLine(
       documentNo: 'INV-100234',
@@ -49,6 +50,7 @@ class DemoInvoiceLookupDataSource implements InvoiceLookupDataSource {
       amount: 2056.80,
       amountIncludingVat: 2159.64,
       orderNo: 'SO-100234',
+      currencyCode: 'USD',
     ),
 
     // Invoice INV-100235 for order SO-100235.
@@ -66,6 +68,7 @@ class DemoInvoiceLookupDataSource implements InvoiceLookupDataSource {
       amount: 6200.00,
       amountIncludingVat: 6510.00,
       orderNo: 'SO-100235',
+      currencyCode: 'USD',
     ),
 
     // Invoice INV-100236 for order SO-100236.
@@ -83,6 +86,7 @@ class DemoInvoiceLookupDataSource implements InvoiceLookupDataSource {
       amount: 3950.00,
       amountIncludingVat: 4147.50,
       orderNo: 'SO-100236',
+      currencyCode: 'USD',
     ),
     BusinessCentralInvoiceLine(
       documentNo: 'INV-100236',
@@ -98,6 +102,7 @@ class DemoInvoiceLookupDataSource implements InvoiceLookupDataSource {
       amount: 1275.00,
       amountIncludingVat: 1338.75,
       orderNo: 'SO-100236',
+      currencyCode: 'USD',
     ),
 
     // SO-100237 intentionally has no invoice yet.

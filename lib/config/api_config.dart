@@ -136,6 +136,16 @@ class ApiConfig {
   /// Business Central pagination limits.
   static const String inventoryPath = 'api/business-central/inventory';
 
+  /// Relative path (no leading slash) for the Business Central purchase-
+  /// orders endpoint, resolved against [baseUrl] by [AncApiClient]. Not
+  /// scoped by customer — company-wide procurement lines with vendor and
+  /// cost fields already stripped server-side. Used by the stock check to
+  /// answer "is more stock already on order for this item, and when is it
+  /// expected?" via each row's `Expected_Receipt_Date`; the optional
+  /// `item_no` query parameter narrows rows to one exact item number
+  /// server-side (see `AncApiClient.fetchPurchaseOrders`).
+  static const String purchaseOrdersPath = 'api/business-central/purchase-orders';
+
   /// Relative path (no leading slash) for the Business Central customer-
   /// details endpoint, resolved against [baseUrl] by [AncApiClient]. Returns
   /// a single scalar snapshot (not a paginated list) of the authenticated

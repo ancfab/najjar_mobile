@@ -699,13 +699,22 @@ class _ScanPreviewArea extends StatelessWidget {
           onScanAgain: onScanAgain,
         );
       case _LookupStage.notFound:
+        // Even with no stock record, incoming stock already on a purchase
+        // order surfaces its expected receipt date under the main message.
+        final notFoundResult = lookupResult;
+        final restockDate = notFoundResult is StockLookupNotFound
+            ? notFoundResult.expectedRestockDate
+            : null;
+        final notFoundMessage = context.t(
+          'scanStock.noStockFoundMessage',
+          params: {'code': activeCode ?? ''},
+        );
         return _LookupMessagePanel(
           key: const ValueKey('scan-stock-not-found-panel'),
           code: activeCode,
-          message: context.t(
-            'scanStock.noStockFoundMessage',
-            params: {'code': activeCode ?? ''},
-          ),
+          message: restockDate == null
+              ? notFoundMessage
+              : '$notFoundMessage\n${context.t('home.stockExpectedBy', params: {'date': MaterialLocalizations.of(context).formatMediumDate(restockDate)})}',
           primaryActionLabel: context.t('scanStock.scanAgainAction'),
           primaryActionKey: const ValueKey('scan-stock-scan-again-button'),
           onPrimaryAction: onScanAgain,
@@ -1028,6 +1037,37 @@ class _StockResultCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.sm),
                 ],
               ],
+            ),
+          ],
+          if (result.combinedAvailabilityLevel ==
+                  StockAvailabilityLevel.outOfStock &&
+              result.expectedRestockDate != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              key: const ValueKey('scan-stock-expected-restock'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.warningYellow.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                context.t(
+                  'home.stockExpectedBy',
+                  params: {
+                    'date': MaterialLocalizations.of(
+                      context,
+                    ).formatMediumDate(result.expectedRestockDate!),
+                  },
+                ),
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySecondary.copyWith(
+                  color: AppColors.warningYellow,
+                ),
+              ),
             ),
           ],
           const SizedBox(height: AppSpacing.sm),

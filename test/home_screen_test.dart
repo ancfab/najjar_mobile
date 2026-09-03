@@ -23,6 +23,7 @@ import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
+import 'package:anc_fabrics/services/home_dashboard_service.dart';
 import 'package:anc_fabrics/services/item_catalogue_search_service.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
 import 'package:anc_fabrics/services/stock_lookup_service.dart';
@@ -37,6 +38,7 @@ import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_current_balance_data_source.dart';
+import 'helpers/fake_home_dashboard_service.dart';
 import 'helpers/fake_item_catalogue_search_service.dart';
 import 'helpers/fake_last_payment_data_source.dart';
 import 'helpers/fake_stock_lookup_service.dart';
@@ -124,32 +126,19 @@ Color? _pillColor(WidgetTester tester, String suffix) {
   return (container.decoration as BoxDecoration?)?.color;
 }
 
-/// A canned live [PaymentEntry] matching the confirmed API contract's
-/// example payload (negative `amount`, non-USD `currencyCode`), used as the
-/// default Last Payment fixture so pre-existing Home screen tests (that
-/// don't care about Last Payment specifically) get a fast, deterministic,
-/// non-mock result instead of hitting real HTTP/secure storage — which
-/// never resolves in this widget-test sandbox (see AccountBalanceScreen's
-/// Quick History tests for the same issue with a live data source default).
-PaymentEntry _samplePaymentEntry({
-  int entryNo = 2001,
-  String postingDate = '2026-01-05',
-  String currencyCode = 'AED',
+/// A canned [LastPaymentSummary] (negative `amount`, matching the confirmed
+/// `customer_details.lastPaymentAmount` contract's sign convention), used
+/// as the default Last Payment fixture so pre-existing Home screen tests
+/// (that don't care about Last Payment specifically) get a fast,
+/// deterministic, non-mock result instead of hitting real HTTP/secure
+/// storage — which never resolves in this widget-test sandbox (see
+/// AccountBalanceScreen's Quick History tests for the same issue with a
+/// live data source default).
+LastPaymentSummary _sampleLastPaymentSummary({
+  DateTime? date,
   double amount = -200.0,
-  double remainingAmount = 0,
 }) {
-  return PaymentEntry.fromJson({
-    'entryNo': entryNo,
-    'postingDate': postingDate,
-    'documentNo': 'REC-TEST-101',
-    'customerNo': 'CLNT-0001',
-    'customerName': 'Test Customer One',
-    'currencyCode': currencyCode,
-    'amount': amount,
-    'remainingAmount': remainingAmount,
-    'open': false,
-    'dueDate': postingDate,
-  });
+  return LastPaymentSummary(amount: amount, date: date ?? DateTime(2026, 1, 5));
 }
 
 /// A canned live [CurrentBalanceAmount], distinct from both the retired
@@ -172,6 +161,7 @@ Future<void> _pumpHomeScreen(
   StockLookupService? checkAvailabilityService,
   ItemCatalogueSearchService? catalogueSearchService,
   AuthService? authService,
+  HomeDashboardService? dashboardService,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -190,7 +180,7 @@ Future<void> _pumpHomeScreen(
       home: HomeScreen(
         lastPaymentSource:
             lastPaymentSource ??
-            FakeLastPaymentDataSource(entry: _samplePaymentEntry()),
+            FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary()),
         currentBalanceSource:
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
@@ -205,13 +195,16 @@ Future<void> _pumpHomeScreen(
         checkAvailabilityService:
             checkAvailabilityService ?? FakeStockLookupService(),
         authService: authService ?? _authServiceFor(),
+        // Defaults to a fake — the live ApiHomeDashboardService default
+        // would make a real network call in this widget-test sandbox.
+        dashboardService: dashboardService ?? FakeHomeDashboardService(),
       ),
     ),
   );
   await tester.pump();
-  // Home screen loads dashboard data via a mock delay on initState; advance
-  // past it explicitly since pumpAndSettle won't wait for a bare Timer that
-  // isn't tied to a scheduled frame.
+  // Home screen loads dashboard data on initState; advance past the fake's
+  // async resolution explicitly since pumpAndSettle won't wait for a bare
+  // Timer that isn't tied to a scheduled frame.
   await tester.pump(const Duration(milliseconds: 700));
   await tester.pumpAndSettle();
 }
@@ -246,6 +239,7 @@ Future<void> _pumpHomeScreenWithoutSettling(
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
         authService: _authServiceFor(),
+        dashboardService: FakeHomeDashboardService(),
       ),
     ),
   );
@@ -261,14 +255,14 @@ class _FlakyLastPaymentDataSource implements LastPaymentDataSource {
   int callCount = 0;
 
   @override
-  Future<PaymentEntry?> fetchLatestPayment() async {
+  Future<LastPaymentSummary?> fetchLatestPayment() async {
     callCount++;
     if (callCount == 1) {
       throw const BusinessCentralFailureException(
         BusinessCentralUpstreamFailure(),
       );
     }
-    return _samplePaymentEntry();
+    return _sampleLastPaymentSummary();
   }
 }
 
@@ -1551,7 +1545,7 @@ void main() {
       final pending = Completer<CurrentBalanceAmount>();
       await _pumpHomeScreenWithoutSettling(
         tester,
-        FakeLastPaymentDataSource(entry: _samplePaymentEntry()),
+        FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary()),
         currentBalanceSource: FakeCurrentBalanceDataSource(
           pendingFuture: pending.future,
         ),
@@ -1605,32 +1599,37 @@ void main() {
       },
     );
 
-    testWidgets('A blank/unknown currency shows "?", never a guessed "\$"', (
-      tester,
-    ) async {
-      await _pumpHomeScreen(
-        tester,
-        390,
-        currentBalanceSource: FakeCurrentBalanceDataSource(
-          amount: const CurrentBalanceAmount(amount: 500, currencyCode: null),
-        ),
-      );
+    testWidgets(
+      'A blank/unknown currency shows the plain amount, never a guessed '
+      '"\$"',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            amount: const CurrentBalanceAmount(
+              amount: 500,
+              currencyCode: null,
+            ),
+          ),
+        );
 
-      expect(
-        find.descendant(
-          of: find.byType(BalanceCard),
-          matching: find.text('? 500.00'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(BalanceCard),
-          matching: find.textContaining('\$'),
-        ),
-        findsNothing,
-      );
-    });
+        expect(
+          find.descendant(
+            of: find.byType(BalanceCard),
+            matching: find.text('500.00'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(BalanceCard),
+            matching: find.textContaining('\$'),
+          ),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets('Failed live requests do not show mock financial data', (
       tester,
@@ -1658,7 +1657,7 @@ void main() {
       (tester) async {
         await _pumpHomeScreenWithoutSettling(
           tester,
-          FakeLastPaymentDataSource(entry: _samplePaymentEntry()),
+          FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary()),
           currentBalanceSource: FakeCurrentBalanceDataSource(
             error: const SessionExpiredException(),
           ),
@@ -1846,9 +1845,11 @@ void main() {
             ],
             home: HomeScreen(
               lastPaymentSource: FakeLastPaymentDataSource(
-                entry: _samplePaymentEntry(),
+                entry: _sampleLastPaymentSummary(),
               ),
               currentBalanceSource: source,
+              authService: _authServiceFor(),
+              dashboardService: FakeHomeDashboardService(),
             ),
           ),
         );
@@ -2144,53 +2145,34 @@ void main() {
       },
     );
 
-    testWidgets('remainingAmount is never used as the displayed amount', (
-      tester,
-    ) async {
-      await _pumpHomeScreen(
-        tester,
-        390,
-        lastPaymentSource: FakeLastPaymentDataSource(
-          entry: _samplePaymentEntry(amount: -200.0, remainingAmount: 999.99),
-        ),
-      );
+    testWidgets(
+      'Shows the plain amount, no currency prefix — customer_details '
+      'carries no currency field, so this never guesses \$ or any code',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          lastPaymentSource: FakeLastPaymentDataSource(
+            entry: _sampleLastPaymentSummary(amount: -200.0),
+          ),
+        );
 
-      expect(
-        find.descendant(
-          of: find.byType(LastPaymentCard),
-          matching: find.text('AED 200.00'),
-        ),
-        findsOneWidget,
-      );
-      expect(find.textContaining('999.99'), findsNothing);
-    });
-
-    testWidgets('A blank currencyCode never defaults to USD/\$', (
-      tester,
-    ) async {
-      await _pumpHomeScreen(
-        tester,
-        390,
-        lastPaymentSource: FakeLastPaymentDataSource(
-          entry: _samplePaymentEntry(currencyCode: ''),
-        ),
-      );
-
-      expect(
-        find.descendant(
-          of: find.byType(LastPaymentCard),
-          matching: find.text('200.00'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(LastPaymentCard),
-          matching: find.textContaining('\$'),
-        ),
-        findsNothing,
-      );
-    });
+        expect(
+          find.descendant(
+            of: find.byType(LastPaymentCard),
+            matching: find.text('200.00'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(LastPaymentCard),
+            matching: find.textContaining('\$'),
+          ),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets('Empty API data shows the no-payments state', (tester) async {
       await _pumpHomeScreen(
@@ -2207,7 +2189,7 @@ void main() {
     testWidgets('Loading state does not show mock or stale payment data', (
       tester,
     ) async {
-      final pending = Completer<PaymentEntry?>();
+      final pending = Completer<LastPaymentSummary?>();
       await _pumpHomeScreenWithoutSettling(
         tester,
         FakeLastPaymentDataSource(pendingFuture: pending.future),
@@ -2221,7 +2203,7 @@ void main() {
       expect(find.text('\$1,250.00'), findsNothing);
       expect(find.text('Oct 24'), findsNothing);
 
-      pending.complete(_samplePaymentEntry());
+      pending.complete(_sampleLastPaymentSummary());
       await tester.pump();
       await tester.pump();
     });
@@ -2335,7 +2317,7 @@ void main() {
     );
 
     testWidgets('Pull-to-refresh reloads the Last Payment row', (tester) async {
-      final source = FakeLastPaymentDataSource(entry: _samplePaymentEntry());
+      final source = FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary());
       await _pumpHomeScreen(tester, 390, lastPaymentSource: source);
       expect(source.callCount, 1);
 

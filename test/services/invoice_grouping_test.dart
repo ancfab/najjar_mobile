@@ -26,6 +26,7 @@ BusinessCentralInvoiceLine _line({
   amount: 180,
   amountIncludingVat: 189,
   orderNo: orderNo,
+  currencyCode: 'AED',
 );
 
 void main() {

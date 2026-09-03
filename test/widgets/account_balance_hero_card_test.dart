@@ -48,11 +48,11 @@ Future<void> _pumpCard(
 void main() {
   group('Balance', () {
     testWidgets(
-      'Shows the balance with a "?" prefix (no known currency), not "\$"',
+      'Shows the plain balance, no prefix (no known currency), not "\$"',
       (tester) async {
         await _pumpCard(tester, balance: 36711.73);
 
-        expect(find.text('? 36,711.73'), findsOneWidget);
+        expect(find.text('36,711.73'), findsOneWidget);
         expect(find.text('\$36,711.73'), findsNothing);
       },
     );
@@ -72,7 +72,7 @@ void main() {
       await _pumpCard(tester, balance: 36711.73, currencyCode: 'AED');
 
       expect(find.text('AED 36,711.73'), findsOneWidget);
-      expect(find.text('? 36,711.73'), findsNothing);
+      expect(find.text('36,711.73'), findsNothing);
     });
 
     for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/business_central_item_search_group.dart';
-import '../models/business_central/payment_entry.dart';
 import '../models/home_dashboard_data.dart';
 import '../services/api_stock_lookup_service.dart';
 import '../services/auth_service.dart';
@@ -78,8 +77,8 @@ enum _CatalogueSearchUiState {
 }
 
 /// UI state for the Last Payment row, tracked independently of the rest of
-/// the dashboard (balance/orders/invoices) so a Payments API failure never
-/// blanks out those mock-backed sections, and vice versa — mirrors
+/// the dashboard (balance/orders/invoices) so a customer-details failure
+/// never blanks out those sections, and vice versa — mirrors
 /// `AccountBalanceScreen`'s `_QuickHistoryState` convention.
 enum _LastPaymentUiState { loading, loaded, empty, error }
 
@@ -113,6 +112,7 @@ CurrentBalanceDataSource resolveDefaultCurrentBalanceDataSource({
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
+    this.dashboardService,
     this.lastPaymentSource,
     this.currentBalanceSource,
     this.checkAvailabilityService,
@@ -120,9 +120,19 @@ class HomeScreen extends StatefulWidget {
     this.authService,
   });
 
+  /// Active Orders / Overdue Invoices metrics seam. Defaults (lazily, in
+  /// State) to [ApiHomeDashboardService] — the live Business Central
+  /// customer-details endpoint; overridable so tests can inject a fake
+  /// instead of a real network call. The owned production default is
+  /// closed on [State.dispose], mirroring [checkAvailabilityService]'s
+  /// exact ownership-disposal pattern.
+  final HomeDashboardService? dashboardService;
+
   /// Last Payment data seam. Defaults (lazily, in State) to
-  /// [LiveLastPaymentDataSource] — the live Business Central Payments
-  /// endpoint; overridable so tests can inject a fake.
+  /// [CustomerDetailsLastPaymentDataSource] — the customer's own
+  /// `customer_details` snapshot's `lastPaymentAmount`/`lastPaymentDate`
+  /// fields (product decision, 2026-09-03); overridable so tests can inject
+  /// a fake.
   final LastPaymentDataSource? lastPaymentSource;
 
   /// Current Balance data seam. Defaults (lazily, in State) via
@@ -167,11 +177,28 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final HomeDashboardService _dashboardService = const HomeDashboardService();
+  /// Dashboard metrics seam actually used by [loadHomeDashboardData] —
+  /// resolved in [initState]; see [HomeScreen.dashboardService].
+  late final HomeDashboardService _dashboardService;
+
+  /// Set only when this State created its own [ApiHomeDashboardService]
+  /// (no [HomeScreen.dashboardService] was injected) — the only instance
+  /// this screen ever closes.
+  ApiHomeDashboardService? _ownedDashboardService;
+
   final TextEditingController _catalogueCodeController =
       TextEditingController();
-  late final LastPaymentDataSource _lastPaymentSource =
-      widget.lastPaymentSource ?? LiveLastPaymentDataSource();
+
+  /// Last Payment data seam actually used by [_loadLastPayment] — resolved
+  /// in [initState], mirroring [HomeScreen.dashboardService]'s exact
+  /// ownership-disposal pattern.
+  late final LastPaymentDataSource _lastPaymentSource;
+
+  /// Set only when this State created its own
+  /// [CustomerDetailsLastPaymentDataSource] (no [HomeScreen.lastPaymentSource]
+  /// was injected) — the only instance this screen ever closes.
+  CustomerDetailsLastPaymentDataSource? _ownedLastPaymentSource;
+
   late final CurrentBalanceDataSource _currentBalanceSource =
       widget.currentBalanceSource ?? resolveDefaultCurrentBalanceDataSource();
 
@@ -242,9 +269,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// superseded and discard its result instead of corrupting fresher state.
   int _currentBalanceRequestId = 0;
 
-  // Last Payment row state — loaded live from the Payments API.
+  // Last Payment row state — loaded live from customer_details.
   _LastPaymentUiState _lastPaymentState = _LastPaymentUiState.loading;
-  PaymentEntry? _lastPaymentEntry;
+  LastPaymentSummary? _lastPaymentEntry;
 
   /// Set only when [_lastPaymentState] is [_LastPaymentUiState.error] from a
   /// [BusinessCentralFailureException] — `null` for a generic/unexpected
@@ -330,6 +357,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    final injectedDashboardService = widget.dashboardService;
+    if (injectedDashboardService != null) {
+      _dashboardService = injectedDashboardService;
+    } else {
+      final owned = ApiHomeDashboardService();
+      _ownedDashboardService = owned;
+      _dashboardService = owned;
+    }
+    final injectedLastPaymentSource = widget.lastPaymentSource;
+    if (injectedLastPaymentSource != null) {
+      _lastPaymentSource = injectedLastPaymentSource;
+    } else {
+      final owned = CustomerDetailsLastPaymentDataSource();
+      _ownedLastPaymentSource = owned;
+      _lastPaymentSource = owned;
+    }
     loadHomeDashboardData();
     _loadCurrentBalance();
     _loadLastPayment();
@@ -377,6 +420,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _ownedCheckAvailabilityService?.close();
     _ownedCatalogueSearchService?.close();
     _ownedAuthService?.close();
+    _ownedDashboardService?.close();
+    _ownedLastPaymentSource?.close();
     super.dispose();
   }
 
@@ -392,7 +437,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _username = session?.username);
   }
 
-  /// Loads Home dashboard summary data from API or mock fallback.
+  /// Loads the Active Orders / Overdue Invoices metrics live from the
+  /// customer-details API (see [ApiHomeDashboardService]). Any failure maps
+  /// to the dashboard error state with a retry — never fabricated numbers.
   Future<void> loadHomeDashboardData() async {
     setState(() {
       _isDashboardLoading = true;
@@ -415,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Refreshes Home dashboard data when user pulls down on the Home screen.
-  /// Fans out to the mock Active Orders/Overdue Invoices summary and the
+  /// Fans out to the live Active Orders/Overdue Invoices summary and the
   /// live Current Balance and Last Payment sources in parallel, since all
   /// three load independently (see [_loadCurrentBalance]/[_loadLastPayment]).
   Future<void> refreshHomeDashboardData() async {
@@ -513,12 +560,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Loads the most recent payment from the live Payments API for the Last
-  /// Payment row. Independent of [loadHomeDashboardData]/
-  /// [refreshHomeDashboardData]'s mock dashboard summary, so a Payments API
-  /// failure never blanks out Balance/Orders/Invoices, and a mock-fetch
-  /// failure never blocks or clears a successfully loaded payment. Also
-  /// serves as the retry action after an error.
+  /// Loads the most recent payment from `customer_details`'
+  /// `lastPaymentAmount`/`lastPaymentDate` fields for the Last Payment row
+  /// (see [CustomerDetailsLastPaymentDataSource]). Independent of
+  /// [loadHomeDashboardData]/[refreshHomeDashboardData], so a
+  /// customer-details failure never blanks out Balance/Orders/Invoices, and
+  /// vice versa. Also serves as the retry action after an error.
   ///
   /// On HTTP 401, [LastPaymentDataSource] throws [SessionExpiredException]
   /// only after the centralized session coordinator has already cleared the
@@ -570,19 +617,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Formats [entry.amount] as an absolute, never-negative value per the
-  /// confirmed display rule, using [entry.currencyCode] exactly as returned
-  /// — never trimmed, never defaulted to USD/`$`. [formatCurrency] only adds
-  /// its own `$` fallback when passed a `null` currency code, which this
-  /// never does; a blank (but non-null) code instead reuses that same
-  /// numeric formatting with the incidental leading separator space
-  /// trimmed, so a missing currency still reads as a plain number rather
-  /// than a fabricated symbol.
-  String _formatLastPaymentAmount(PaymentEntry entry) {
-    final formatted = formatCurrency(
-      entry.amount.abs(),
-      currencyCode: entry.currencyCode,
-    );
-    return entry.currencyCode.trim().isEmpty ? formatted.trimLeft() : formatted;
+  /// confirmed display rule. `customer_details` carries no currency field
+  /// at all (unlike the Payments-list endpoint this row used to source
+  /// from), so this always renders the plain figure via
+  /// [formatCurrencyOrUnknown] — no prefix, never a guessed `$`/code.
+  String _formatLastPaymentAmount(LastPaymentSummary entry) {
+    return formatCurrencyOrUnknown(entry.amount.abs(), currencyCode: null);
   }
 
   /// Validates that the catalogue code input is not empty (after trimming
@@ -1090,10 +1130,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Builds the Current Balance card (live ledger-entries API), the
-  // active-orders/overdue-invoices section (still mock-backed), and the
-  // Last Payment row (live Payments API) — each loads and switches between
-  // its own loading/error/loaded states independently of the others; see
-  // _loadCurrentBalance/_loadLastPayment.
+  // active-orders/overdue-invoices section (live customer-details API), and
+  // the Last Payment row (live customer-details API) — each loads and
+  // switches between its own loading/error/loaded states independently of
+  // the others; see _loadCurrentBalance/_loadLastPayment.
   Widget _buildDashboardSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1205,9 +1245,13 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       case _LastPaymentUiState.loaded:
         final entry = _lastPaymentEntry!;
+        final date = entry.date;
         return LastPaymentCard(
           amount: _formatLastPaymentAmount(entry),
-          date: formatMonthDay(entry.postingDate),
+          // customer_details can report an amount with no accompanying
+          // date — shown as an empty date string rather than a fabricated
+          // one; the amount alone is still real, confirmed data.
+          date: date == null ? '' : formatMonthDay(date),
         );
     }
   }
@@ -1617,9 +1661,13 @@ class _VariationRow extends StatelessWidget {
       );
     } else if (state == _CheckAvailabilityUiState.notFound) {
       // No open inventory rows for this exact itemNo — effectively out of
-      // stock (still no figure shown).
-      belowLine = const _StockStatusPill(
+      // stock (still no figure shown), but incoming stock already on a
+      // purchase order still surfaces its expected receipt date.
+      belowLine = _StockStatusPill(
         level: StockAvailabilityLevel.outOfStock,
+        expectedRestockDate: result is StockLookupNotFound
+            ? result.expectedRestockDate
+            : null,
       );
     } else {
       // retryableFailure / temporarilyUnavailable / invalidInput
@@ -1689,9 +1737,11 @@ class _StockStatusPill extends StatelessWidget {
 
   final StockAvailabilityLevel level;
 
-  /// TODO(expected-restock-date): shown beside an out-of-stock status once a
-  /// purchase/replenishment endpoint feeds
-  /// `StockLookupSuccess.expectedRestockDate`. Always null today.
+  /// The earliest purchase-order expected-receipt date after the lookup
+  /// date, fed by `StockLookupSuccess.expectedRestockDate` /
+  /// `StockLookupNotFound.expectedRestockDate` — shown beside an
+  /// out-of-stock status as "stock expected by this date"; `null` when no
+  /// incoming stock is on order.
   final DateTime? expectedRestockDate;
 
   @override
@@ -1739,7 +1789,15 @@ class _StockStatusPill extends StatelessWidget {
           ),
           if (restockDate != null)
             Text(
-              MaterialLocalizations.of(context).formatMediumDate(restockDate),
+              context.t(
+                'home.stockExpectedBy',
+                params: {
+                  'date': MaterialLocalizations.of(
+                    context,
+                  ).formatMediumDate(restockDate),
+                },
+              ),
+              key: const ValueKey('variation-restock-date'),
               style: TextStyle(fontSize: 12, color: fg),
             ),
         ],

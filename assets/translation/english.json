@@ -59,7 +59,8 @@
     "catalogueGroupTotalInventory": "Group total: {amount}",
     "catalogueSelectVariation": "Select a variation",
     "checkVariationAction": "Check",
-    "stockOutOfStock": "Out of stock"
+    "stockOutOfStock": "Out of stock",
+    "stockExpectedBy": "Stock expected by {date}"
   },
   "balanceCard": {
     "label": "CURRENT BALANCE",
@@ -187,8 +188,12 @@
   "invoices": {
     "overdueTitle": "Overdue Invoices",
     "title": "Invoices",
-    "overdueListComingSoon": "Overdue invoices list coming soon",
-    "listComingSoon": "Invoices list coming soon"
+    "empty": "No invoices found.",
+    "unableToLoad": "Unable to load invoices.",
+    "unableToLoadMore": "Could not load more invoices.",
+    "loadMore": "Load more",
+    "linesCount": "{count} lines",
+    "overdueScopeNote": "Showing all invoices — per-invoice overdue status is not available from the API yet. The overdue total on Home is live data."
   },
   "invoiceDetails": {
     "title": "Invoice Details",

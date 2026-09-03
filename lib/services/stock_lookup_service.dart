@@ -126,12 +126,14 @@ class StockLookupSuccess extends StockLookupResult {
   /// that doesn't exercise availability display).
   final List<StockLocationAvailability> availabilityByLocation;
 
-  /// TODO(expected-restock-date): the earliest expected incoming-stock date
-  /// for this item, shown beside an out-of-stock status on the Home Check
-  /// Availability card. No ANC API endpoint exposes purchase-order /
-  /// replenishment receipt dates yet, so `ApiStockLookupService` always
-  /// leaves this `null`; populate it here (and render it in
-  /// `home_screen.dart`'s status pill) once such an endpoint exists.
+  /// The earliest purchase-order `Expected_Receipt_Date` strictly after the
+  /// lookup date for this exact item, or `null` when no incoming stock is
+  /// on order (or the purchase-orders fetch failed — it's best-effort and
+  /// must never fail the main lookup). Populated by `ApiStockLookupService`
+  /// only when the item is out of stock (see
+  /// [combinedAvailabilityLevel]), and shown beside the out-of-stock status
+  /// on the Home Check Availability card and the Scan Stock result card as
+  /// "stock expected by this date".
   final DateTime? expectedRestockDate;
 
   /// A single, location-agnostic availability classification for this item,
@@ -196,9 +198,16 @@ enum StockAvailabilityLevel {
   outOfStock,
 }
 
-/// The lookup completed but found no stock record for [rawCode].
+/// The lookup completed but found no stock record for [rawCode] — the
+/// out-of-stock case for an item with no open inventory rows at all.
 class StockLookupNotFound extends StockLookupResult {
-  const StockLookupNotFound(super.rawCode);
+  const StockLookupNotFound(super.rawCode, {this.expectedRestockDate});
+
+  /// Same meaning and source as [StockLookupSuccess.expectedRestockDate]:
+  /// even an item with no inventory rows can have incoming stock already on
+  /// a purchase order, and the UI shows that date beside the out-of-stock
+  /// status.
+  final DateTime? expectedRestockDate;
 }
 
 /// [rawCode] itself failed validation before any lookup was attempted (e.g.

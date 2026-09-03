@@ -59,7 +59,8 @@
     "catalogueGroupTotalInventory": "إجمالي المجموعة: {amount}",
     "catalogueSelectVariation": "اختر صنفًا فرعيًا",
     "checkVariationAction": "تحقق",
-    "stockOutOfStock": "نفد المخزون"
+    "stockOutOfStock": "نفد المخزون",
+    "stockExpectedBy": "مخزون متوقع بحلول {date}"
   },
   "balanceCard": {
     "label": "الرصيد الحالي",
@@ -187,8 +188,12 @@
   "invoices": {
     "overdueTitle": "الفواتير المتأخرة",
     "title": "الفواتير",
-    "overdueListComingSoon": "قائمة الفواتير المتأخرة قريبًا",
-    "listComingSoon": "قائمة الفواتير قريبًا"
+    "empty": "لا توجد فواتير.",
+    "unableToLoad": "تعذر تحميل الفواتير.",
+    "unableToLoadMore": "تعذر تحميل المزيد من الفواتير.",
+    "loadMore": "تحميل المزيد",
+    "linesCount": "{count} بنود",
+    "overdueScopeNote": "يتم عرض جميع الفواتير — حالة التأخر لكل فاتورة غير متوفرة من النظام بعد. إجمالي المتأخرات في الصفحة الرئيسية بيانات حية."
   },
   "invoiceDetails": {
     "title": "تفاصيل الفاتورة",

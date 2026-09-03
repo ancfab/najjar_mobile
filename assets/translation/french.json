@@ -59,7 +59,8 @@
     "catalogueGroupTotalInventory": "Total du groupe : {amount}",
     "catalogueSelectVariation": "Sélectionnez une variante",
     "checkVariationAction": "Vérifier",
-    "stockOutOfStock": "Rupture de stock"
+    "stockOutOfStock": "Rupture de stock",
+    "stockExpectedBy": "Stock attendu d'ici le {date}"
   },
   "balanceCard": {
     "label": "SOLDE ACTUEL",
@@ -187,8 +188,12 @@
   "invoices": {
     "overdueTitle": "Factures en retard",
     "title": "Factures",
-    "overdueListComingSoon": "Liste des factures en retard bientôt disponible",
-    "listComingSoon": "Liste des factures bientôt disponible"
+    "empty": "Aucune facture.",
+    "unableToLoad": "Impossible de charger les factures.",
+    "unableToLoadMore": "Impossible de charger plus de factures.",
+    "loadMore": "Charger plus",
+    "linesCount": "{count} lignes",
+    "overdueScopeNote": "Toutes les factures sont affichées — le statut de retard par facture n'est pas encore disponible via l'API. Le total en retard sur l'accueil est une donnée en direct."
   },
   "invoiceDetails": {
     "title": "Détails de la facture",

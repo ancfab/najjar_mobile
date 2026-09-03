@@ -15,8 +15,6 @@
 /// `commonItemNo` match is distinguished from that broader set.
 library;
 
-import 'package:flutter/foundation.dart';
-
 import '../config/api_config.dart';
 import '../models/business_central/business_central_item_search_group.dart';
 import 'anc_api_client.dart';

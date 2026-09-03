@@ -817,12 +817,14 @@ void main() {
             lineNo: 10000,
             amount: 180,
             amountIncludingVat: 189,
+            currencyCode: '', // isolates amount computation from currency display
           ),
           sampleInvoiceLine(
             documentNo: 'INV-24001',
             lineNo: 20000,
             amount: 100,
             amountIncludingVat: 105,
+            currencyCode: '',
           ),
         ],
       );
@@ -830,6 +832,88 @@ void main() {
       expect(find.text('280.00'), findsOneWidget); // subtotal 180 + 100
       expect(find.text('294.00'), findsOneWidget); // total 189 + 105
     });
+
+    testWidgets(
+      'falls back to a line\'s own Amount for Total when '
+      'Amount_Including_VAT is not published (confirmed absent on '
+      'Lebanon/Iraq\'s real invoices page) — never an invented VAT figure',
+      (tester) async {
+        await pumpLive(
+          tester,
+          lines: [
+            sampleInvoiceLine(
+              documentNo: 'INV-24001',
+              lineNo: 10000,
+              amount: 180,
+              amountIncludingVat: null,
+              currencyCode: '',
+            ),
+            sampleInvoiceLine(
+              documentNo: 'INV-24001',
+              lineNo: 20000,
+              amount: 100,
+              amountIncludingVat: null,
+              currencyCode: '',
+            ),
+          ],
+        );
+
+        expect(find.text('280.00'), findsWidgets); // subtotal AND total
+      },
+    );
+
+    testWidgets(
+      "prefixes every amount with the invoice's own Currency_Code when "
+      'known',
+      (tester) async {
+        await pumpLive(
+          tester,
+          lines: [
+            sampleInvoiceLine(
+              documentNo: 'INV-24001',
+              lineNo: 10000,
+              amount: 180,
+              amountIncludingVat: 189,
+              currencyCode: 'OMR',
+            ),
+            sampleInvoiceLine(
+              documentNo: 'INV-24001',
+              lineNo: 20000,
+              amount: 100,
+              amountIncludingVat: 105,
+              currencyCode: 'OMR',
+            ),
+          ],
+        );
+
+        expect(find.text('OMR 180.00'), findsOneWidget); // line 1 amount
+        expect(find.text('OMR 100.00'), findsOneWidget); // line 2 amount
+        expect(find.text('OMR 280.00'), findsOneWidget); // subtotal
+        expect(find.text('OMR 294.00'), findsOneWidget); // total
+      },
+    );
+
+    testWidgets(
+      'shows the plain amount, no prefix, when every line\'s '
+      'Currency_Code is blank/unknown',
+      (tester) async {
+        await pumpLive(
+          tester,
+          lines: [
+            sampleInvoiceLine(
+              documentNo: 'INV-24001',
+              lineNo: 10000,
+              amount: 180,
+              amountIncludingVat: 189,
+              currencyCode: '',
+            ),
+          ],
+        );
+
+        expect(find.text('180.00'), findsWidgets);
+        expect(find.textContaining('?'), findsNothing);
+      },
+    );
 
     testWidgets('never shows lines belonging to a different invoice '
         'Document_No', (tester) async {

@@ -10,6 +10,7 @@ import '../services/support_region_service.dart';
 import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
+import '../widgets/client_brand_title.dart';
 import '../widgets/custom_bottom_nav.dart';
 import '../widgets/support_action_card.dart';
 import '../widgets/support_hours_card.dart';
@@ -324,7 +325,9 @@ class _SupportScreenState extends State<SupportScreen> {
         elevation: 0,
         toolbarHeight: 68,
         titleSpacing: 16,
-        title: ClampedTextScale(child: _buildHeaderTitle()),
+        title: ClampedTextScale(
+          child: ClientBrandTitle(pageTitle: context.t('support.title')),
+        ),
       ),
       body: SafeArea(
         top: false,
@@ -391,62 +394,6 @@ class _SupportScreenState extends State<SupportScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  // App bar title: small brand mark + "Indigo Loom" eyebrow + page title,
-  // matching the header style used by the Orders screen.
-  Widget _buildHeaderTitle() {
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.primaryNavy,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            'IL',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Indigo Loom',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                  color: AppColors.grayText,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                context.t('support.title'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textNavy,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 

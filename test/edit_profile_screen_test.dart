@@ -14,7 +14,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/config/api_config.dart';
-import 'package:anc_fabrics/data/mock_profile_data.dart';
 import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/screens/change_password_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
@@ -1131,12 +1130,42 @@ void main() {
   });
 
   group('Client info', () {
-    testWidgets('Shows the ANC ID and profile-updated text', (tester) async {
-      await pumpEditProfile(tester);
+    testWidgets(
+      "Shows the account's real BC customer number from the session",
+      (tester) async {
+        await pumpEditProfile(tester);
+        await tester.pump();
 
-      expect(find.text('ANC ID: #${kMockUserProfile.ancId}'), findsOneWidget);
-      expect(find.text(kMockUserProfile.profileUpdatedLabel), findsOneWidget);
-    });
+        expect(find.text('ANC ID: #SAMPLE-0001'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Shows no ANC ID label when the session has no linked BC customer',
+      (tester) async {
+        await pumpEditProfile(
+          tester,
+          authService: _authServiceFor(
+            session: const AuthSession(
+              token: _syntheticToken,
+              userId: 7,
+              username: 'sample.user',
+              phone: '+96890000000',
+              country: 'OM',
+              clientId: 'ANCNAJJAR',
+              bcCustomerNo: null,
+              mustChangePassword: false,
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('edit-profile-bc-customer-no')),
+          findsNothing,
+        );
+      },
+    );
   });
 
   group('Form fields', () {
@@ -1757,7 +1786,10 @@ void main() {
       // exception: it is not a locally-owned customer field, so it still
       // comes from widget.profile (see the class doc comment).
       expect(request.email, '');
-      expect(request.phone, kMockUserProfile.phone);
+      // Not a locally-owned customer field — it's re-composed from the
+      // real, authenticated identity fields (dial code + phone digits),
+      // never from any mock/fabricated value.
+      expect(request.phone, '+96890000000');
       expect(request.company, '');
       expect(request.businessAddress, '');
     });
