@@ -15,6 +15,7 @@ class AccountStatementData {
     this.quickHistory = const [],
     required this.generatedAt,
     this.currencyCode,
+    this.clientName,
   });
 
   /// The Global Account Balance hero figure (`customerBalance` from the
@@ -43,8 +44,15 @@ class AccountStatementData {
   /// (ultimately ledger-entries' `Currency_Code`), passed straight through
   /// by `AccountBalanceScreen`. Never derived from `customer-details`
   /// itself, which exposes no currency field, and never re-resolved here.
-  /// `null` when not yet resolved, in which case every amount renders
-  /// through `formatCurrencyOrUnknown`'s "?" fallback rather than a guessed
-  /// code.
+  /// `null` when not yet resolved, in which case every amount renders as
+  /// the plain figure via `formatCurrencyOrUnknown`, with no prefix at all
+  /// (never a guessed code).
   final String? currencyCode;
+
+  /// The signed-in customer's own real name — `AccountBalanceScreen`'s
+  /// already-resolved `_displayName` (see `resolveClientDisplayName`),
+  /// shown as the document's header instead of a fabricated company brand.
+  /// `null` when not yet resolved, in which case the header omits it
+  /// entirely rather than showing a placeholder.
+  final String? clientName;
 }

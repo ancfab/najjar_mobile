@@ -19,8 +19,9 @@ BusinessCentralInvoiceLine sampleInvoiceLine({
   double quantity = 12,
   double unitPrice = 15,
   double amount = 180,
-  double amountIncludingVat = 189,
+  double? amountIncludingVat = 189,
   String orderNo = 'SO-24001',
+  String currencyCode = 'AED',
 }) {
   return BusinessCentralInvoiceLine(
     documentNo: documentNo,
@@ -36,6 +37,7 @@ BusinessCentralInvoiceLine sampleInvoiceLine({
     amount: amount,
     amountIncludingVat: amountIncludingVat,
     orderNo: orderNo,
+    currencyCode: currencyCode,
   );
 }
 

@@ -17,6 +17,7 @@ class LoginResponse {
     required this.token,
     required this.mustChangePassword,
     required this.user,
+    this.customerDetails,
   });
 
   /// Opaque Sanctum personal access token, stored and sent back exactly as
@@ -35,6 +36,15 @@ class LoginResponse {
 
   final AuthenticatedUser user;
 
+  /// The raw `customer_details` object the backend embeds on login when the
+  /// account is linked to a Business Central customer (name, address,
+  /// contact info, balance figures — field names vary per BC tenant), or
+  /// `null` when absent, disabled server-side, or not a JSON object.
+  /// Deliberately lenient: this is enrichment used to seed the local
+  /// customer profile (see `AuthService.login`), so a missing or
+  /// oddly-shaped value must never fail an otherwise valid login.
+  final Map<String, dynamic>? customerDetails;
+
   /// Parses a login success body.
   ///
   /// Throws a [FormatException] — never including [token]'s value — when
@@ -51,10 +61,15 @@ class LoginResponse {
     }
     final user = AuthenticatedUser.fromJson(userJson);
 
+    final customerDetailsJson = json['customer_details'];
+
     return LoginResponse(
       token: token,
       mustChangePassword: _normalizeMustChangePassword(json, user),
       user: user,
+      customerDetails: customerDetailsJson is Map<String, dynamic>
+          ? customerDetailsJson
+          : null,
     );
   }
 

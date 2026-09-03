@@ -54,17 +54,17 @@ void main() {
     );
 
     test('includes the balance and credit figures with no hardcoded "\$" and '
-        'no derived credit-limit/total figure', () async {
+        'no "?" unknown-currency marker (just the plain figure)', () async {
       final bytes = await buildAccountStatementPdfBytes(data);
       final text = String.fromCharCodes(bytes);
 
-      expect(text, contains('(?)'));
       expect(text, contains('(36,711.73)'));
       expect(text, contains('(Available)'));
       expect(text, contains('(57,150.00)'));
       expect(text, contains('(Used)'));
       expect(text, contains('(42,850.00)'));
       expect(text, isNot(contains(r'($36,711.73)')));
+      expect(text, isNot(contains('(?)')));
       // No inferred total (availableCredit + usedCredit = 100,000.00) and
       // no "Credit Limit" label — that figure isn't a confirmed backend
       // contract.

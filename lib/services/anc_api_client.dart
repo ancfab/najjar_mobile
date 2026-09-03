@@ -19,6 +19,7 @@ import '../models/business_central/customer_details.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
+import '../models/business_central/purchase_order_line.dart';
 import '../models/business_central/sales_order_line.dart';
 import 'anc_api_exceptions.dart';
 
@@ -459,18 +460,7 @@ class AncApiClient {
       },
     );
 
-    final PaginatedResponse<BusinessCentralItemSearchGroup> decoded;
-    try {
-      decoded = _decodeItemSearchResponse(response);
-    } on AncApiException catch (error) {
-      rethrow;
-    }
-
-    for (final group in decoded.data) {
-      debugPrint('variations=${group.variations.length}');
-    }
-
-    return decoded;
+    return _decodeItemSearchResponse(response);
   }
 
   /// Calls `GET /api/business-central/inventory` for the authenticated
@@ -531,6 +521,51 @@ class AncApiClient {
       },
     );
     return _decodeInventoryResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/purchase-orders` for the
+  /// authenticated user, requesting [page] at a fixed [perPage] size,
+  /// optionally filtered to the exact Business Central item [itemNo] via
+  /// the `item_no` query parameter (applied server-side over the ANC API's
+  /// normalized rows). Company-wide procurement data — never sends a
+  /// customer identifier; vendor and cost fields are stripped server-side
+  /// before rows reach this client.
+  ///
+  /// [page]/[perPage] are clamped the same way as every other Business
+  /// Central list call on this client, and pagination follows the same
+  /// fixed-endpoint `page: currentPage + 1` convention (never a
+  /// backend-provided `next_page_url`).
+  ///
+  /// A blank (empty or whitespace-only) [itemNo] throws [ArgumentError]
+  /// rather than silently sending an unfiltered request — the only caller
+  /// today ([ApiStockLookupService]) always filters; pass `null` explicitly
+  /// for a deliberate unfiltered fetch.
+  Future<PaginatedResponse<PurchaseOrderLine>> fetchPurchaseOrders({
+    required String token,
+    String? itemNo,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) async {
+    if (itemNo != null && itemNo.trim().isEmpty) {
+      throw ArgumentError.value(itemNo, 'itemNo', 'must not be blank');
+    }
+
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.purchaseOrdersPath,
+      token: token,
+      queryParameters: {
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+        'item_no': ?itemNo,
+      },
+    );
+    return _decodePurchaseOrdersResponse(response);
   }
 
   /// Calls `GET /api/business-central/customer-details` for the
@@ -1158,6 +1193,32 @@ class AncApiClient {
   /// [_decodeLedgerEntriesResponse]. The Business Central taxonomy
   /// (pagination bug vs. account-not-linked) is decided one layer up (see
   /// `mapBusinessCentralError`), not here.
+  PaginatedResponse<PurchaseOrderLine> _decodePurchaseOrdersResponse(
+    http.Response response,
+  ) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<PurchaseOrderLine>.fromJson(
+          json,
+          PurchaseOrderLine.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed purchase-orders response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API purchase-orders request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
   PaginatedResponse<BusinessCentralSalesOrderLine> _decodeSalesOrdersResponse(
     http.Response response,
   ) {

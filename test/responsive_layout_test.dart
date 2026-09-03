@@ -26,6 +26,7 @@ import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
+import 'package:anc_fabrics/services/invoices_service.dart';
 import 'package:anc_fabrics/widgets/account_balance_hero_card.dart';
 import 'package:anc_fabrics/widgets/country_code_picker.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
@@ -39,8 +40,11 @@ import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_balance_history_data_source.dart';
 import 'helpers/fake_current_balance_data_source.dart';
+import 'helpers/fake_home_dashboard_service.dart';
 import 'helpers/fake_invoice_lookup_data_source.dart';
+import 'helpers/fake_local_customer_profile_store.dart';
 import 'helpers/fake_last_payment_data_source.dart';
+import 'helpers/fake_session_expiry_coordinator.dart';
 
 import 'helpers/fake_order_detail_data_source.dart';
 import 'helpers/fake_quick_history_data_source.dart';
@@ -164,6 +168,7 @@ void main() {
               ),
             ),
             authService: _authServiceForLayoutCheck(),
+            dashboardService: FakeHomeDashboardService(),
           ),
         ),
       );
@@ -715,15 +720,27 @@ void main() {
       (tester) async {
         await _setSize(tester, _smallPhone, textScaleFactor: 1.5);
         await tester.pumpWidget(
-          const MaterialApp(
-            supportedLocales: [Locale('en'), Locale('ar'), Locale('fr')],
-            localizationsDelegates: [
+          MaterialApp(
+            supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+            localizationsDelegates: const [
               AppTranslationsDelegate(),
               GlobalMaterialLocalizations.delegate,
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: InvoicesScreen(),
+            // Live InvoicesService defaults to real HTTP/secure storage,
+            // which never resolves in this widget-test sandbox — inject a
+            // fake so pumpAndSettle doesn't wait forever (this test only
+            // cares about layout, not real invoice data).
+            home: InvoicesScreen(
+              invoicesService: InvoicesService(
+                apiClient: AncApiClient(
+                  httpClient: _ShouldNeverBeCalledHttpClient(),
+                ),
+                sessionStore: FakeAuthSessionStore(),
+                coordinator: FakeSessionExpiryCoordinator(),
+              ),
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -754,6 +771,8 @@ void main() {
             exporter: FakeAccountStatementExporter(),
             quickHistorySource: FakeQuickHistoryDataSource(),
             balanceHistorySource: FakeBalanceHistoryDataSource(),
+            authService: _authServiceForLayoutCheck(),
+            localProfileStore: FakeLocalCustomerProfileStore(),
           ),
         ),
       );

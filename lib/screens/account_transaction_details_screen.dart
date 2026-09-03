@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../utils/currency.dart';
 import '../utils/date_time_format.dart';
 import '../utils/responsive.dart';
+import '../widgets/client_brand_title.dart';
 
 /// Transaction Details screen for a single [AccountTransaction] selected
 /// from the Account Balance screen's Quick History list.
@@ -132,25 +133,13 @@ class AccountTransactionDetailsScreen extends StatelessWidget {
         onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: Text(context.t('accountTransaction.title')),
-      actions: [
+      actions: const [
         Padding(
-          padding: const EdgeInsetsDirectional.only(end: 16),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.primaryNavy,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'IL',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+          padding: EdgeInsetsDirectional.only(end: 16),
+          child: ClientBrandTitle(
+            badgeOnly: true,
+            badgeSize: 32,
+            badgeFontSize: 11,
           ),
         ),
       ],

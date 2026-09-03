@@ -12,6 +12,7 @@ import '../services/mock_invoice_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/filename.dart';
 import '../utils/responsive.dart';
+import '../widgets/client_brand_title.dart';
 import '../widgets/invoice_action_buttons.dart';
 import '../widgets/invoice_breadcrumb.dart';
 import '../widgets/invoice_info_card.dart';
@@ -271,7 +272,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         // so the menu affordance falls back to simple back navigation.
         onPressed: () => Navigator.of(context).maybePop(),
       ),
-      title: ClampedTextScale(child: _buildBrandTitle()),
+      title: const ClampedTextScale(child: ClientBrandTitle()),
       actions: [
         Padding(
           padding: const EdgeInsetsDirectional.only(end: 16),
@@ -302,44 +303,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     );
   }
 
-  // "Indigo Loom" brand mark shown in the header, matching the IL badge
-  // convention used across the app's other screens.
-  Widget _buildBrandTitle() {
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.primaryNavy,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            'IL',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: Text(
-            'Indigo Loom',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textNavy,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildBody() {
     if (_isLive) return _buildLiveBody();

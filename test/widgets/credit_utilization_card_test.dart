@@ -37,7 +37,7 @@ void main() {
   group('Figures', () {
     testWidgets(
       'Shows the Credit Utilization heading and Available/Used Credit '
-      'labels, with the "?" unknown-currency fallback when no currency is '
+      'labels, with the plain amount (no prefix) when no currency is '
       'supplied',
       (tester) async {
         await _pumpCard(
@@ -51,9 +51,9 @@ void main() {
         expect(find.text('Credit Utilization'), findsOneWidget);
         expect(find.text('Credit Information'), findsNothing);
         expect(find.text('Available Credit'), findsOneWidget);
-        expect(find.text('? 57,150.00'), findsOneWidget);
+        expect(find.text('57,150.00'), findsOneWidget);
         expect(find.text('Used Credit'), findsOneWidget);
-        expect(find.text('? 42,850.00'), findsOneWidget);
+        expect(find.text('42,850.00'), findsOneWidget);
         expect(find.text('\$57,150.00'), findsNothing);
         expect(find.text('\$42,850.00'), findsNothing);
       },
@@ -73,7 +73,7 @@ void main() {
 
       expect(find.text('AED 57,150.00'), findsOneWidget);
       expect(find.text('AED 42,850.00'), findsOneWidget);
-      expect(find.text('? 57,150.00'), findsNothing);
+      expect(find.text('57,150.00'), findsNothing);
     });
 
     for (final currency in ['AED', 'OMR', 'USD', 'IQD', 'SYP']) {

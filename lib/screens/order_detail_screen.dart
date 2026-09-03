@@ -12,6 +12,7 @@ import '../services/order_detail_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
 import '../utils/responsive.dart';
+import '../widgets/client_brand_title.dart';
 import 'invoice_details_screen.dart';
 
 /// Order Detail screen for a single Business Central sales order,
@@ -267,25 +268,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: Text(context.t('orderDetail.title')),
-      actions: [
+      actions: const [
         Padding(
-          padding: const EdgeInsetsDirectional.only(end: 16),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.primaryNavy,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'IL',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+          padding: EdgeInsetsDirectional.only(end: 16),
+          child: ClientBrandTitle(
+            badgeOnly: true,
+            badgeSize: 32,
+            badgeFontSize: 11,
           ),
         ),
       ],

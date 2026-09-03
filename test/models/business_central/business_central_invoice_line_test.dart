@@ -15,6 +15,7 @@ Map<String, dynamic> _validJson({
   Object? unitPrice = 850.0,
   Object? amount = 10200.0,
   Object? amountIncludingVat = 10710.0,
+  Object? currencyCode = 'AED',
 }) => {
   'Document_No': 'INV-1001',
   'Line_No': 10000,
@@ -29,6 +30,7 @@ Map<String, dynamic> _validJson({
   'Amount': amount,
   'Amount_Including_VAT': amountIncludingVat,
   'Order_No': 'ORD-8829',
+  'Currency_Code': currencyCode,
 };
 
 /// Every undocumented field observed on the confirmed live deployed
@@ -70,6 +72,7 @@ void main() {
       expect(line.amount, 10200.0);
       expect(line.amountIncludingVat, 10710.0);
       expect(line.orderNo, 'ORD-8829');
+      expect(line.currencyCode, 'AED');
     });
 
     test('ignores every undocumented extra field observed on the live '
@@ -142,6 +145,100 @@ void main() {
         final line = BusinessCentralInvoiceLine.fromJson(json);
         expect(line.postingDate, isNull);
         expect(line.postingDate, isNot(DateTime.now()));
+      });
+    });
+
+    group('Amount_Including_VAT (confirmed live contract mismatch)', () {
+      test('a missing Amount_Including_VAT key parses as null', () {
+        final json = _validJson()..remove('Amount_Including_VAT');
+        final line = BusinessCentralInvoiceLine.fromJson(json);
+        expect(line.amountIncludingVat, isNull);
+      });
+
+      test('an explicit null Amount_Including_VAT parses as null', () {
+        final line = BusinessCentralInvoiceLine.fromJson(
+          _validJson(amountIncludingVat: null),
+        );
+        expect(line.amountIncludingVat, isNull);
+      });
+
+      test('a valid int or double Amount_Including_VAT parses correctly', () {
+        expect(
+          BusinessCentralInvoiceLine.fromJson(
+            _validJson(amountIncludingVat: 10710),
+          ).amountIncludingVat,
+          10710.0,
+        );
+        expect(
+          BusinessCentralInvoiceLine.fromJson(
+            _validJson(amountIncludingVat: 10710.5),
+          ).amountIncludingVat,
+          10710.5,
+        );
+      });
+
+      test('a present non-numeric Amount_Including_VAT throws, never '
+          'treated as unknown/null', () {
+        expect(
+          () => BusinessCentralInvoiceLine.fromJson(
+            _validJson(amountIncludingVat: 'not-a-number'),
+          ),
+          throwsFormatException,
+        );
+      });
+
+      test('never substitutes Amount or 0 when Amount_Including_VAT is '
+          'missing', () {
+        final json = _validJson(amount: 10200.0)
+          ..remove('Amount_Including_VAT');
+        final line = BusinessCentralInvoiceLine.fromJson(json);
+        expect(line.amountIncludingVat, isNull);
+        expect(line.amountIncludingVat, isNot(line.amount));
+        expect(line.amountIncludingVat, isNot(0));
+      });
+    });
+
+    group('Currency_Code (confirmed live "blankable" field, 2026-09-03)', () {
+      test('a missing Currency_Code key parses as "" (never null)', () {
+        final json = _validJson()..remove('Currency_Code');
+        final line = BusinessCentralInvoiceLine.fromJson(json);
+        expect(line.currencyCode, '');
+      });
+
+      test('an explicit null Currency_Code parses as "" (never null)', () {
+        final line = BusinessCentralInvoiceLine.fromJson(
+          _validJson(currencyCode: null),
+        );
+        expect(line.currencyCode, '');
+      });
+
+      test('an explicit "" Currency_Code (confirmed live on Lebanon\'s '
+          'tenant) parses as "", not an error', () {
+        final line = BusinessCentralInvoiceLine.fromJson(
+          _validJson(currencyCode: ''),
+        );
+        expect(line.currencyCode, '');
+      });
+
+      test('a real currency code parses exactly as given', () {
+        for (final code in ['USD', 'OMR', 'AED', 'IQD', 'SYP']) {
+          expect(
+            BusinessCentralInvoiceLine.fromJson(
+              _validJson(currencyCode: code),
+            ).currencyCode,
+            code,
+          );
+        }
+      });
+
+      test('a present non-String Currency_Code throws, never treated as '
+          'blank', () {
+        expect(
+          () => BusinessCentralInvoiceLine.fromJson(
+            _validJson(currencyCode: 123),
+          ),
+          throwsFormatException,
+        );
       });
     });
 
@@ -260,7 +357,8 @@ void main() {
           'Quantity',
           'Unit_Price',
           'Amount',
-          'Amount_Including_VAT',
+          // Posting_Date/Amount_Including_VAT are deliberately excluded —
+          // both are optional, covered by their own dedicated groups above.
           'Order_No',
         ]) {
           final json = _validJson()..remove(key);

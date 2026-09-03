@@ -20,19 +20,25 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:anc_fabrics/models/account_transaction.dart';
+import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/balance_history_point.dart';
 import 'package:anc_fabrics/models/business_central/customer_details.dart';
+import 'package:anc_fabrics/models/local_customer_profile.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/account_balance_service.dart';
+import 'package:anc_fabrics/services/anc_api_client.dart';
+import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/balance_history_data_source.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
 import 'package:anc_fabrics/services/current_user_avatar_controller.dart';
+import 'package:anc_fabrics/services/local_customer_profile_store.dart';
 import 'package:anc_fabrics/theme/app_colors.dart';
 import 'package:anc_fabrics/widgets/avatar_initials_badge.dart';
 import 'package:anc_fabrics/widgets/balance_history_date_range_picker.dart';
@@ -40,10 +46,54 @@ import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
+import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_balance_history_data_source.dart';
+import 'helpers/fake_local_customer_profile_store.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
+
+const _syntheticToken = 'synthetic-id|synthetic-secret';
+
+const _sampleSession = AuthSession(
+  token: _syntheticToken,
+  userId: 7,
+  username: 'sample.user',
+  phone: '+96890000000',
+  country: 'OM',
+  clientId: 'ANCNAJJAR',
+  bcCustomerNo: 'SAMPLE-0001',
+  mustChangePassword: false,
+);
+
+/// An http.Client that fails the test if it is ever called — the header's
+/// identity load only ever calls [AuthService.currentSession] (a local
+/// secure-storage read), never the network.
+class _ShouldNeverBeCalledHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    throw StateError(
+      'AuthService must not call the ANC API from AccountBalanceScreen — '
+      'only currentSession (a local secure-storage read) is used here.',
+    );
+  }
+
+  @override
+  void close() {}
+}
+
+/// Builds a real [AuthService] over a [FakeAuthSessionStore] seeded with
+/// [session] (defaulting to [_sampleSession]) — mirrors
+/// home_screen_test.dart's/edit_profile_screen_test.dart's identical
+/// pattern, so the header's real `AuthService.currentSession` call is
+/// exercised for real rather than re-implemented as a parallel fake.
+AuthService _authServiceFor({AuthSession? session}) {
+  final store = FakeAuthSessionStore()..seed(session ?? _sampleSession);
+  return AuthService(
+    apiClient: AncApiClient(httpClient: _ShouldNeverBeCalledHttpClient()),
+    sessionStore: store,
+  );
+}
 
 // Ledger-adapted fixture rows, matching what
 // adaptLedgerEntryToAccountTransaction would produce for real ledger
@@ -103,6 +153,8 @@ Future<void> _pumpAccountBalanceScreen(
   String? currencyCode,
   FakeQuickHistoryDataSource? quickHistorySource,
   BalanceHistoryDataSource? balanceHistorySource,
+  AuthService? authService,
+  LocalCustomerProfileStore? localProfileStore,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -132,6 +184,8 @@ Future<void> _pumpAccountBalanceScreen(
               points: _balanceHistoryPoints,
               currencyCode: 'AED',
             ),
+        authService: authService ?? _authServiceFor(),
+        localProfileStore: localProfileStore ?? FakeLocalCustomerProfileStore(),
       ),
     ),
   );
@@ -152,22 +206,59 @@ void main() {
   });
 
   group('Header', () {
-    testWidgets('Shows the Indigo Loom brand and avatar initials badge', (
-      tester,
-    ) async {
-      await _pumpAccountBalanceScreen(tester);
+    testWidgets(
+      'Shows the Indigo Loom brand and initials derived from the real '
+      "locally-stored customer profile's full name",
+      (tester) async {
+        final localProfileStore = FakeLocalCustomerProfileStore()
+          ..seed(
+            _sampleSession.userId,
+            const LocalCustomerProfile(
+              fullName: 'Amina Saleh',
+              email: '',
+              company: '',
+              businessAddress: '',
+            ),
+          );
+        await _pumpAccountBalanceScreen(
+          tester,
+          localProfileStore: localProfileStore,
+        );
 
-      expect(find.text('Indigo Loom'), findsOneWidget);
-      // Derived from the mock signed-in user, "Alex Sterling".
-      expect(find.text('AS'), findsOneWidget);
-    });
+        expect(find.text('Indigo Loom'), findsOneWidget);
+        expect(find.text('AS'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Falls back to the session username\'s initial when no local profile '
+      'name is saved — never a fabricated name',
+      (tester) async {
+        await _pumpAccountBalanceScreen(tester);
+
+        // _sampleSession.username is "sample.user" — a single "word" per
+        // userInitials' whitespace-splitting rule, so just its first letter.
+        expect(find.text('S'), findsOneWidget);
+      },
+    );
 
     testWidgets('Reflects a shared avatar image and keeps showing the initials '
         'fallback when none is set', (tester) async {
       final avatarController = CurrentUserAvatarController();
+      final localProfileStore = FakeLocalCustomerProfileStore()
+        ..seed(
+          _sampleSession.userId,
+          const LocalCustomerProfile(
+            fullName: 'Amina Saleh',
+            email: '',
+            company: '',
+            businessAddress: '',
+          ),
+        );
       await _pumpAccountBalanceScreen(
         tester,
         avatarController: avatarController,
+        localProfileStore: localProfileStore,
       );
 
       expect(find.text('AS'), findsOneWidget);
@@ -186,6 +277,16 @@ void main() {
         find.byKey(const ValueKey('account-balance-avatar')),
       );
       expect(badge.image, isNotNull);
+
+      // The resolve above still starts a fetch against flutter_test's stub
+      // HttpClient, which always answers 400 — let that expected async
+      // failure land inside THIS test and drain it, so it can neither fail
+      // this test nor leak into whichever test runs next.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      tester.takeException();
     });
   });
 
@@ -195,7 +296,7 @@ void main() {
       (tester) async {
         await _pumpAccountBalanceScreen(tester);
 
-        expect(find.text('? 36,711.73'), findsWidgets);
+        expect(find.text('36,711.73'), findsWidgets);
         expect(find.text('Export PDF'), findsOneWidget);
       },
     );
@@ -266,7 +367,7 @@ void main() {
         find.byKey(const ValueKey('account-balance-loading')),
         findsNothing,
       );
-      expect(find.text('? 36,711.73'), findsWidgets);
+      expect(find.text('36,711.73'), findsWidgets);
     });
 
     testWidgets('Shows the error state with retry on a summary failure', (
@@ -295,7 +396,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(callCount, 2);
-        expect(find.text('? 36,711.73'), findsWidgets);
+        expect(find.text('36,711.73'), findsWidgets);
       },
     );
 
@@ -326,9 +427,9 @@ void main() {
         await _pumpAccountBalanceScreen(tester);
 
         expect(find.text('Available Credit'), findsOneWidget);
-        expect(find.text('? 57,150.00'), findsOneWidget);
+        expect(find.text('57,150.00'), findsOneWidget);
         expect(find.text('Used Credit'), findsOneWidget);
-        expect(find.text('? 42,850.00'), findsOneWidget);
+        expect(find.text('42,850.00'), findsOneWidget);
         expect(find.text('\$57,150.00'), findsNothing);
         expect(find.text('\$42,850.00'), findsNothing);
       },
@@ -401,7 +502,7 @@ void main() {
 
           expect(find.text('$currency 36,711.73'), findsNWidgets(2));
           expect(find.text('$currency 0.00'), findsOneWidget);
-          expect(find.text('? 36,711.73'), findsNothing);
+          expect(find.text('36,711.73'), findsNothing);
         },
       );
     }
@@ -413,8 +514,8 @@ void main() {
         final service = FakeAccountBalanceService(summary: summary);
         await _pumpAccountBalanceScreen(tester, service: service);
 
-        expect(find.text('? 36,711.73'), findsNWidgets(2));
-        expect(find.text('? 0.00'), findsOneWidget);
+        expect(find.text('36,711.73'), findsNWidgets(2));
+        expect(find.text('0.00'), findsOneWidget);
       },
     );
 

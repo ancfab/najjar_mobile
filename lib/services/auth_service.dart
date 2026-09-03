@@ -9,6 +9,7 @@ import '../models/auth/change_password_result.dart';
 import '../models/auth/login_failure.dart';
 import '../models/auth/login_request.dart';
 import '../models/auth/login_response.dart';
+import '../models/local_customer_profile.dart';
 import '../models/auth/session_validation_result.dart';
 import '../models/auth/update_profile_result.dart';
 import '../models/auth/upload_avatar_result.dart';
@@ -16,6 +17,7 @@ import '../utils/image_format_sniffer.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
+import 'local_customer_profile_store.dart';
 import 'logout_service.dart';
 import 'secure_auth_session_store.dart';
 import 'session_storage_exception.dart';
@@ -58,15 +60,19 @@ class AuthService implements LogoutService {
   AuthService({
     required AncApiClient apiClient,
     required AuthSessionStore sessionStore,
+    LocalCustomerProfileStore? localProfileStore,
   }) : _apiClient = apiClient,
        _sessionStore = sessionStore,
+       _localProfileStore = localProfileStore ?? SecureLocalCustomerProfileStore(),
        _ownsApiClient = false;
 
   AuthService._owned({
     required AncApiClient apiClient,
     required AuthSessionStore sessionStore,
+    LocalCustomerProfileStore? localProfileStore,
   }) : _apiClient = apiClient,
        _sessionStore = sessionStore,
+       _localProfileStore = localProfileStore ?? SecureLocalCustomerProfileStore(),
        _ownsApiClient = true;
 
   /// Production factory: creates and owns its own [AncApiClient] (closed by
@@ -80,6 +86,11 @@ class AuthService implements LogoutService {
 
   final AncApiClient _apiClient;
   final AuthSessionStore _sessionStore;
+
+  /// Local persistence for the customer-profile display fields (full name,
+  /// email, company, business address), seeded at login from the account's
+  /// own Business Central Customer Details row — see [_seedLocalProfile].
+  final LocalCustomerProfileStore _localProfileStore;
 
   /// Whether this instance created [_apiClient] itself (via
   /// [AuthService.production]) as opposed to receiving a caller-owned one —
@@ -139,7 +150,77 @@ class AuthService implements LogoutService {
       return const AuthLoginFailure(AuthLoginFailureType.secureStorage);
     }
 
+    await _seedLocalProfile(session.userId, response.customerDetails);
+
     return AuthLoginSuccess(session);
+  }
+
+  /// Seeds this account's locally-persisted customer profile from the login
+  /// response's embedded Business Central Customer Details row, so the
+  /// profile screens show the customer's real BC name/email/address from
+  /// the very first login instead of empty fields.
+  ///
+  /// Strictly best-effort and never destructive:
+  /// - Nothing happens when the backend sent no `customer_details`.
+  /// - An already-saved local profile with any non-blank field is left
+  ///   untouched — the user's own edits always win over a re-seed.
+  /// - Any storage failure is swallowed; login has already succeeded.
+  ///
+  /// Field mapping (tenant field names vary in casing — the first present,
+  /// non-blank candidate wins; a field with no usable candidate is stored
+  /// as an empty string, never a fabricated value):
+  /// - full name/company: `customerName`
+  /// - email: `email`
+  /// - business address: `address`, `address2`, `city`, `postCode` joined.
+  Future<void> _seedLocalProfile(
+    int userId,
+    Map<String, dynamic>? customerDetails,
+  ) async {
+    if (customerDetails == null) return;
+
+    String pick(List<String> keys) {
+      for (final key in keys) {
+        final value = customerDetails[key];
+        if (value is String && value.trim().isNotEmpty) return value.trim();
+      }
+      return '';
+    }
+
+    final name = pick(['customerName', 'CustomerName', 'name', 'Name']);
+    final email = pick(['email', 'Email', 'eMail', 'E_Mail']);
+    final addressParts = [
+      pick(['address', 'Address']),
+      pick(['address2', 'Address2']),
+      pick(['city', 'City']),
+      pick(['postCode', 'PostCode', 'postalCode']),
+    ].where((part) => part.isNotEmpty).toList();
+    final businessAddress = addressParts.join(', ');
+
+    if (name.isEmpty && email.isEmpty && businessAddress.isEmpty) return;
+
+    try {
+      final existing = await _localProfileStore.load(userId);
+      final hasOwnData =
+          existing != null &&
+          (existing.fullName.trim().isNotEmpty ||
+              existing.email.trim().isNotEmpty ||
+              existing.company.trim().isNotEmpty ||
+              existing.businessAddress.trim().isNotEmpty);
+      if (hasOwnData) return;
+
+      await _localProfileStore.save(
+        userId,
+        LocalCustomerProfile(
+          fullName: name,
+          email: email,
+          company: name,
+          businessAddress: businessAddress,
+        ),
+      );
+    } catch (error) {
+      // Best-effort enrichment only — never fail a successful login over it.
+      debugPrint('Seeding local customer profile failed: $error');
+    }
   }
 
   /// Re-validates a persisted secure session against `GET /auth/me`, per

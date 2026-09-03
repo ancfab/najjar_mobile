@@ -30,9 +30,26 @@ import 'package:anc_fabrics/services/local_customer_profile_store.dart';
 import 'package:anc_fabrics/services/session_storage_exception.dart';
 
 import '../helpers/fake_auth_session_store.dart';
+import '../helpers/fake_local_customer_profile_store.dart';
 import '../helpers/fake_secure_key_value_store.dart';
 import '../helpers/recording_multipart_http_client.dart';
 import '../helpers/valid_avatar_image.dart';
+
+/// A [LocalCustomerProfileStore] whose every method throws — proves login's
+/// best-effort profile seeding swallows a storage failure rather than
+/// letting it escape and fail an otherwise successful login.
+class _ThrowingLocalCustomerProfileStore implements LocalCustomerProfileStore {
+  @override
+  Future<LocalCustomerProfile?> load(int userId) =>
+      throw StateError('load failed');
+
+  @override
+  Future<void> save(int userId, LocalCustomerProfile profile) =>
+      throw StateError('save failed');
+
+  @override
+  Future<void> clear(int userId) => throw StateError('clear failed');
+}
 
 /// Records the single request it receives and replies with a canned
 /// response (or throws, to simulate a transport failure), so tests can
@@ -132,12 +149,26 @@ AuthService _service(
   http.Client httpClient,
   FakeAuthSessionStore store, {
   Duration requestTimeout = const Duration(seconds: 15),
+  LocalCustomerProfileStore? localProfileStore,
 }) => AuthService(
   apiClient: AncApiClient(
     httpClient: httpClient,
     requestTimeout: requestTimeout,
   ),
   sessionStore: store,
+  localProfileStore: localProfileStore,
+);
+
+/// A [_RecordingHttpClient] whose canned login success body also embeds
+/// [customerDetails] under `customer_details`, exactly like the ANC API
+/// does when `businesscentral.login_customer_details.enabled` is on.
+_RecordingHttpClient _successHttpClientWithCustomerDetails(
+  Map<String, dynamic> customerDetails,
+) => _RecordingHttpClient(
+  (req) async => _jsonResponse(200, {
+    ..._validLoginResponseJson(),
+    'customer_details': customerDetails,
+  }, request: req),
 );
 
 void main() {
@@ -367,6 +398,153 @@ void main() {
       expect(result.toString(), isNot(contains(_syntheticToken)));
       expect(result.toString(), isNot(contains(_validPassword)));
     });
+  });
+
+  group('local customer-profile seeding on login', () {
+    test(
+      'seeds the local profile from customer_details when the account has '
+      'no local profile saved yet',
+      () async {
+        final http = _successHttpClientWithCustomerDetails({
+          'customerCode': 'SAMPLE-0001',
+          'customerName': 'Test Customer One',
+          'email': 'one@example.test',
+          'address': '123 Test Street',
+          'city': 'Test City',
+        });
+        final localProfileStore = FakeLocalCustomerProfileStore();
+        final service = _service(
+          http,
+          store,
+          localProfileStore: localProfileStore,
+        );
+
+        await service.login(
+          country: _validCountry,
+          phone: _validPhone,
+          username: _validUsername,
+          password: _validPassword,
+        );
+
+        final saved = await localProfileStore.load(7);
+        expect(saved, isNotNull);
+        expect(saved!.fullName, 'Test Customer One');
+        expect(saved.company, 'Test Customer One');
+        expect(saved.email, 'one@example.test');
+        expect(saved.businessAddress, '123 Test Street, Test City');
+      },
+    );
+
+    test('does nothing when the login response has no customer_details', () async {
+      final http = _successHttpClient();
+      final localProfileStore = FakeLocalCustomerProfileStore();
+      final service = _service(
+        http,
+        store,
+        localProfileStore: localProfileStore,
+      );
+
+      await service.login(
+        country: _validCountry,
+        phone: _validPhone,
+        username: _validUsername,
+        password: _validPassword,
+      );
+
+      expect(await localProfileStore.load(7), isNull);
+    });
+
+    test(
+      "never overwrites an already-saved local profile with any of the "
+      "user's own non-blank data — the user's own edits always win over a "
+      're-seed on a later login',
+      () async {
+        final http = _successHttpClientWithCustomerDetails({
+          'customerCode': 'SAMPLE-0001',
+          'customerName': 'Business Central Name',
+          'email': 'bc@example.test',
+        });
+        final localProfileStore = FakeLocalCustomerProfileStore()
+          ..seed(
+            7,
+            const LocalCustomerProfile(
+              fullName: 'My Own Name',
+              email: 'my.own@example.test',
+              company: '',
+              businessAddress: '',
+            ),
+          );
+        final service = _service(
+          http,
+          store,
+          localProfileStore: localProfileStore,
+        );
+
+        await service.login(
+          country: _validCountry,
+          phone: _validPhone,
+          username: _validUsername,
+          password: _validPassword,
+        );
+
+        final profile = await localProfileStore.load(7);
+        expect(profile!.fullName, 'My Own Name');
+        expect(profile.email, 'my.own@example.test');
+        expect(localProfileStore.savedUserIds, isEmpty);
+      },
+    );
+
+    test(
+      'a local-profile-store failure never fails an otherwise successful '
+      'login',
+      () async {
+        final http = _successHttpClientWithCustomerDetails({
+          'customerCode': 'SAMPLE-0001',
+          'customerName': 'Test Customer One',
+        });
+        final service = _service(
+          http,
+          store,
+          localProfileStore: _ThrowingLocalCustomerProfileStore(),
+        );
+
+        final result = await service.login(
+          country: _validCountry,
+          phone: _validPhone,
+          username: _validUsername,
+          password: _validPassword,
+        );
+
+        expect(result, isA<AuthLoginSuccess>());
+      },
+    );
+
+    test(
+      'ignores customer_details fields with no usable name/email/address '
+      'candidate, seeding nothing',
+      () async {
+        final http = _successHttpClientWithCustomerDetails({
+          'customerCode': 'SAMPLE-0001',
+          // No customerName/name/email/address field at all.
+          'customerbalance': 100.0,
+        });
+        final localProfileStore = FakeLocalCustomerProfileStore();
+        final service = _service(
+          http,
+          store,
+          localProfileStore: localProfileStore,
+        );
+
+        await service.login(
+          country: _validCountry,
+          phone: _validPhone,
+          username: _validUsername,
+          password: _validPassword,
+        );
+
+        expect(await localProfileStore.load(7), isNull);
+      },
+    );
   });
 
   group('session save behavior', () {
@@ -1454,14 +1632,35 @@ void main() {
       );
     });
 
-    test('does not import local_customer_profile_store.dart — logout() must '
-        'never clear this account\'s locally-persisted customer profile; that '
-        'store is deliberately kept across logout so the same account finds '
-        'it restored the next time it signs in on this device', () {
-      final source = File('lib/services/auth_service.dart').readAsStringSync();
+    test(
+      "logout()'s own method body never references the local customer "
+      'profile store — that store is deliberately kept across logout so '
+      'the same account finds it restored the next time it signs in on '
+      'this device. AuthService DOES import LocalCustomerProfileStore '
+      "(login() seeds this device's local profile from the login "
+      "response's embedded Customer Details, when present) — this checks "
+      "logout()'s own body specifically, not a whole-file import ban, so "
+      "that legitimate use doesn't false-positive this invariant.",
+      () {
+        final source = File(
+          'lib/services/auth_service.dart',
+        ).readAsStringSync();
+        final match = RegExp(
+          r'Future<void> logout\(\) async \{.*?\n  \}',
+          dotAll: true,
+        ).firstMatch(source);
+        expect(
+          match,
+          isNotNull,
+          reason: 'Could not locate logout()\'s method body in the source '
+              '— update this regex if logout() was reformatted.',
+        );
 
-      expect(source, isNot(contains("import 'local_customer_profile_store")));
-    });
+        final logoutBody = match!.group(0)!;
+        expect(logoutBody, isNot(contains('LocalCustomerProfileStore')));
+        expect(logoutBody, isNot(contains('_localProfileStore')));
+      },
+    );
 
     test('a saved local customer profile survives a successful logout and is '
         'still retrievable for the same userId afterward', () async {

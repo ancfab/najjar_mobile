@@ -11,12 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:anc_fabrics/localization/app_locale.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 import 'package:anc_fabrics/main.dart';
+import 'package:anc_fabrics/models/home_dashboard_data.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/services/locale_controller.dart';
 import 'package:anc_fabrics/services/session_storage_keys.dart';
 import 'package:anc_fabrics/widgets/custom_bottom_nav.dart';
 
 import '../helpers/fake_current_balance_data_source.dart';
+import '../helpers/fake_home_dashboard_service.dart';
 import '../helpers/fake_last_payment_data_source.dart';
 
 Future<void> _pumpApp(WidgetTester tester, {double width = 390}) async {
@@ -25,11 +27,11 @@ Future<void> _pumpApp(WidgetTester tester, {double width = 390}) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  // Last Payment and Current Balance both default to live Business Central
-  // endpoints (real HTTP/secure storage), which never resolve in this
-  // widget-test sandbox — inject fakes so pumpAndSettle below doesn't wait
-  // forever on their loading spinners (these tests don't exercise either
-  // specifically).
+  // Last Payment, Current Balance, and the dashboard metrics all default to
+  // live Business Central endpoints (real HTTP/secure storage), which never
+  // resolve in this widget-test sandbox — inject fakes so pumpAndSettle
+  // below doesn't wait forever on their loading spinners (these tests don't
+  // exercise any of them specifically).
   await tester.pumpWidget(
     MyApp(
       isLoggedIn: true,
@@ -40,13 +42,19 @@ Future<void> _pumpApp(WidgetTester tester, {double width = 390}) async {
           currencyCode: 'AED',
         ),
       ),
+      dashboardService: FakeHomeDashboardService(
+        data: const HomeDashboardData(
+          activeOrdersCount: '3',
+          overdueInvoicesAmount: '1,250.00',
+        ),
+      ),
     ),
   );
   await tester.pump();
-  // Home screen loads dashboard data via a mock delay on initState; advance
-  // past it explicitly (matching home_screen_test.dart's convention) so the
-  // "Active Orders" metric card — not just its loading skeleton — is on
-  // screen before assertions run.
+  // Home screen loads dashboard data on initState; advance past the fake's
+  // async resolution explicitly (matching home_screen_test.dart's
+  // convention) so the "Active Orders" metric card — not just its loading
+  // skeleton — is on screen before assertions run.
   await tester.pump(const Duration(milliseconds: 700));
   await tester.pumpAndSettle();
 }

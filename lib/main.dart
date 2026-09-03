@@ -9,6 +9,7 @@ import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'services/current_balance_data_source.dart';
 import 'services/current_user_avatar_controller.dart';
+import 'services/home_dashboard_service.dart';
 import 'services/last_payment_data_source.dart';
 import 'services/locale_controller.dart';
 import 'services/session_expiry_coordinator.dart';
@@ -134,6 +135,7 @@ class MyApp extends StatelessWidget {
     GlobalKey<NavigatorState>? navigatorKey,
     this.lastPaymentSource,
     this.currentBalanceSource,
+    this.dashboardService,
   }) : navigatorKey = navigatorKey ?? appNavigatorKey;
 
   /// Whether a previously-established session is still active, as
@@ -168,6 +170,13 @@ class MyApp extends StatelessWidget {
   /// through this real app root can inject a fake instead of exercising
   /// real HTTP/secure storage.
   final CurrentBalanceDataSource? currentBalanceSource;
+
+  /// Active Orders / Overdue Invoices metrics seam for the Home screen
+  /// reached when [isLoggedIn] is true. Defaults (lazily, in [HomeScreen])
+  /// to the live customer-details API endpoint; overridable so widget tests
+  /// that drive through this real app root can inject a fake instead of
+  /// exercising real HTTP/secure storage.
+  final HomeDashboardService? dashboardService;
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +225,7 @@ class MyApp extends StatelessWidget {
               ? HomeScreen(
                   lastPaymentSource: lastPaymentSource,
                   currentBalanceSource: currentBalanceSource,
+                  dashboardService: dashboardService,
                 )
               : LoginScreen(startupMessage: startupMessage),
         );

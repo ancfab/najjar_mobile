@@ -55,17 +55,19 @@ String _groupedTwoDecimals(num amount) {
 ///
 /// [currencyCode] is displayed exactly as given, never converted or
 /// re-derived — same as [formatCurrency]. When it is `null`, empty, or
-/// whitespace-only, the prefix is `"?"` instead of a guessed symbol: a
-/// visible "unknown currency" indicator (e.g. `"? 42,850.00"`).
+/// whitespace-only, there is no prefix at all (e.g. `"42,850.00"`, same as
+/// [formatPlainAmount]) — a guessed symbol would misrepresent the currency,
+/// and per product decision (2026-09-03) an unknown currency is shown as
+/// plainly as the amount itself, never flagged with a "?" marker.
 String formatCurrencyOrUnknown(num amount, {required String? currencyCode}) {
   final isNegative = amount < 0;
   final grouped = _groupedTwoDecimals(amount.abs());
 
   final trimmedCode = currencyCode?.trim();
   final prefix = (trimmedCode == null || trimmedCode.isEmpty)
-      ? '?'
-      : trimmedCode;
-  return '${isNegative ? '-' : ''}$prefix $grouped';
+      ? ''
+      : '$trimmedCode ';
+  return '${isNegative ? '-' : ''}$prefix$grouped';
 }
 
 /// Formats [amount] with comma thousands separators and exactly two decimal

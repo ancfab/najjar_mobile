@@ -1,4 +1,5 @@
 import '../models/business_central/business_central_inventory_entry.dart';
+import '../models/business_central/purchase_order_line.dart';
 import 'anc_api_client.dart';
 import 'anc_api_exceptions.dart';
 import 'auth_session_store.dart';
@@ -114,15 +115,121 @@ class ApiStockLookupService implements StockLookupService {
         .where((row) => row.itemNo == itemNo && row.open)
         .toList(growable: false);
 
-    if (openMatches.isEmpty) return StockLookupNotFound(rawCode);
+    if (openMatches.isEmpty) {
+      // No open inventory anywhere — before reporting a bare "not found",
+      // check whether more stock is already on a purchase order (see
+      // _expectedRestockDate); the UI shows that date beside the
+      // out-of-stock status.
+      return StockLookupNotFound(
+        rawCode,
+        expectedRestockDate: await _expectedRestockDate(
+          token: session.token,
+          itemNo: itemNo,
+        ),
+      );
+    }
 
-    return StockLookupSuccess(
+    final availability = _aggregateByLocation(openMatches);
+    final result = StockLookupSuccess(
       rawCode,
       scannedAt: DateTime.now(),
       itemNo: itemNo,
       description: _firstDescription(openMatches),
-      availabilityByLocation: _aggregateByLocation(openMatches),
+      availabilityByLocation: availability,
     );
+
+    // Only an out-of-stock result (summed quantity <= 0 — the red status)
+    // warrants the extra purchase-orders round-trip; in-stock/low results
+    // never show a restock date.
+    if (result.combinedAvailabilityLevel != StockAvailabilityLevel.outOfStock) {
+      return result;
+    }
+
+    return StockLookupSuccess(
+      rawCode,
+      scannedAt: result.scannedAt,
+      itemNo: itemNo,
+      description: result.description,
+      availabilityByLocation: availability,
+      expectedRestockDate: await _expectedRestockDate(
+        token: session.token,
+        itemNo: itemNo,
+      ),
+    );
+  }
+
+  /// Hard cap on filtered purchase-order pages fetched per lookup — same
+  /// defensive-only reasoning as [_maxPages], sized smaller because one
+  /// item's open purchase-order lines are a far smaller set than its
+  /// inventory ledger.
+  static const int _maxPurchaseOrderPages = 10;
+
+  /// The earliest purchase-order `Expected_Receipt_Date` strictly after
+  /// [searchedAt] (defaulting to now — "the date searched") for the exact
+  /// [itemNo] variation, via `GET
+  /// /api/business-central/purchase-orders?item_no=...`, or `null` when no
+  /// such line exists.
+  ///
+  /// Strictly best-effort: the main stock answer is already known when this
+  /// runs, so ANY failure here (transport, HTTP, malformed pagination)
+  /// returns `null` rather than degrading a valid out-of-stock result into
+  /// an error state. Rows are re-checked against [itemNo] client-side —
+  /// same defensive exact-match rule as the inventory fetch — so another
+  /// variation's incoming stock is never shown for this one.
+  Future<DateTime?> _expectedRestockDate({
+    required String token,
+    required String itemNo,
+    DateTime? searchedAt,
+  }) async {
+    // Date-only comparison ("after the date searched"): receipt dates are
+    // date-only values, so the threshold is normalized to midnight —
+    // tomorrow's expected receipt counts, today's does not.
+    final searched = searchedAt ?? DateTime.now();
+    final threshold = DateTime(searched.year, searched.month, searched.day);
+    DateTime? earliest;
+
+    try {
+      var requestedPage = 1;
+      var previousCurrentPage = 0;
+
+      for (var i = 0; i < _maxPurchaseOrderPages; i++) {
+        final response = await _apiClient.fetchPurchaseOrders(
+          token: token,
+          itemNo: itemNo,
+          page: requestedPage,
+          perPage: _perPage,
+        );
+
+        final currentPage = response.currentPage;
+        final lastPage = response.lastPage;
+        final malformed =
+            currentPage < 1 ||
+            lastPage < 1 ||
+            currentPage > lastPage ||
+            currentPage != requestedPage ||
+            currentPage <= previousCurrentPage;
+        if (malformed) return earliest;
+
+        for (final PurchaseOrderLine line in response.data) {
+          final date = line.expectedReceiptDate;
+          if (line.itemNo != itemNo || date == null) continue;
+          if (!date.isAfter(threshold)) continue;
+          if (earliest == null || date.isBefore(earliest)) earliest = date;
+        }
+
+        if (response.isLastPage) return earliest;
+        previousCurrentPage = currentPage;
+        requestedPage = currentPage + 1;
+      }
+    } catch (_) {
+      // Deliberately broader than the usual `on AncApiException`: this
+      // enrichment runs after the primary stock answer is already known,
+      // and no failure in it — expected or not — may replace a valid
+      // out-of-stock result with an error.
+      return earliest;
+    }
+
+    return earliest;
   }
 
   /// Fetches every filtered (`item_no`-scoped) page for [itemNo], starting

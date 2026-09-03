@@ -633,8 +633,13 @@ void main() {
   });
 
   group('Not-found cases', () {
+    // Every not-found outcome now also triggers one best-effort
+    // purchase-orders request (the expected-restock check), scripted here
+    // as an empty response unless the test is about that data.
     test('an empty filtered dataset returns StockLookupNotFound', () async {
       final fakeHttp = _ScriptedHttpClient([
+        (req) async =>
+            _jsonResponse(200, _envelope(rows: const []), request: req),
         (req) async =>
             _jsonResponse(200, _envelope(rows: const []), request: req),
       ]);
@@ -643,6 +648,10 @@ void main() {
       final result = await service.lookup('1038 01');
 
       expect(result, isA<StockLookupNotFound>());
+      expect(
+        (result as StockLookupNotFound).expectedRestockDate,
+        isNull,
+      );
     });
 
     test(
@@ -659,6 +668,8 @@ void main() {
             ),
             request: req,
           ),
+          (req) async =>
+              _jsonResponse(200, _envelope(rows: const []), request: req),
         ]);
         final service = _service(httpClient: fakeHttp, session: _session());
 
@@ -677,6 +688,8 @@ void main() {
             _envelope(rows: [_row(itemNo: 'OTHER-ITEM')]),
             request: req,
           ),
+          (req) async =>
+              _jsonResponse(200, _envelope(rows: const []), request: req),
         ]);
         final service = _service(httpClient: fakeHttp, session: _session());
 
@@ -690,6 +703,8 @@ void main() {
       final fakeHttp = _ScriptedHttpClient([
         (req) async =>
             _jsonResponse(200, _envelope(rows: const []), request: req),
+        (req) async =>
+            _jsonResponse(200, _envelope(rows: const []), request: req),
       ]);
       final service = _service(httpClient: fakeHttp, session: _session());
 
@@ -697,6 +712,148 @@ void main() {
 
       expect(result, isNot(isA<StockLookupSuccess>()));
     });
+  });
+
+  group('Expected restock date (purchase orders)', () {
+    Map<String, dynamic> poRow({
+      String itemNo = '1038 01',
+      String? expectedReceiptDate,
+      String documentNo = 'PO-9001',
+      int lineNo = 10000,
+    }) => {
+      'Document_No': documentNo,
+      'Line_No': lineNo,
+      'No': itemNo,
+      'Description': 'Incoming fabric',
+      'Quantity': 500,
+      if (expectedReceiptDate != null)
+        'Expected_Receipt_Date': expectedReceiptDate,
+    };
+
+    String dateOnly(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final nextMonth = DateTime.now().add(const Duration(days: 30));
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+
+    test(
+      'a not-found item with a future purchase-order receipt date reports '
+      'it, from a filtered item_no request',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async =>
+              _jsonResponse(200, _envelope(rows: const []), request: req),
+          (req) async => _jsonResponse(
+            200,
+            _envelope(
+              rows: [
+                poRow(expectedReceiptDate: dateOnly(nextMonth)),
+                poRow(
+                  documentNo: 'PO-9002',
+                  expectedReceiptDate: dateOnly(tomorrow),
+                ),
+                // Past dates and other variations never count.
+                poRow(
+                  documentNo: 'PO-9003',
+                  expectedReceiptDate: dateOnly(yesterday),
+                ),
+                poRow(itemNo: '1038 02', expectedReceiptDate: '2099-01-01'),
+              ],
+            ),
+            request: req,
+          ),
+        ]);
+        final service = _service(httpClient: fakeHttp, session: _session());
+
+        final result = await service.lookup('1038 01');
+
+        expect(result, isA<StockLookupNotFound>());
+        expect(
+          (result as StockLookupNotFound).expectedRestockDate,
+          DateTime(tomorrow.year, tomorrow.month, tomorrow.day),
+        );
+
+        // The second request is the purchase-orders one, filtered to the
+        // exact item (space percent-encoded).
+        expect(fakeHttp.requestedUrls, hasLength(2));
+        final poUrl = fakeHttp.requestedUrls[1].toString();
+        expect(poUrl, contains('/api/business-central/purchase-orders'));
+        expect(poUrl, contains('item_no=1038%2001'));
+      },
+    );
+
+    test(
+      'an out-of-stock success (every open quantity <= 0) carries the '
+      'earliest future receipt date',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async => _jsonResponse(
+            200,
+            _envelope(rows: [_row(remainingQuantity: 0)]),
+            request: req,
+          ),
+          (req) async => _jsonResponse(
+            200,
+            _envelope(
+              rows: [poRow(expectedReceiptDate: dateOnly(nextMonth))],
+            ),
+            request: req,
+          ),
+        ]);
+        final service = _service(httpClient: fakeHttp, session: _session());
+
+        final result = await service.lookup('1038 01');
+
+        expect(result, isA<StockLookupSuccess>());
+        final success = result as StockLookupSuccess;
+        expect(
+          success.combinedAvailabilityLevel,
+          StockAvailabilityLevel.outOfStock,
+        );
+        expect(
+          success.expectedRestockDate,
+          DateTime(nextMonth.year, nextMonth.month, nextMonth.day),
+        );
+      },
+    );
+
+    test('an in-stock success never triggers a purchase-orders request', () async {
+      final fakeHttp = _ScriptedHttpClient([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(rows: [_row(remainingQuantity: 500)]),
+          request: req,
+        ),
+      ]);
+      final service = _service(httpClient: fakeHttp, session: _session());
+
+      final result = await service.lookup('1038 01');
+
+      expect(result, isA<StockLookupSuccess>());
+      expect((result as StockLookupSuccess).expectedRestockDate, isNull);
+      expect(fakeHttp.requestCount, 1);
+    });
+
+    test(
+      'a failing purchase-orders request never degrades the primary '
+      'not-found answer',
+      () async {
+        final fakeHttp = _ScriptedHttpClient([
+          (req) async =>
+              _jsonResponse(200, _envelope(rows: const []), request: req),
+          (req) async => _jsonResponse(200, const {}, request: req),
+        ]);
+        final service = _service(httpClient: fakeHttp, session: _session());
+
+        final result = await service.lookup('1038 01');
+
+        expect(result, isA<StockLookupNotFound>());
+        expect((result as StockLookupNotFound).expectedRestockDate, isNull);
+      },
+    );
   });
 
   group('Session handling', () {

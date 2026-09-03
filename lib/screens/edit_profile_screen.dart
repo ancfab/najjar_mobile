@@ -3,13 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../data/country_codes.dart';
-import '../data/mock_profile_data.dart';
 import '../localization/translations.dart';
 import '../models/auth/update_profile_result.dart';
 import '../models/auth/upload_avatar_result.dart';
 import '../models/country_code.dart';
 import '../models/local_customer_profile.dart';
-import '../models/user_profile.dart';
 import '../services/avatar_cropper_service.dart';
 import '../services/avatar_image_processor.dart';
 import '../services/avatar_permission_service.dart';
@@ -42,23 +40,22 @@ const int _navIndexOrders = 1;
 const int _navIndexSupport = 2;
 const int _navIndexProfile = 3;
 
-/// Edit Profile screen: avatar with a camera/edit overlay, client info
-/// (ANC ID + last-updated label), a prefilled editable form, a full-width
+/// Edit Profile screen: avatar with a camera/edit overlay, the account's
+/// real BC customer number, a prefilled editable form, a full-width
 /// "Save Changes" action, and a "Logout" action.
 ///
 /// The full name/email/company/business-address fields are locally-owned
 /// display data (see [LocalCustomerProfile]/[LocalCustomerProfileStore]):
-/// no confirmed backend endpoint returns or accepts them yet. They start
+/// no confirmed backend endpoint accepts edits to them yet. They start
 /// genuinely empty and are populated only from a profile already saved
-/// locally for the signed-in account (see
-/// [_EditProfileScreenState._loadIdentity]) — never from [kMockUserProfile]
-/// or any other fabricated value, so demo data can never appear as, or be
-/// saved as, real customer information. Once the user saves, the local
-/// store is the sole source of truth for these fields going forward.
+/// locally for the signed-in account (seeded at login from the account's
+/// own Business Central Customer Details row when available — see
+/// [AuthService]; refined by the user here afterwards) — never from any
+/// fabricated value, so demo data can never appear as, or be saved as,
+/// real customer information.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({
     super.key,
-    this.profile = kMockUserProfile,
     ProfileService? service,
     this.logoutService,
     this.authService,
@@ -78,20 +75,6 @@ class EditProfileScreen extends StatefulWidget {
            avatarCropperService ?? const ImageCropperAvatarCropperService(),
        avatarImageProcessor =
            avatarImageProcessor ?? const DefaultAvatarImageProcessor();
-
-  /// Display-only values for this screen's client-info section (the "ANC
-  /// ID: #..." label and the "Profile updated ... ago" caption — see
-  /// [_buildAvatarSection]) and for the fixed `phone` value forwarded to
-  /// [ProfileService.updateProfile]. Deliberately **not** used to prefill
-  /// the full name/email/company/business-address fields — those are
-  /// locally-owned customer data (see [LocalCustomerProfile]) and must
-  /// never be seeded from mock/fabricated values (see
-  /// [_EditProfileScreenState._loadIdentity]). Defaults to the isolated
-  /// mock profile; overridable so tests can inject fixed values. Does not
-  /// carry username/phone for the editable identity fields — those are
-  /// real, authenticated-identity fields prefilled from
-  /// [AuthService.currentSession] instead.
-  final UserProfile profile;
 
   /// Remote save-changes seam for the full name/email/company/business-
   /// address fields only — no confirmed backend endpoint exists yet, so
@@ -165,7 +148,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   // Locally-owned customer fields — prefilled asynchronously from
   // LocalCustomerProfileStore (see _loadIdentity), never from
-  // widget.profile/kMockUserProfile: fabricated demo data must never appear
+  // any fabricated demo value: mock data must never appear
   // as if it were this customer's real information, nor be savable back
   // into their local profile. Start empty; a signed-in account with no
   // locally-saved profile yet is expected to see genuinely empty fields
@@ -205,6 +188,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // or if it never does (e.g. no session), in which case Save Changes
   // skips local persistence rather than guessing a key.
   int? _currentUserId;
+
+  // The authenticated account's Business Central customer number (e.g.
+  // "CLNT-0001"), from the persisted session — shown read-only under the
+  // avatar (see _buildAvatarSection); never editable on this screen. Null
+  // (label hidden) until _loadIdentity resolves, or for an account with no
+  // linked BC customer.
+  String? _bcCustomerNo;
 
   // The authenticated user's country, resolved from AuthSession.country —
   // fixed/read-only on this screen (see the class doc comment); only used
@@ -284,7 +274,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // "MockProfile" to match ProfileService/UnavailableProfileService's
   // existing naming for this same seam, not because the field values
   // themselves are mock-derived (they are not — see _loadIdentity).
-  bool get _isMockProfileDirty {
+  bool get _isLocalProfileDirty {
     return _fullNameController.text.trim() != _initialFullName ||
         _emailController.text.trim() != _initialEmail ||
         _companyController.text.trim() != _initialCompany ||
@@ -302,12 +292,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // Trimmed current values compared against the initial snapshot, so Save
   // Changes stays disabled until the form actually differs from the
   // loaded profile (whitespace-only edits don't count as a change).
-  bool get _isDirty => _isMockProfileDirty || _isIdentityDirty;
+  bool get _isDirty => _isLocalProfileDirty || _isIdentityDirty;
 
   @override
   void initState() {
     super.initState();
-    // Genuinely empty — not widget.profile/kMockUserProfile — until
+    // Genuinely empty — never a fabricated value — until
     // _loadIdentity's LocalCustomerProfileStore lookup resolves (see its
     // doc comment). Kept in sync with the also-empty controllers above so
     // _isDirty never falsely trips before that load completes.
@@ -377,6 +367,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _initialUsername = session.username;
       _initialPhoneDigits = phoneDigits;
       _currentUserId = session.userId;
+      _bcCustomerNo = session.bcCustomerNo;
 
       if (localProfile != null) {
         _fullNameController.text = localProfile.fullName;
@@ -848,14 +839,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     String? resultMessage;
 
-    if (_isMockProfileDirty) {
+    if (_isLocalProfileDirty) {
       final request = ProfileUpdateRequest(
         fullName: _fullNameController.text.trim(),
         email: _emailController.text.trim(),
-        // This mock/local field has no editable UI of its own anymore —
-        // see the class doc comment — so it is passed through unchanged
-        // rather than read from a repurposed controller.
-        phone: widget.profile.phone,
+        // The real phone is owned by the identity PATCH path (dial code +
+        // local digits, see _composePhoneForSubmit) — forwarded here so no
+        // mock/fabricated value ever rides along.
+        phone: _composePhoneForSubmit(),
         company: _companyController.text.trim(),
         businessAddress: _businessAddressController.text.trim(),
       );
@@ -1176,7 +1167,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildAvatarSection() {
-    final profile = widget.profile;
     return Center(
       child: Column(
         children: [
@@ -1261,20 +1251,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            context.t('editProfile.ancIdLabel', params: {'id': profile.ancId}),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textNavy,
+          // The customer's real BC identity (bc_customer_no from the
+          // authenticated session, e.g. "CLNT-0001") — hidden entirely,
+          // never a placeholder, when the account has no linked customer.
+          if (_bcCustomerNo != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              context.t(
+                'editProfile.ancIdLabel',
+                params: {'id': _bcCustomerNo!},
+              ),
+              key: const ValueKey('edit-profile-bc-customer-no'),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textNavy,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            profile.profileUpdatedLabel,
-            style: const TextStyle(fontSize: 13, color: AppColors.grayText),
-          ),
+          ],
         ],
       ),
     );
