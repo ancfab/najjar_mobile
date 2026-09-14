@@ -8,7 +8,7 @@ appId: com.ancfabrics.app
 - inputText: "${TEST_CLIENT}"
 - tapOn: "Enter your password"
 - inputText: "${TEST_PASSWORD}"
-- hideKeyboard
+- tapOn: "Welcome back."
 - tapOn: "LOGIN"
 - waitForAnimationToEnd
 - takeScreenshot: screen-2-home
