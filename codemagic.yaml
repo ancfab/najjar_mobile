@@ -7,6 +7,64 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
+      groups:
+        - test_login
+    triggering:
+      events: []          # manual trigger only — start it from the dashboard when you want screenshots
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Build iOS app for Simulator
+        script: |
+          flutter build ios --simulator --no-codesign
+
+      - name: Install Maestro
+        script: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "PATH=$HOME/.maestro/bin:$PATH" >> $CM_ENV
+
+      - name: Boot simulator and install app
+        script: |
+          set -e
+
+          SIM_NAME="iPhone 16"
+          BUNDLE_ID="com.ancfabrics.app"
+          APP_PATH="build/ios/iphonesimulator/Runner.app"
+
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['udid'] for v in d['devices'].values() for x in v if x['name']=='$SIM_NAME'), ''))")
+
+          if [ -z "$UDID" ]; then
+            echo "No $SIM_NAME simulator found, creating one..."
+            RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; d=json.load(sys.stdin); r=[x for x in d['runtimes'] if x['name'].startswith('iOS')]; print(sorted(r, key=lambda x: x['version'])[-1]['identifier'])")
+            DEVICETYPE=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['identifier'] for x in d['devicetypes'] if x['name']=='$SIM_NAME'), ''))")
+            UDID=$(xcrun simctl create "$SIM_NAME" "$DEVICETYPE" "$RUNTIME")
+          fi
+
+          echo "UDID=$UDID" >> $CM_ENV
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP_PATH"
+
+      - name: Run Maestro flow and capture screenshots
+        script: |
+          set -e
+          mkdir -p screenshots
+          cd screenshots
+          maestro --device "$UDID" test ../maestro/login_flow.yaml
+
+    artifacts:
+      - screenshots/*.png
+workflows:
+  ios-screenshots:
+    name: iOS Screenshots
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
     triggering:
       events: []          # manual trigger only — start it from the dashboard when you want screenshots
     scripts:
