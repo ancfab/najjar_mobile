@@ -52,6 +52,14 @@ workflows:
           set -e
           mkdir -p screenshots
           cd screenshots
+                  cd "$CM_BUILD_DIR"
+                  echo "Searching for generated screenshot files..."
+                  find "$HOME" -iname "screen-1-login.png" -o -iname "screen-2-home.png" 2>/dev/null | while read -r f; do
+                  echo "Found: $f"
+                  cp "$f" screenshots/ 2>/dev/null || true
+                  done
+                  echo "Contents of screenshots/:"
+                  ls -la screenshots/
           maestro --device "$UDID" test ../maestro/login_flow.yaml
 
     artifacts:
