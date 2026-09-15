@@ -45,7 +45,21 @@ workflows:
           echo "UDID=$UDID" >> $CM_ENV
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
-          codesign --force --deep --sign - "$APP_PATH"
+          cat > /tmp/sim.entitlements <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>application-identifier</key>
+            <string>FAKETEAMID.com.ancfabrics.app</string>
+            <key>keychain-access-groups</key>
+            <array>
+              <string>FAKETEAMID.com.ancfabrics.app</string>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --deep --sign - --entitlements /tmp/sim.entitlements "$APP_PATH"
           xcrun simctl install "$UDID" "$APP_PATH"
 
       - name: Run Maestro flow and capture screenshots
