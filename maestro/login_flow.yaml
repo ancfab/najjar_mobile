@@ -12,8 +12,10 @@ appId: com.ancfabrics.app
 - tapOn: "LOGIN"
 - waitForAnimationToEnd
 - takeScreenshot: screen-2-home
+- extendedWaitUntil:
+    visible: "CURRENT BALANCE"
+    timeout: 15000
 - tapOn: "CURRENT BALANCE"
-- waitForAnimationToEnd
 - takeScreenshot: screen-3-balance
 - tapOn: "Back"
 - waitForAnimationToEnd
