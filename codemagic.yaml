@@ -56,7 +56,7 @@ workflows:
                   maestro --device "$UDID" test -e TEST_MOBILE="$TEST_MOBILE" -e TEST_CLIENT="$TEST_CLIENT" -e TEST_PASSWORD="$TEST_PASSWORD" ../maestro/login_flow.yaml
                   cd "$CM_BUILD_DIR"
                   echo "Searching for generated screenshot files..."
-                  find "$HOME" -iname "screen-1-login.png" -o -iname "screen-2-home.png" 2>/dev/null | while read -r f; do
+                  find "$HOME" -iname "screen-1-login.png" -o -iname "screen-2-home.png" -o -iname "screen-3-balance.png" -o -iname "screen-4-profile.png" 2>/dev/null | while read -r f; do
                   echo "Found: $f"
                   cp "$f" screenshots/ 2>/dev/null || true
                   done
