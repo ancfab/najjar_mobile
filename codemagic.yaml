@@ -59,6 +59,7 @@ workflows:
             <key>get-task-allow</key>
             <true/>
           </dict>
+          </plist>
           PLIST
           codesign --force --deep --sign - --entitlements /tmp/sim.entitlements "$APP_PATH"
           xcrun simctl install "$UDID" "$APP_PATH"
