@@ -16,6 +16,7 @@ appId: com.ancfabrics.app
     visible: "CURRENT BALANCE"
     timeout: 15000
 - tapOn: "CURRENT BALANCE"
+- waitForAnimationToEnd
 - takeScreenshot: screen-3-balance
 - tapOn: "Back"
 - waitForAnimationToEnd
