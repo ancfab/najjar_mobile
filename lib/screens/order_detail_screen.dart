@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/sales_order_line.dart';
+import '../models/business_central/zebra_sales_order_line.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/demo_invoice_lookup_data_source.dart';
 import '../services/demo_order_detail_data_source.dart';
+import '../services/demo_zebra_order_detail_data_source.dart';
 import '../services/invoice_grouping.dart';
 import '../services/invoice_lookup_data_source.dart';
 import '../services/order_detail_data_source.dart';
+import '../services/zebra_order_detail_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
 import '../utils/responsive.dart';
@@ -70,19 +75,41 @@ InvoiceLookupDataSource resolveDefaultInvoiceLookupDataSource({
       : LiveInvoiceLookupDataSource();
 }
 
+/// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
+/// returns [DemoZebraOrderDetailDataSource] instead of
+/// [LiveZebraOrderDetailDataSource] — the live Zebra-detail enrichment is
+/// untouched and fully restored once the flag is set back to `false`. See
+/// [resolveDefaultOrderDetailDataSource]'s doc comment for the rest of this
+/// convention.
+ZebraOrderDetailDataSource resolveDefaultZebraOrderDetailDataSource({
+  bool useDemo = DemoConfig.useDemoOrders,
+}) {
+  return useDemo
+      ? const DemoZebraOrderDetailDataSource()
+      : LiveZebraOrderDetailDataSource();
+}
+
 class OrderDetailScreen extends StatefulWidget {
   OrderDetailScreen({
     super.key,
     required this.documentNo,
     OrderDetailDataSource? orderDetailSource,
     InvoiceLookupDataSource? invoiceLookupSource,
+    ZebraOrderDetailDataSource? zebraOrderDetailSource,
   }) : orderDetailSource =
            orderDetailSource ?? resolveDefaultOrderDetailDataSource(),
        invoiceLookupSource =
-           invoiceLookupSource ?? resolveDefaultInvoiceLookupDataSource();
+           invoiceLookupSource ?? resolveDefaultInvoiceLookupDataSource(),
+       zebraOrderDetailSource =
+           zebraOrderDetailSource ?? resolveDefaultZebraOrderDetailDataSource();
 
   /// The sales order's confirmed `Document_No` (e.g. `"SO-24001"`) — the
-  /// order identifier per the confirmed contract.
+  /// order identifier per the confirmed contract. Also passed as-is to
+  /// [zebraOrderDetailSource]'s lookup: on most tenants this is actually the
+  /// plain Sales Order page's own order GUID rather than a human document
+  /// number (that page has no such field) — the Zebra endpoint accepts
+  /// either (see `ZebraOrderDetailService`'s doc comment), so this screen
+  /// never needs to know or care which kind it has.
   final String documentNo;
 
   /// Order-line query seam. Defaults to the live Business Central
@@ -94,6 +121,12 @@ class OrderDetailScreen extends StatefulWidget {
   /// fake.
   final InvoiceLookupDataSource invoiceLookupSource;
 
+  /// Zebra-detail enrichment seam, fetched best-effort after
+  /// [orderDetailSource] resolves — see [_loadZebraDetail]. Defaults to the
+  /// live Zebra sales-orders endpoint; overridable so tests can inject a
+  /// fake.
+  final ZebraOrderDetailDataSource zebraOrderDetailSource;
+
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
@@ -103,8 +136,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       widget.orderDetailSource;
   late final InvoiceLookupDataSource _invoiceLookupSource =
       widget.invoiceLookupSource;
+  late final ZebraOrderDetailDataSource _zebraOrderDetailSource =
+      widget.zebraOrderDetailSource;
 
   List<BusinessCentralSalesOrderLine>? _lines;
+
+  /// Best-effort Zebra-detail enrichment for this order - `null` until
+  /// [_loadZebraDetail] resolves (or when it never runs at all, e.g. the
+  /// order wasn't found), empty when this order has no Zebra detail
+  /// (company has no Zebra integration, or this specific order isn't a
+  /// Zebra order). Both `null` and empty render identically - see
+  /// [_buildZebraDetailsCard] - the distinction only matters for avoiding a
+  /// redundant re-fetch, not for what's shown.
+  List<BusinessCentralZebraSalesOrderLine>? _zebraLines;
 
   /// Also doubles as the duplicate-request guard in [_loadOrder] — mirrors
   /// `OrdersScreen._isLoading`'s exact convention.
@@ -148,6 +192,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       _notFound = false;
       _errorOutcome = null;
       _hasUnknownError = false;
+      _zebraLines = null;
     });
     try {
       final lines = await _orderDetailSource.fetchOrder(
@@ -159,6 +204,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         _notFound = lines.isEmpty;
         _isLoading = false;
       });
+      if (lines.isNotEmpty) {
+        unawaited(_loadZebraDetail(generation));
+      }
     } on SessionExpiredException {
       // The centralized session coordinator has already cleared the
       // session and is navigating to Login — show nothing here.
@@ -174,6 +222,31 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         _hasUnknownError = true;
         _isLoading = false;
       });
+    }
+  }
+
+  /// Fetches the best-effort Zebra-detail enrichment for this order, once
+  /// [_loadOrder] has confirmed the order itself exists. Never affects
+  /// [_isLoading]/[_notFound]/[_errorOutcome]/[_hasUnknownError] - a slow,
+  /// failed, or unavailable Zebra lookup must never turn an already-loaded
+  /// order into a loading/error/not-found state (see
+  /// `ZebraOrderDetailService`'s doc comment: every failure short of a dead
+  /// session already resolves to an empty list, so the only exception this
+  /// needs to handle here is [SessionExpiredException]).
+  ///
+  /// [generation] is the same stale-response guard [_loadOrder] uses, so a
+  /// superseded retry's Zebra lookup can never overwrite a fresher load's
+  /// state.
+  Future<void> _loadZebraDetail(int generation) async {
+    try {
+      final zebraLines = await _zebraOrderDetailSource.fetchOrder(
+        documentNo: widget.documentNo,
+      );
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() => _zebraLines = zebraLines);
+    } on SessionExpiredException {
+      // The centralized session coordinator has already cleared the
+      // session and is navigating to Login — show nothing here.
     }
   }
 
@@ -308,6 +381,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             _buildOrderHeader(lines.first),
             const SizedBox(height: 16),
             _buildOrderItemsCard(lines),
+            if ((_zebraLines ?? const []).isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildZebraDetailsCard(_zebraLines!),
+            ],
             const SizedBox(height: 16),
             _buildOrderHistoryCard(),
             const SizedBox(height: 16),
@@ -569,6 +646,199 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                context.t(
+                  'salesOrderLine.quantityAtPrice',
+                  params: {
+                    'quantity': formatPlainAmount(line.quantity),
+                    'unitPrice': formatPlainAmount(line.unitPrice),
+                  },
+                ),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.grayText,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formatPlainAmount(line.amount),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryNavy,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Zebra Order Details card: shown only when the best-effort Zebra-detail
+  // enrichment fetch (see _loadZebraDetail) returned at least one row for
+  // this order - order-level fields (status/salesperson/memo) plus each
+  // line's cut-to-size dimensions, none of which exist on the plain Sales
+  // Order contract [_buildOrderItemsCard] renders above. Every order-level
+  // field is identical across every line of the same order (confirmed live:
+  // one Zebra order = one status/salesperson/memo), so it's read once from
+  // the first line rather than repeated per row.
+  Widget _buildZebraDetailsCard(List<BusinessCentralZebraSalesOrderLine> lines) {
+    final first = lines.first;
+    final hasSummary =
+        first.status != null || first.salespersonCode != null || first.memo != null;
+
+    return Container(
+      key: const ValueKey('order-detail-zebra-card'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            context.t('orderDetail.zebraHeader'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.0,
+              color: AppColors.grayText,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (hasSummary) ...[
+            _buildZebraSummary(first),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 12),
+          ],
+          for (final line in lines) ...[
+            _buildZebraLineRow(line),
+            if (line != lines.last) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 12),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZebraSummary(BusinessCentralZebraSalesOrderLine line) {
+    final chips = <Widget>[
+      if (line.status != null)
+        _buildZebraInfoChip(context.t('orderDetail.zebraStatusLabel'), line.status!),
+      if (line.salespersonCode != null)
+        _buildZebraInfoChip(
+          context.t('orderDetail.zebraSalespersonLabel'),
+          line.salespersonCode!,
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (chips.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: chips),
+        if (line.memo != null) ...[
+          if (chips.isNotEmpty) const SizedBox(height: 8),
+          Text(
+            '${context.t('orderDetail.zebraMemoLabel')}: ${line.memo}',
+            style: const TextStyle(fontSize: 12, color: AppColors.grayText),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildZebraInfoChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        '$label: $value',
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textNavy,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildZebraLineRow(BusinessCentralZebraSalesOrderLine line) {
+    return Column(
+      key: ValueKey('order-detail-zebra-line-${line.identity}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                line.description,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textNavy,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              context.t(
+                'salesOrderLine.lineNumber',
+                params: {'lineNo': '${line.lineNo}'},
+              ),
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.grayText,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          context.t('salesOrderLine.itemNo', params: {'itemNo': line.itemNo}),
+          style: const TextStyle(fontSize: 12, color: AppColors.grayText),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (line.hasDimensions) ...[
+          const SizedBox(height: 2),
+          Text(
+            context.t(
+              'orderDetail.zebraDimensions',
+              params: {
+                'width': formatPlainAmount(line.width ?? 0),
+                'length': formatPlainAmount(line.length ?? 0),
+                'area': formatPlainAmount(line.sqMtr ?? 0),
+              },
+            ),
+            style: const TextStyle(fontSize: 12, color: AppColors.grayText),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
         const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,

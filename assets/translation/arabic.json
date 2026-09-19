@@ -163,7 +163,12 @@
     "viewTimelineAction": "عرض الجدول الزمني للطلب",
     "invoiceHeader": "الفاتورة",
     "viewInvoiceAction": "عرض الفاتورة",
-    "customerLabel": "العميل"
+    "customerLabel": "العميل",
+    "zebraHeader": "تفاصيل طلب زيبرا",
+    "zebraStatusLabel": "الحالة",
+    "zebraSalespersonLabel": "مندوب المبيعات",
+    "zebraMemoLabel": "ملاحظة",
+    "zebraDimensions": "{width} × {length} م ({area} م²)"
   },
   "orderStatus": {
     "delivered": "تم التسليم",

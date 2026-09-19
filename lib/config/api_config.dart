@@ -123,6 +123,23 @@ class ApiConfig {
   /// never sends a customer identifier here either.
   static const String salesOrdersPath = 'api/business-central/sales-orders';
 
+  /// Relative path (no leading slash) for the Business Central Zebra
+  /// sales-orders endpoint, resolved against [baseUrl] by [AncApiClient].
+  /// A separate, richer integration from [salesOrdersPath] — same
+  /// underlying order lines for a "Zebra"-type order (confirmed live:
+  /// identical item/quantity/amount rows), plus order-level fields
+  /// [salesOrdersPath] never has (status, salesperson, memo, currency) and
+  /// per-line cut-to-size dimensions (width/length/area). Not every order
+  /// is a Zebra order, and not every company has this integration at all —
+  /// see `ZebraOrderDetailService`'s doc comment for how a caller is
+  /// expected to treat an empty result or a temporarily-unavailable
+  /// response as "no Zebra detail for this order", never as an error to
+  /// surface on its own. Shares [businessCentralDefaultPerPage]/
+  /// [businessCentralMinPerPage]/[businessCentralMaxPerPage] with every
+  /// other Business Central list endpoint on this client.
+  static const String zebraSalesOrdersPath =
+      'api/business-central/zebra-sales-orders';
+
   /// Relative path (no leading slash) for the Business Central items
   /// (product catalog) endpoint, resolved against [baseUrl] by
   /// [AncApiClient]. This catalog is company-scoped rather than

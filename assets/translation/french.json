@@ -163,7 +163,12 @@
     "viewTimelineAction": "VOIR LE SUIVI DE LA COMMANDE",
     "invoiceHeader": "FACTURE",
     "viewInvoiceAction": "VOIR LA FACTURE",
-    "customerLabel": "Client"
+    "customerLabel": "Client",
+    "zebraHeader": "DÉTAILS ZEBRA DE LA COMMANDE",
+    "zebraStatusLabel": "Statut",
+    "zebraSalespersonLabel": "Vendeur",
+    "zebraMemoLabel": "Remarque",
+    "zebraDimensions": "{width} x {length} m ({area} m²)"
   },
   "orderStatus": {
     "delivered": "Livrée",

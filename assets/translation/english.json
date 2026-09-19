@@ -163,7 +163,12 @@
     "viewTimelineAction": "VIEW ORDER TIMELINE",
     "invoiceHeader": "INVOICE",
     "viewInvoiceAction": "VIEW INVOICE",
-    "customerLabel": "Customer"
+    "customerLabel": "Customer",
+    "zebraHeader": "ZEBRA ORDER DETAILS",
+    "zebraStatusLabel": "Status",
+    "zebraSalespersonLabel": "Salesperson",
+    "zebraMemoLabel": "Note",
+    "zebraDimensions": "{width} x {length} m ({area} m²)"
   },
   "orderStatus": {
     "delivered": "Delivered",

@@ -21,6 +21,7 @@ import '../models/business_central/paginated_response.dart';
 import '../models/business_central/payment_entry.dart';
 import '../models/business_central/purchase_order_line.dart';
 import '../models/business_central/sales_order_line.dart';
+import '../models/business_central/zebra_sales_order_line.dart';
 import 'anc_api_exceptions.dart';
 
 /// Purpose: The single controlled HTTP transport boundary between this app
@@ -382,6 +383,59 @@ class AncApiClient {
       },
     );
     return _decodeSalesOrdersResponse(response);
+  }
+
+  /// Calls `GET /api/business-central/zebra-sales-orders` for the
+  /// authenticated user, requesting [page] at a fixed [perPage] size. Never
+  /// sends a customer identifier — the ANC API scopes the result to the
+  /// authenticated [token]'s `bc_customer_no` server-side. Each returned row
+  /// is one Zebra order *line*, not one complete order — see
+  /// [BusinessCentralZebraSalesOrderLine].
+  ///
+  /// This is a SEPARATE, richer Business Central integration from
+  /// [fetchSalesOrders] — not every order is a Zebra order, and not every
+  /// company has this integration published at all, so the ANC API may
+  /// return an empty result or HTTP 503 for a perfectly normal order/company;
+  /// [ZebraOrderDetailService] is responsible for treating both as "no
+  /// Zebra detail available", never as a request failure to surface on its
+  /// own.
+  ///
+  /// [page]/[perPage] are clamped exactly like [fetchSalesOrders]. Same
+  /// "no `fetchZebraSalesOrdersPage(nextPageUrl:)` counterpart" reasoning
+  /// as every other Business Central list endpoint on this client.
+  ///
+  /// [documentNo], when supplied, is sent as the `document_no` query
+  /// parameter — see `ZebraOrderDetailService`'s doc comment for the two
+  /// different kinds of identifier this may be (a human Zebra document
+  /// number, or the plain Sales Order page's own order GUID) and why this
+  /// client does not need to distinguish them; the ANC API resolves either
+  /// one server-side. Omitted entirely (not sent as an empty string) when
+  /// `null`, so `SalesOrderLinesService`-style unfiltered paging (if ever
+  /// added for this endpoint) would be unaffected, matching [fetchSalesOrders]'s
+  /// own convention.
+  Future<PaginatedResponse<BusinessCentralZebraSalesOrderLine>>
+  fetchZebraSalesOrders({
+    required String token,
+    int page = 1,
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+    String? documentNo,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePerPage = perPage.clamp(
+      ApiConfig.businessCentralMinPerPage,
+      ApiConfig.businessCentralMaxPerPage,
+    );
+
+    final response = await getAuthenticatedJson(
+      ApiConfig.zebraSalesOrdersPath,
+      token: token,
+      queryParameters: {
+        'page': '$safePage',
+        'per_page': '$safePerPage',
+        'document_no': ?documentNo,
+      },
+    );
+    return _decodeZebraSalesOrdersResponse(response);
   }
 
   /// Calls `GET /api/business-central/items` for the authenticated user,
@@ -1238,6 +1292,40 @@ class AncApiClient {
 
     throw AncHttpException(
       'ANC API sales-orders request failed.',
+      statusCode: response.statusCode,
+      validationError: response.statusCode == 422
+          ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
+          : null,
+    );
+  }
+
+  /// Decodes a Zebra sales-orders response. HTTP 200 is parsed as a
+  /// [PaginatedResponse] of [BusinessCentralZebraSalesOrderLine]; every
+  /// other status raises [AncHttpException] with that [statusCode] —
+  /// including a parsed [ApiValidationError] for 422 — the same shape as
+  /// [_decodeSalesOrdersResponse]. In particular HTTP 503 (this company has
+  /// no Zebra integration, or it isn't safely scoped yet) is NOT
+  /// special-cased here — it surfaces as an ordinary [AncHttpException]
+  /// like any other status; [ZebraOrderDetailService] is the layer that
+  /// decides to treat it as "no Zebra detail" rather than a failure.
+  PaginatedResponse<BusinessCentralZebraSalesOrderLine>
+  _decodeZebraSalesOrdersResponse(http.Response response) {
+    if (response.statusCode == 200) {
+      final json = _decodeJsonOrThrow(response.body);
+      try {
+        return PaginatedResponse<BusinessCentralZebraSalesOrderLine>.fromJson(
+          json,
+          BusinessCentralZebraSalesOrderLine.fromJson,
+        );
+      } on FormatException catch (error) {
+        throw AncProtocolException(
+          'Malformed Zebra sales-orders response: ${error.message}',
+        );
+      }
+    }
+
+    throw AncHttpException(
+      'ANC API Zebra sales-orders request failed.',
       statusCode: response.statusCode,
       validationError: response.statusCode == 422
           ? ApiValidationError.fromJson(_decodeJsonOrNull(response.body))
