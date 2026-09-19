@@ -1,0 +1,25 @@
+appId: com.ancfabrics.app
+---
+- launchApp
+- takeScreenshot: screen-1-login
+- tapOn: "50 123 4567"
+- inputText: "${TEST_MOBILE}"
+- tapOn: "Enter your name"
+- inputText: "${TEST_CLIENT}"
+- tapOn: "Enter your password"
+- inputText: "${TEST_PASSWORD}"
+- tapOn: "Welcome back."
+- tapOn: "LOGIN"
+- waitForAnimationToEnd
+- takeScreenshot: screen-2-home
+- extendedWaitUntil:
+    visible: "CURRENT BALANCE"
+    timeout: 15000
+- tapOn: "CURRENT BALANCE"
+- waitForAnimationToEnd
+- takeScreenshot: screen-3-balance
+- tapOn: "Back"
+- waitForAnimationToEnd
+- tapOn: "Profile"
+- waitForAnimationToEnd
+- takeScreenshot: screen-4-profile

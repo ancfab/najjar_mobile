@@ -1,0 +1,112 @@
+workflows:
+  ios-screenshots:
+    name: iOS Screenshots
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - test_login
+    triggering:
+      events: []          # manual trigger only — start it from the dashboard when you want screenshots
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Build iOS app for Simulator
+        script: |
+          flutter build ios --simulator --no-codesign
+
+      - name: Install Maestro
+        script: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "PATH=$HOME/.maestro/bin:$PATH" >> $CM_ENV
+
+      - name: Boot simulator and install app
+        script: |
+          set -e
+
+          SIM_NAME="iPhone 16"
+          BUNDLE_ID="com.ancfabrics.app"
+          APP_PATH="build/ios/iphonesimulator/Runner.app"
+
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['udid'] for v in d['devices'].values() for x in v if x['name']=='$SIM_NAME'), ''))")
+
+          if [ -z "$UDID" ]; then
+            echo "No $SIM_NAME simulator found, creating one..."
+            RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; d=json.load(sys.stdin); r=[x for x in d['runtimes'] if x['name'].startswith('iOS')]; print(sorted(r, key=lambda x: x['version'])[-1]['identifier'])")
+            DEVICETYPE=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['identifier'] for x in d['devicetypes'] if x['name']=='$SIM_NAME'), ''))")
+            UDID=$(xcrun simctl create "$SIM_NAME" "$DEVICETYPE" "$RUNTIME")
+          fi
+
+          echo "UDID=$UDID" >> $CM_ENV
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          cat > /tmp/sim.entitlements <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>application-identifier</key>
+            <string>FAKETEAMID.com.ancfabrics.app</string>
+            <key>keychain-access-groups</key>
+            <array>
+              <string>FAKETEAMID.com.ancfabrics.app</string>
+            </array>
+            <key>get-task-allow</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --deep --sign - --entitlements /tmp/sim.entitlements "$APP_PATH"
+          xcrun simctl install "$UDID" "$APP_PATH"
+
+      - name: Run Maestro flow and capture screenshots
+        script: |
+          set -e
+          mkdir -p screenshots
+          cd screenshots
+                  maestro --device "$UDID" test -e TEST_MOBILE="$TEST_MOBILE" -e TEST_CLIENT="$TEST_CLIENT" -e TEST_PASSWORD="$TEST_PASSWORD" ../maestro/login_flow.yaml || true
+                  cd "$CM_BUILD_DIR"
+                  echo "Searching for generated screenshot files..."
+                  find "$HOME" -iname "screen-1-login.png" -o -iname "screen-2-home.png" -o -iname "screen-3-balance.png" -o -iname "screen-4-profile.png" 2>/dev/null | while read -r f; do
+                  echo "Found: $f"
+                  cp "$f" screenshots/ 2>/dev/null || true
+                  done
+                  echo "Contents of screenshots/:"
+                  ls -la screenshots/
+
+    artifacts:
+      - screenshots/*.png
+
+  ios-device-build:
+    name: iOS Device Build (unsigned)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events: []          # manual trigger only — start it from the dashboard
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Build unsigned iOS app for device
+        script: |
+          flutter build ios --release --no-codesign
+      - name: Package unsigned IPA
+        script: |
+          set -e
+          mkdir -p "$CM_BUILD_DIR/ipa_build/Payload"
+          cp -r build/ios/iphoneos/Runner.app "$CM_BUILD_DIR/ipa_build/Payload/"
+          cd "$CM_BUILD_DIR/ipa_build"
+          zip -r "$CM_BUILD_DIR/najjar_mobile-unsigned.ipa" Payload
+          cd "$CM_BUILD_DIR"
+          ls -la najjar_mobile-unsigned.ipa
+    artifacts:
+      - najjar_mobile-unsigned.ipa
