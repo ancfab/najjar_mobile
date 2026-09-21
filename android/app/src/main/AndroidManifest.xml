@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Required for all ANC API calls (login, etc.) in release builds.
          debug/AndroidManifest.xml and profile/AndroidManifest.xml already
          declare this for Flutter tooling (hot reload/VM service), which
@@ -12,11 +13,15 @@
          none. See lib/services/avatar_permission_service.dart and
          avatar_picker_service.dart. -->
     <uses-permission android:name="android.permission.CAMERA"/>
-    <!-- Android 13+ (API 33) granular media permission, requested via
-         permission_handler's Permission.photos before the gallery picker is
-         launched. permission_handler reports this as already granted on
-         older Android versions, where it isn't required. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!-- Google Play's Photo and Video Permissions policy only allows
+         READ_MEDIA_IMAGES for apps whose core purpose needs broad photo
+         access; a one-off avatar pick must use the system Photo Picker
+         instead (which image_picker already launches, permission-free).
+         tools:node="remove" strips it even if a plugin's manifest adds it,
+         so the merged manifest never needs a Play Console declaration. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove"/>
     <!-- Camera is used for avatar capture but isn't essential to the app,
          so devices without one (e.g. some tablets) can still install it. -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
