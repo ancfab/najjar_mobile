@@ -655,7 +655,7 @@ void main() {
       expect(find.text('TRIPOLI'), findsOneWidget);
       // TRIPOLI's 20 MT is at/below the 100 m low-stock threshold: the exact
       // quantity must not be shown, only the localized contact-support copy.
-      expect(find.text('Contact Support for inquiries'), findsOneWidget);
+      expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
       expect(find.textContaining('150'), findsNothing);
       expect(find.textContaining('20 MT'), findsNothing);
 
@@ -746,7 +746,7 @@ void main() {
           'yellow row background', (tester) async {
         await pumpWithQuantity(tester, 99);
 
-        expect(find.text('Contact Support for inquiries'), findsOneWidget);
+        expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
         expect(find.text('Available'), findsNothing);
         expect(find.textContaining('99'), findsNothing);
         final rowContainer = tester.widget<Container>(
@@ -765,7 +765,7 @@ void main() {
           'quantity, with a yellow row background', (tester) async {
         await pumpWithQuantity(tester, 100);
 
-        expect(find.text('Contact Support for inquiries'), findsOneWidget);
+        expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
         expect(find.text('Available'), findsNothing);
         expect(find.textContaining('100'), findsNothing);
         final rowContainer = tester.widget<Container>(
@@ -786,7 +786,7 @@ void main() {
 
         expect(find.text('Available'), findsOneWidget);
         expect(find.textContaining('100.01'), findsNothing);
-        expect(find.text('Contact Support for inquiries'), findsNothing);
+        expect(find.text('For more information, please contact the orders department.'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
             of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
@@ -805,7 +805,7 @@ void main() {
 
         expect(find.text('Available'), findsOneWidget);
         expect(find.textContaining('150'), findsNothing);
-        expect(find.text('Contact Support for inquiries'), findsNothing);
+        expect(find.text('For more information, please contact the orders department.'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
             of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
@@ -848,7 +848,7 @@ void main() {
 
         expect(find.text('Available'), findsOneWidget);
         expect(find.textContaining('15'), findsNothing);
-        expect(find.text('Contact Support for inquiries'), findsNothing);
+        expect(find.text('For more information, please contact the orders department.'), findsNothing);
         // No MT-threshold styling: the row must not be wrapped in the
         // colored Container that MT rows get — it must not "become green"
         // just because it isn't low stock.

@@ -1791,11 +1791,7 @@ class _StockStatusPill extends StatelessWidget {
             Text(
               context.t(
                 'home.stockExpectedBy',
-                params: {
-                  'date': MaterialLocalizations.of(
-                    context,
-                  ).formatMediumDate(restockDate),
-                },
+                params: {'date': formatNumericDayMonth(restockDate)},
               ),
               key: const ValueKey('variation-restock-date'),
               style: TextStyle(fontSize: 12, color: fg),

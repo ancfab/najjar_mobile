@@ -714,7 +714,7 @@ class _ScanPreviewArea extends StatelessWidget {
           code: activeCode,
           message: restockDate == null
               ? notFoundMessage
-              : '$notFoundMessage\n${context.t('home.stockExpectedBy', params: {'date': MaterialLocalizations.of(context).formatMediumDate(restockDate)})}',
+              : '$notFoundMessage\n${context.t('home.stockExpectedBy', params: {'date': formatNumericDayMonth(restockDate)})}',
           primaryActionLabel: context.t('scanStock.scanAgainAction'),
           primaryActionKey: const ValueKey('scan-stock-scan-again-button'),
           onPrimaryAction: onScanAgain,
@@ -1058,9 +1058,7 @@ class _StockResultCard extends StatelessWidget {
                 context.t(
                   'home.stockExpectedBy',
                   params: {
-                    'date': MaterialLocalizations.of(
-                      context,
-                    ).formatMediumDate(result.expectedRestockDate!),
+                    'date': formatNumericDayMonth(result.expectedRestockDate!),
                   },
                 ),
                 textAlign: TextAlign.center,
