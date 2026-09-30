@@ -13,7 +13,7 @@
     "clear": "مسح",
     "selectDate": "اختر التاريخ",
     "errorGeneric": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
-    "contactSupportForInquiries": "يرجى التواصل مع الدعم للاستفسار",
+    "contactSupportForInquiries": "للمزيد من المعلومات، يرجى التواصل مع قسم الطلبات.",
     "available": "متوفر"
   },
   "language": {
@@ -59,8 +59,8 @@
     "catalogueGroupTotalInventory": "إجمالي المجموعة: {amount}",
     "catalogueSelectVariation": "اختر صنفًا فرعيًا",
     "checkVariationAction": "تحقق",
-    "stockOutOfStock": "نفد المخزون",
-    "stockExpectedBy": "مخزون متوقع بحلول {date}"
+    "stockOutOfStock": "غير متوفر حالياً",
+    "stockExpectedBy": "متوقع توفره بتاريخ: {date}"
   },
   "balanceCard": {
     "label": "الرصيد الحالي",

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 
 import 'avatar_picker_service.dart';
@@ -39,10 +40,12 @@ abstract class AvatarPermissionService {
 
 /// Real [AvatarPermissionService] backed by the `permission_handler` plugin.
 ///
-/// Gallery access requests `Permission.photos`, which per permission_handler
-/// only applies to Android 13+ (`READ_MEDIA_IMAGES`) and iOS; on older
-/// Android versions where the modern picker doesn't need a runtime
-/// permission at all, the plugin reports it as already granted.
+/// On Android, gallery access needs no runtime permission: `image_picker`
+/// launches the system Photo Picker, which grants access to only the image
+/// the user picks. The app deliberately doesn't declare `READ_MEDIA_IMAGES`
+/// (see AndroidManifest.xml), so requesting `Permission.photos` there would
+/// always come back denied and block the picker. On iOS, gallery access
+/// still requests `Permission.photos`.
 class PermissionHandlerAvatarPermissionService
     implements AvatarPermissionService {
   const PermissionHandlerAvatarPermissionService();
@@ -52,8 +55,12 @@ class PermissionHandlerAvatarPermissionService
       _request(ph.Permission.camera);
 
   @override
-  Future<AvatarPermissionStatus> requestGalleryPermission() =>
-      _request(ph.Permission.photos);
+  Future<AvatarPermissionStatus> requestGalleryPermission() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AvatarPermissionStatus.granted;
+    }
+    return _request(ph.Permission.photos);
+  }
 
   Future<AvatarPermissionStatus> _request(ph.Permission permission) async {
     final status = await permission.request();

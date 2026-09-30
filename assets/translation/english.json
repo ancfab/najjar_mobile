@@ -13,7 +13,7 @@
     "clear": "Clear",
     "selectDate": "Select date",
     "errorGeneric": "Something went wrong. Please try again.",
-    "contactSupportForInquiries": "Contact Support for inquiries",
+    "contactSupportForInquiries": "For more information, please contact the orders department.",
     "available": "Available"
   },
   "language": {
@@ -59,8 +59,8 @@
     "catalogueGroupTotalInventory": "Group total: {amount}",
     "catalogueSelectVariation": "Select a variation",
     "checkVariationAction": "Check",
-    "stockOutOfStock": "Out of stock",
-    "stockExpectedBy": "Stock expected by {date}"
+    "stockOutOfStock": "Currently unavailable",
+    "stockExpectedBy": "Expected available on: {date}"
   },
   "balanceCard": {
     "label": "CURRENT BALANCE",

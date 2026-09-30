@@ -13,7 +13,7 @@
     "clear": "Effacer",
     "selectDate": "Sélectionner une date",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
-    "contactSupportForInquiries": "Contactez le support pour toute demande",
+    "contactSupportForInquiries": "Pour plus d'informations, veuillez contacter le service des commandes.",
     "available": "Disponible"
   },
   "language": {
@@ -59,8 +59,8 @@
     "catalogueGroupTotalInventory": "Total du groupe : {amount}",
     "catalogueSelectVariation": "Sélectionnez une variante",
     "checkVariationAction": "Vérifier",
-    "stockOutOfStock": "Rupture de stock",
-    "stockExpectedBy": "Stock attendu d'ici le {date}"
+    "stockOutOfStock": "Actuellement indisponible",
+    "stockExpectedBy": "Disponibilité prévue le : {date}"
   },
   "balanceCard": {
     "label": "SOLDE ACTUEL",

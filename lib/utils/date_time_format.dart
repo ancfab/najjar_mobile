@@ -70,3 +70,10 @@ String formatCompactLocalTimestamp(DateTime dateTime) {
   return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
       '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
 }
+
+/// Formats [dateTime] as `"d/M"` (e.g. `"21/9"`) — a locale-neutral,
+/// always-LTR numeric day/month used for expected-restock dates, where a
+/// spelled-out month name would need translating in every language (and
+/// reads long inside a status pill) but the digits do not.
+String formatNumericDayMonth(DateTime dateTime) =>
+    '${dateTime.day}/${dateTime.month}';
