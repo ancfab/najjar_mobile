@@ -69,10 +69,11 @@ Map<String, dynamic> _invoiceLineJson({
   double amount = 180,
   double amountIncludingVat = 189,
   String currencyCode = 'OMR',
+  String postingDate = '2026-03-21',
 }) => {
   'Document_No': documentNo,
   'Line_No': lineNo,
-  'Posting_Date': '2026-03-21',
+  'Posting_Date': postingDate,
   'Sell_to_Customer_No': customerNo,
   'Sell_to_Customer_Name': customerName,
   'Type': 'Item',
@@ -137,6 +138,98 @@ Future<void> _pumpInvoices(
 }
 
 void main() {
+  group('Ordering', () {
+    // The ANC API returns invoices newest-first across every page, so the
+    // screen must show them in the order they arrive - it may not reverse
+    // them (it once did, assuming the API was oldest-first) and a later
+    // page must land beneath what is already shown, never above it.
+    double top(WidgetTester tester, String documentNo) => tester
+        .getTopLeft(find.byKey(ValueKey('invoice-card-$documentNo')))
+        .dy;
+
+    testWidgets(
+      'shows invoices newest first, keeping the API order for a same-date tie',
+      (tester) async {
+        final service = _serviceWith([
+          (req) async => _jsonResponse(
+            200,
+            _envelope(
+              rows: [
+                _invoiceLineJson(documentNo: 'INV-3', postingDate: '2026-09-01'),
+                _invoiceLineJson(documentNo: 'INV-2', postingDate: '2026-08-31'),
+                _invoiceLineJson(documentNo: 'INV-1', postingDate: '2026-08-31'),
+              ],
+            ),
+            request: req,
+          ),
+        ]);
+
+        await _pumpInvoices(tester, service);
+
+        expect(top(tester, 'INV-3'), lessThan(top(tester, 'INV-2')));
+        expect(top(tester, 'INV-2'), lessThan(top(tester, 'INV-1')));
+      },
+    );
+
+    testWidgets('Load more adds older invoices beneath the ones already shown', (
+      tester,
+    ) async {
+      final service = _serviceWith([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [
+              _invoiceLineJson(documentNo: 'INV-5', postingDate: '2026-09-05'),
+            ],
+            currentPage: 1,
+            lastPage: 2,
+          ),
+          request: req,
+        ),
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [
+              _invoiceLineJson(documentNo: 'INV-4', postingDate: '2026-09-04'),
+            ],
+            currentPage: 2,
+            lastPage: 2,
+          ),
+          request: req,
+        ),
+      ]);
+
+      await _pumpInvoices(tester, service);
+      await tester.tap(find.byKey(const ValueKey('invoices-load-more')));
+      await tester.pumpAndSettle();
+
+      expect(top(tester, 'INV-5'), lessThan(top(tester, 'INV-4')));
+    });
+
+    testWidgets('an invoice with no posting date is kept after every dated one', (
+      tester,
+    ) async {
+      final undated = _invoiceLineJson(documentNo: 'INV-U')
+        ..remove('Posting_Date');
+      final service = _serviceWith([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(
+            rows: [
+              undated,
+              _invoiceLineJson(documentNo: 'INV-D', postingDate: '2026-01-01'),
+            ],
+          ),
+          request: req,
+        ),
+      ]);
+
+      await _pumpInvoices(tester, service);
+
+      expect(top(tester, 'INV-D'), lessThan(top(tester, 'INV-U')));
+    });
+  });
+
   group('Currency display', () {
     testWidgets(
       "prefixes the invoice total with the invoice's own Currency_Code",

@@ -129,10 +129,9 @@ class HomeScreen extends StatefulWidget {
   final HomeDashboardService? dashboardService;
 
   /// Last Payment data seam. Defaults (lazily, in State) to
-  /// [CustomerDetailsLastPaymentDataSource] — the customer's own
-  /// `customer_details` snapshot's `lastPaymentAmount`/`lastPaymentDate`
-  /// fields (product decision, 2026-09-03); overridable so tests can inject
-  /// a fake.
+  /// [LiveLastPaymentDataSource] — the newest row of the Payments endpoint
+  /// and its posting date (product decision, 2026-09-30); overridable so
+  /// tests can inject a fake.
   final LastPaymentDataSource? lastPaymentSource;
 
   /// Current Balance data seam. Defaults (lazily, in State) via
@@ -195,9 +194,9 @@ class _HomeScreenState extends State<HomeScreen> {
   late final LastPaymentDataSource _lastPaymentSource;
 
   /// Set only when this State created its own
-  /// [CustomerDetailsLastPaymentDataSource] (no [HomeScreen.lastPaymentSource]
+  /// [LiveLastPaymentDataSource] (no [HomeScreen.lastPaymentSource]
   /// was injected) — the only instance this screen ever closes.
-  CustomerDetailsLastPaymentDataSource? _ownedLastPaymentSource;
+  LiveLastPaymentDataSource? _ownedLastPaymentSource;
 
   late final CurrentBalanceDataSource _currentBalanceSource =
       widget.currentBalanceSource ?? resolveDefaultCurrentBalanceDataSource();
@@ -369,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (injectedLastPaymentSource != null) {
       _lastPaymentSource = injectedLastPaymentSource;
     } else {
-      final owned = CustomerDetailsLastPaymentDataSource();
+      final owned = LiveLastPaymentDataSource();
       _ownedLastPaymentSource = owned;
       _lastPaymentSource = owned;
     }
@@ -560,11 +559,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Loads the most recent payment from `customer_details`'
-  /// `lastPaymentAmount`/`lastPaymentDate` fields for the Last Payment row
-  /// (see [CustomerDetailsLastPaymentDataSource]). Independent of
+  /// Loads the most recent payment from the Payments endpoint for the Last
+  /// Payment row (see [LiveLastPaymentDataSource]). Independent of
   /// [loadHomeDashboardData]/[refreshHomeDashboardData], so a
-  /// customer-details failure never blanks out Balance/Orders/Invoices, and
+  /// payments failure never blanks out Balance/Orders/Invoices, and
   /// vice versa. Also serves as the retry action after an error.
   ///
   /// On HTTP 401, [LastPaymentDataSource] throws [SessionExpiredException]
@@ -617,12 +615,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Formats [entry.amount] as an absolute, never-negative value per the
-  /// confirmed display rule. `customer_details` carries no currency field
-  /// at all (unlike the Payments-list endpoint this row used to source
-  /// from), so this always renders the plain figure via
-  /// [formatCurrencyOrUnknown] — no prefix, never a guessed `$`/code.
+  /// confirmed display rule, prefixed with the payment's own currency code
+  /// when the source has one; otherwise the plain figure via
+  /// [formatCurrencyOrUnknown] — never a guessed `$`/code.
   String _formatLastPaymentAmount(LastPaymentSummary entry) {
-    return formatCurrencyOrUnknown(entry.amount.abs(), currencyCode: null);
+    return formatCurrencyOrUnknown(
+      entry.amount.abs(),
+      currencyCode: entry.currencyCode,
+    );
   }
 
   /// Validates that the catalogue code input is not empty (after trimming
@@ -1248,9 +1248,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final date = entry.date;
         return LastPaymentCard(
           amount: _formatLastPaymentAmount(entry),
-          // customer_details can report an amount with no accompanying
-          // date — shown as an empty date string rather than a fabricated
-          // one; the amount alone is still real, confirmed data.
+          // A source can report an amount with no accompanying date
+          // (customer_details) — shown as an empty date string rather than
+          // a fabricated one; the amount alone is still real data.
           date: date == null ? '' : formatMonthDay(date),
         );
     }

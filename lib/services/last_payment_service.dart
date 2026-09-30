@@ -27,7 +27,7 @@ PaymentEntry? selectLatestPayment(List<PaymentEntry> entries) {
 /// the Home screen's Last Payment row.
 ///
 /// Requests `GET /api/business-central/payments?page=1&per_page=1` — the
-/// confirmed contract guarantees newest-first ordering by `postingDate`
+/// backend sorts this endpoint newest-first by `postingDate`
 /// (ties broken by the higher `entryNo`), so a single narrow page is
 /// sufficient. Deliberately never pages through the full list the way
 /// `PaymentsService` does for a browsable history; this class only answers

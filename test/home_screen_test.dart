@@ -137,8 +137,13 @@ Color? _pillColor(WidgetTester tester, String suffix) {
 LastPaymentSummary _sampleLastPaymentSummary({
   DateTime? date,
   double amount = -200.0,
+  String? currencyCode = 'AED',
 }) {
-  return LastPaymentSummary(amount: amount, date: date ?? DateTime(2026, 1, 5));
+  return LastPaymentSummary(
+    amount: amount,
+    date: date ?? DateTime(2026, 1, 5),
+    currencyCode: currencyCode,
+  );
 }
 
 /// A canned live [CurrentBalanceAmount], distinct from both the retired
@@ -2146,14 +2151,17 @@ void main() {
     );
 
     testWidgets(
-      'Shows the plain amount, no currency prefix — customer_details '
-      'carries no currency field, so this never guesses \$ or any code',
+      'Shows the plain amount, no currency prefix, when the source has no '
+      'currency — never guesses \$ or any code',
       (tester) async {
         await _pumpHomeScreen(
           tester,
           390,
           lastPaymentSource: FakeLastPaymentDataSource(
-            entry: _sampleLastPaymentSummary(amount: -200.0),
+            entry: _sampleLastPaymentSummary(
+              amount: -200.0,
+              currencyCode: null,
+            ),
           ),
         );
 
@@ -2317,7 +2325,9 @@ void main() {
     );
 
     testWidgets('Pull-to-refresh reloads the Last Payment row', (tester) async {
-      final source = FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary());
+      final source = FakeLastPaymentDataSource(
+        entry: _sampleLastPaymentSummary(),
+      );
       await _pumpHomeScreen(tester, 390, lastPaymentSource: source);
       expect(source.callCount, 1);
 

@@ -155,12 +155,21 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   /// Groups fetched lines by `Document_No`, then orders the resulting
   /// invoices by `Posting_Date` descending (latest date first — e.g.
-  /// 2026-09-01 before 2026-08-31). A document with no known posting date
-  /// at all (see `BusinessCentralInvoiceLine.postingDate`'s doc comment on
-  /// why this is sometimes null/omitted live) can't be placed by date
+  /// 2026-09-01 before 2026-08-31).
+  ///
+  /// The ANC API already returns invoices newest-first across ALL pages
+  /// (and pages by whole invoice), so this is a safety net over what has
+  /// been loaded, not the thing that makes the order correct — sorting only
+  /// the pages fetched so far can never put the newest invoice of a long
+  /// history first. Consequently it must trust the API's order and never
+  /// reverse it: groups are built in the order the lines arrived, and a tie
+  /// (two invoices posted the same date) keeps that API order, which is
+  /// higher document number first.
+  ///
+  /// A document with no known posting date at all can't be placed by date
   /// honestly, so it's kept after every dated document, in the API's own
-  /// most-recently-fetched-first record order — never sorted to an
-  /// arbitrary/guessed position among the dated ones.
+  /// order — never sorted to an arbitrary/guessed position among the dated
+  /// ones.
   static List<_InvoiceGroup> _groupLines(
     List<BusinessCentralInvoiceLine> lines,
   ) {
@@ -169,7 +178,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       byDocument.putIfAbsent(line.documentNo, () => []).add(line);
     }
     final groups = [
-      for (final entry in byDocument.entries.toList().reversed)
+      for (final entry in byDocument.entries)
         _InvoiceGroup(
           documentNo: entry.key,
           postingDate: entry.value
@@ -199,11 +208,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     for (final group in groups) {
       (group.postingDate == null ? undated : dated).add(group);
     }
-    // List.sort isn't guaranteed stable, but a tie (two invoices posted the
-    // exact same date) has no more-precise real signal to break it with, so
-    // an arbitrary stable-or-not order between them is acceptable here.
-    dated.sort((a, b) => b.postingDate!.compareTo(a.postingDate!));
-    return [...dated, ...undated];
+    // List.sort isn't guaranteed stable, so a tie is broken by the group's
+    // original position (the API's own order) explicitly rather than left
+    // to chance.
+    final indexed = [for (var i = 0; i < dated.length; i++) (i, dated[i])];
+    indexed.sort((a, b) {
+      final byDate = b.$2.postingDate!.compareTo(a.$2.postingDate!);
+      return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+    });
+    return [for (final entry in indexed) entry.$2, ...undated];
   }
 
   /// The first non-blank `Currency_Code` among [lines], in order — `null`

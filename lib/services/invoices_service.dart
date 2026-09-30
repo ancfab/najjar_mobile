@@ -82,8 +82,9 @@ class InvoicesService {
   /// result instead of corrupting the freshly-refreshed rows.
   int _generation = 0;
 
-  /// Flat invoice-line rows loaded so far, oldest page first, in exact
-  /// backend order — never sorted or grouped by `Document_No`. Never
+  /// Flat invoice-line rows loaded so far, first-loaded page first, in exact
+  /// backend order (the API returns newest invoice first, a page being a set
+  /// of whole invoices) — never sorted or grouped by `Document_No`. Never
   /// mutated in place — always replaced wholesale so callers holding a
   /// previous reference never see a partially-updated list.
   List<BusinessCentralInvoiceLine> get lines => _lines;
