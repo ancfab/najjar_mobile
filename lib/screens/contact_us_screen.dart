@@ -5,7 +5,9 @@ import '../localization/translations.dart';
 import '../models/contact_subject.dart';
 import '../models/support_region.dart';
 import '../services/email_launcher.dart';
+import '../services/maps_launcher.dart';
 import '../services/phone_launcher.dart';
+import '../services/whatsapp_launcher.dart';
 import '../theme/app_colors.dart';
 import '../utils/contact_form_validators.dart';
 import '../utils/responsive.dart';
@@ -34,6 +36,8 @@ class ContactUsScreen extends StatefulWidget {
     this.region,
     this.phoneLauncher = const PhoneLauncher(),
     this.emailLauncher = const EmailLauncher(),
+    this.whatsAppLauncher = const WhatsAppLauncher(),
+    this.mapsLauncher = const MapsLauncher(),
     this.initialName,
     this.initialEmail,
   });
@@ -50,6 +54,14 @@ class ContactUsScreen extends StatefulWidget {
   /// Injectable so tests can supply a fake [UrlLauncherClient]-backed
   /// launcher instead of touching the real `url_launcher` plugin.
   final EmailLauncher emailLauncher;
+
+  /// Opens a WhatsApp chat with one of this region's contact numbers.
+  /// Injectable for the same reason as [phoneLauncher].
+  final WhatsAppLauncher whatsAppLauncher;
+
+  /// Opens an office location in the device's maps app. Injectable for the
+  /// same reason as [phoneLauncher].
+  final MapsLauncher mapsLauncher;
 
   /// Prefill values for the customer's name/email, sourced from a
   /// logged-in profile/session once one exists. Null in production today.
@@ -75,6 +87,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   bool _isSendingForm = false;
   bool _isEmailActionLaunching = false;
   bool _isPhoneLaunching = false;
+  bool _isWhatsAppLaunching = false;
+  bool _isMapsLaunching = false;
   bool _nameEditedByUser = false;
   bool _emailEditedByUser = false;
   AutovalidateMode _autovalidateMode = AutovalidateMode.disabled;
@@ -179,6 +193,57 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isPhoneLaunching = false);
+    }
+  }
+
+  /// Opens a WhatsApp chat with one of this region's own contact numbers.
+  /// The region's dialing code resolves numbers stored in local form (e.g.
+  /// Syria's `0989204480`), which is why this never reports "unavailable"
+  /// for a number the Call action can already dial.
+  Future<void> _onWhatsAppTap(String number) async {
+    if (_isWhatsAppLaunching) return;
+
+    setState(() => _isWhatsAppLaunching = true);
+    try {
+      final result = await widget.whatsAppLauncher.open(
+        number,
+        dialCode: _region.id.dialCode,
+      );
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(
+          context.t(
+            'contactUs.whatsappOpenFailed',
+            params: {'number': number},
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isWhatsAppLaunching = false);
+    }
+  }
+
+  /// Opens [location] in the device's maps app, searching on the office's
+  /// name, address and city together — ANC's own address only; the user's
+  /// position is never read (see [MapsLauncher]).
+  Future<void> _onDirectionsTap(SupportOfficeLocation location) async {
+    if (_isMapsLaunching) return;
+
+    setState(() => _isMapsLaunching = true);
+    try {
+      final addressKey = location.addressKey;
+      final result = await widget.mapsLauncher.openLocation([
+        location.name,
+        addressKey == null ? location.address : context.t(addressKey),
+        location.city,
+        _region.id.localizedName(context),
+      ]);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(context.t('contactUs.mapsUnavailable'));
+      }
+    } finally {
+      if (mounted) setState(() => _isMapsLaunching = false);
     }
   }
 
@@ -497,30 +562,53 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final number in hotlineNumbers)
-                  Semantics(
-                    button: true,
-                    label: context.t(
-                      'contactUs.callNumber',
-                      params: {'number': number},
-                    ),
-                    child: InkWell(
-                      key: ValueKey('contact-hotline-number-$number'),
-                      onTap: () => _onCallTap(number),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Directionality(
-                          textDirection: TextDirection.ltr,
-                          child: Text(
-                            number,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primaryNavy,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          label: context.t(
+                            'contactUs.callNumber',
+                            params: {'number': number},
+                          ),
+                          child: InkWell(
+                            key: ValueKey('contact-hotline-number-$number'),
+                            onTap: () => _onCallTap(number),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Text(
+                                  number,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryNavy,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                      Semantics(
+                        button: true,
+                        label: context.t(
+                          'contactUs.chatOnWhatsAppNumber',
+                          params: {'number': number},
+                        ),
+                        child: IconButton(
+                          key: ValueKey('contact-hotline-whatsapp-$number'),
+                          onPressed: () => _onWhatsAppTap(number),
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(
+                            Icons.chat_rounded,
+                            size: 18,
+                            color: AppColors.primaryNavy,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
@@ -557,6 +645,8 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               key: ValueKey('office-location-${location.city}'),
               location: location,
               onCallTap: _onCallTap,
+              onWhatsAppTap: _onWhatsAppTap,
+              onDirectionsTap: () => _onDirectionsTap(location),
             ),
             const SizedBox(height: 8),
           ],

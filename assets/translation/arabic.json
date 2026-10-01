@@ -303,7 +303,8 @@
     "directHotlineLabel": "الخط الساخن المباشر",
     "hoursFallback": "سيتم تأكيد ساعات الدعم لـ {region} قريبًا.",
     "hotlineFallback": "سيتم إضافة أرقام الخط الساخن لـ {region} قريبًا.",
-    "callNumber": "اتصال بـ {number}"
+    "callNumber": "اتصال بـ {number}",
+    "mapsUnavailable": "تعذّر فتح الخرائط. يرجى المحاولة مرة أخرى."
   },
   "supportAction": {
     "heading": "دعم مباشر من متخصص",
@@ -364,6 +365,11 @@
     "mainOfficeLabel": "المكتب الرئيسي",
     "callUsLabel": "اتصل بنا",
     "callNumber": "اتصل بالرقم {number}",
+    "chatOnWhatsAppNumber": "محادثة واتساب مع {number}",
+    "whatsAppAction": "واتساب",
+    "whatsappOpenFailed": "تعذّر فتح واتساب للرقم {number}. يرجى المحاولة لاحقًا.",
+    "openInMaps": "فتح {address} في الخرائط",
+    "mapsUnavailable": "تعذّر فتح الخرائط. يرجى المحاولة مرة أخرى.",
     "dialerUnavailable": "تعذّر فتح تطبيق الاتصال. يرجى المحاولة مرة أخرى.",
     "locationsLabel": "الفروع",
     "regionalContactsLabel": "جهات الاتصال الإقليمية",

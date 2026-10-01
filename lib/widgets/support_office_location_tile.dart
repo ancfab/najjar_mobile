@@ -13,12 +13,22 @@ class SupportOfficeLocationTile extends StatelessWidget {
     super.key,
     required this.location,
     required this.onCallTap,
+    this.onWhatsAppTap,
+    this.onDirectionsTap,
     this.compact = false,
     this.callNumberLabelKey = 'contactUs.callNumber',
   });
 
   final SupportOfficeLocation location;
   final ValueChanged<String> onCallTap;
+
+  /// Opens a WhatsApp chat with this office's own number. Null leaves the
+  /// row with the Call action alone, exactly as before this existed.
+  final ValueChanged<String>? onWhatsAppTap;
+
+  /// Opens this office's address in the device's maps app. Null renders
+  /// the address as plain, untappable text.
+  final VoidCallback? onDirectionsTap;
 
   /// When true, renders just the city/name/address/phone content without
   /// the outer bordered card background — used on the Support screen,
@@ -79,10 +89,86 @@ class SupportOfficeLocationTile extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 4),
-        Text(
-          _addressText(context),
-          style: const TextStyle(fontSize: 13, color: AppColors.grayText),
-        ),
+        if (onDirectionsTap == null)
+          Text(
+            _addressText(context),
+            style: const TextStyle(fontSize: 13, color: AppColors.grayText),
+          )
+        else
+          Semantics(
+            button: true,
+            label: context.t(
+              'contactUs.openInMaps',
+              params: {'address': _addressText(context)},
+            ),
+            child: InkWell(
+              key: ValueKey('office-location-directions-${location.city}'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: onDirectionsTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.place_rounded,
+                      size: 14,
+                      color: AppColors.primaryNavy,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _addressText(context),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryNavy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (phone != null && onWhatsAppTap != null) ...[
+          const SizedBox(height: 6),
+          Semantics(
+            button: true,
+            label: context.t(
+              'contactUs.chatOnWhatsAppNumber',
+              params: {'number': phone},
+            ),
+            child: InkWell(
+              key: ValueKey('office-location-whatsapp-${location.city}'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => onWhatsAppTap!(phone),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.chat_rounded,
+                      size: 14,
+                      color: AppColors.primaryNavy,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      context.t('contactUs.whatsAppAction'),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryNavy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         if (phone != null) ...[
           const SizedBox(height: 6),
           Semantics(

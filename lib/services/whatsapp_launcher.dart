@@ -43,8 +43,19 @@ class WhatsAppLauncher {
   /// Normalizes [rawNumber] and attempts to open a WhatsApp chat with it,
   /// trying the native `whatsapp://` URI first and the `https://wa.me/`
   /// web URI only if the native attempt fails or throws.
-  Future<WhatsAppLaunchResult> open(String? rawNumber) async {
-    final normalized = normalizeWhatsAppNumber(rawNumber);
+  ///
+  /// [dialCode] (e.g. `+963`) supplies the country code for a number
+  /// written locally, which is how most verified regional contact numbers
+  /// are stored. An already-international [rawNumber] keeps its own country
+  /// code regardless, and without [dialCode] a local number still resolves
+  /// to [WhatsAppLaunchOutcome.unavailable] rather than a guessed country.
+  Future<WhatsAppLaunchResult> open(
+    String? rawNumber, {
+    String? dialCode,
+  }) async {
+    final normalized = dialCode == null
+        ? normalizeWhatsAppNumber(rawNumber)
+        : normalizeWhatsAppNumberWithDialCode(rawNumber, dialCode);
     if (normalized == null) {
       return const WhatsAppLaunchResult(WhatsAppLaunchOutcome.unavailable);
     }

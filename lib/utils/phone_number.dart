@@ -24,6 +24,39 @@ String? normalizeWhatsAppNumber(String? raw) {
   return digitsOnly;
 }
 
+/// Normalizes [raw] into the digits-only WhatsApp form, using [dialCode]
+/// (e.g. `+963`) as the country code when [raw] is written locally rather
+/// than internationally — which is how most verified regional contact
+/// numbers are stored (e.g. Syria's `0989204480`).
+///
+/// An already-international [raw] (leading `+`) keeps its own country code
+/// and ignores [dialCode] entirely, so a number verified for one country is
+/// never rewritten into another. A local number's single leading trunk `0`
+/// is dropped before [dialCode] is applied, per E.164.
+///
+/// Returns `null` when [raw] is unusable, or when it is local and no
+/// [dialCode] is known — a country code is never guessed.
+String? normalizeWhatsAppNumberWithDialCode(String? raw, String? dialCode) {
+  if (raw == null) return null;
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+  if (trimmed.startsWith('+')) return normalizeWhatsAppNumber(trimmed);
+
+  if (dialCode == null) return null;
+  final codeDigits = dialCode.replaceAll(RegExp(r'[^0-9]'), '');
+  if (codeDigits.isEmpty) return null;
+
+  var localDigits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+  if (localDigits.isEmpty) return null;
+  // A single leading trunk prefix is local-dialing notation only; E.164
+  // drops it. Deliberately only one, so a number that legitimately begins
+  // with 0 after the trunk digit keeps it.
+  if (localDigits.startsWith('0')) localDigits = localDigits.substring(1);
+  if (localDigits.isEmpty) return null;
+
+  return normalizeWhatsAppNumber('+$codeDigits$localDigits');
+}
+
 /// Normalizes a phone number into the form suitable for a `tel:` URI.
 ///
 /// Unlike [normalizeWhatsAppNumber], a leading `+` (and the international

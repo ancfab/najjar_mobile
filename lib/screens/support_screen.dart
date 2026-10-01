@@ -5,6 +5,7 @@ import '../localization/translations.dart';
 import '../models/support_region.dart';
 import '../navigation/main_bottom_nav.dart';
 import '../services/auth_service.dart';
+import '../services/maps_launcher.dart';
 import '../services/phone_launcher.dart';
 import '../services/support_region_service.dart';
 import '../services/whatsapp_launcher.dart';
@@ -38,6 +39,7 @@ import 'contact_us_screen.dart';
 class SupportScreen extends StatefulWidget {
   const SupportScreen({
     super.key,
+    this.mapsLauncher = const MapsLauncher(),
     WhatsAppLauncher? whatsAppLauncher,
     PhoneLauncher? phoneLauncher,
     this.regions,
@@ -50,6 +52,11 @@ class SupportScreen extends StatefulWidget {
   /// Injectable so tests can supply a fake launcher instead of touching the
   /// real `url_launcher` plugin.
   final WhatsAppLauncher whatsAppLauncher;
+
+  /// Opens an office location in the device's maps app. Injectable so
+  /// tests can supply a fake [UrlLauncherClient]-backed launcher instead of
+  /// touching the real `url_launcher` plugin.
+  final MapsLauncher mapsLauncher;
 
   /// Injectable so tests can supply a fake launcher instead of touching the
   /// real `url_launcher` plugin.
@@ -84,6 +91,7 @@ class _SupportScreenState extends State<SupportScreen> {
   SupportRegionId? _selectedRegionId;
   bool _isLoadingRegions = true;
   bool _isWhatsAppLaunching = false;
+  bool _isMapsLaunching = false;
   bool _isPhoneLaunching = false;
 
   late final AuthService _authService;
@@ -221,13 +229,42 @@ class _SupportScreenState extends State<SupportScreen> {
     });
   }
 
+  /// The number "Chat on WhatsApp" should open for [region].
+  ///
+  /// Prefers a number verified specifically as that region's WhatsApp
+  /// contact, and otherwise falls back to a number already verified as
+  /// reachable for the region — its first hotline, then its first regional
+  /// representative with a number. Every ANC contact number in these
+  /// regions is a mobile line carrying WhatsApp, so the fallback reaches
+  /// the same people the Call action does rather than reporting the
+  /// feature as unavailable. Returns `null` only when the region has no
+  /// verified number at all, which stays an honest "unavailable" instead of
+  /// a fabricated number.
+  String? _whatsAppNumberFor(SupportRegionData region) {
+    final dedicated = region.whatsappNumber;
+    if (dedicated != null && dedicated.trim().isNotEmpty) return dedicated;
+
+    for (final hotline in region.hotlineNumbers) {
+      if (hotline.trim().isNotEmpty) return hotline;
+    }
+    for (final location in region.officeLocations) {
+      final phone = location.phone;
+      if (phone != null && phone.trim().isNotEmpty) return phone;
+    }
+    for (final contact in region.regionalContacts) {
+      final phone = contact.phone;
+      if (phone != null && phone.trim().isNotEmpty) return phone;
+    }
+    return null;
+  }
+
   Future<void> _onChatOnWhatsApp() async {
     if (_isWhatsAppLaunching) return;
 
     // Read the region fresh at tap time (not captured earlier) so a region
     // switch before this async work resolves can't use stale contact data.
     final region = _selectedRegion;
-    final number = region.whatsappNumber;
+    final number = _whatsAppNumberFor(region);
     if (number == null || number.trim().isEmpty) {
       _showSnackBar(
         context.t(
@@ -240,7 +277,10 @@ class _SupportScreenState extends State<SupportScreen> {
 
     setState(() => _isWhatsAppLaunching = true);
     try {
-      final result = await widget.whatsAppLauncher.open(number);
+      final result = await widget.whatsAppLauncher.open(
+        number,
+        dialCode: region.id.dialCode,
+      );
       if (!mounted) return;
       if (!result.succeeded) {
         _showSnackBar(
@@ -252,6 +292,30 @@ class _SupportScreenState extends State<SupportScreen> {
       }
     } finally {
       if (mounted) setState(() => _isWhatsAppLaunching = false);
+    }
+  }
+
+  /// Opens [location] in the device's maps app — ANC's own address only;
+  /// the user's position is never read (see [MapsLauncher]).
+  Future<void> _onDirectionsTap(SupportOfficeLocation location) async {
+    if (_isMapsLaunching) return;
+
+    final region = _selectedRegion;
+    setState(() => _isMapsLaunching = true);
+    try {
+      final addressKey = location.addressKey;
+      final result = await widget.mapsLauncher.openLocation([
+        location.name,
+        addressKey == null ? location.address : context.t(addressKey),
+        location.city,
+        region.id.localizedName(context),
+      ]);
+      if (!mounted) return;
+      if (!result.succeeded) {
+        _showSnackBar(context.t('support.mapsUnavailable'));
+      }
+    } finally {
+      if (mounted) setState(() => _isMapsLaunching = false);
     }
   }
 
@@ -487,6 +551,7 @@ class _SupportScreenState extends State<SupportScreen> {
             key: ValueKey('support-office-location-${location.city}'),
             location: location,
             onCallTap: _onCallOfficeLocation,
+            onDirectionsTap: () => _onDirectionsTap(location),
             compact: true,
             callNumberLabelKey: 'support.callNumber',
           ),

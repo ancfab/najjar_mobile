@@ -303,7 +303,8 @@
     "directHotlineLabel": "DIRECT HOTLINE",
     "hoursFallback": "Support hours for {region} will be confirmed soon.",
     "hotlineFallback": "Hotline numbers for {region} will be added soon.",
-    "callNumber": "Call {number}"
+    "callNumber": "Call {number}",
+    "mapsUnavailable": "Unable to open maps. Please try again."
   },
   "supportAction": {
     "heading": "Live Specialist Support",
@@ -364,6 +365,11 @@
     "mainOfficeLabel": "MAIN OFFICE",
     "callUsLabel": "CALL US",
     "callNumber": "Call {number}",
+    "chatOnWhatsAppNumber": "Chat on WhatsApp with {number}",
+    "whatsAppAction": "WhatsApp",
+    "whatsappOpenFailed": "Couldn't open WhatsApp for {number}. Please try again later.",
+    "openInMaps": "Open {address} in maps",
+    "mapsUnavailable": "Unable to open maps. Please try again.",
     "dialerUnavailable": "Unable to open the phone dialer. Please try again.",
     "locationsLabel": "LOCATIONS",
     "regionalContactsLabel": "REGIONAL CONTACTS",

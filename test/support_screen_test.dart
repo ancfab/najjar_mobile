@@ -273,18 +273,28 @@ void main() {
   testWidgets('WhatsApp button reflects the currently selected region', (
     tester,
   ) async {
-    await pumpSupport(tester);
-
-    final uae = kSupportRegions.first;
-    await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
-    await tester.pump();
-    expect(
-      find.text(
-        'WhatsApp support is not available for ${uae.displayName} '
-        'yet.',
+    // No region carries a dedicated whatsappNumber yet, so each one falls
+    // back to a number already verified as reachable for it — the UAE's
+    // hotline, then Lebanon's — rather than reporting WhatsApp as
+    // unavailable for a number the Call action can dial.
+    final client = FakeUrlLauncherClient(nativeResult: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SupportScreen(whatsAppLauncher: WhatsAppLauncher(client: client)),
       ),
-      findsOneWidget,
     );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
+    await tester.pumpAndSettle();
+    expect(client.attemptedUris.last.toString(), contains('971565110448'));
     expect(tester.takeException(), isNull);
 
     final lebanon = kSupportRegions.firstWhere(
@@ -294,27 +304,89 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
-    // The previous SnackBar's hide animation (triggered by
-    // hideCurrentSnackBar in _onChatOnWhatsApp) needs a moment to finish
-    // before the new one is shown, well short of its own auto-dismiss
-    // duration.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      find.text(
-        'WhatsApp support is not available for '
-        '${lebanon.displayName} yet.',
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.text(
-        'WhatsApp support is not available for ${uae.displayName} '
-        'yet.',
-      ),
-      findsNothing,
-    );
+    await tester.pumpAndSettle();
+    expect(client.attemptedUris.last.toString(), contains('96179303551'));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'A region with no verified number at all still reports WhatsApp as '
+    'unavailable, never a fabricated number',
+    (tester) async {
+      final client = FakeUrlLauncherClient(nativeResult: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+          localizationsDelegates: const [
+            AppTranslationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: SupportScreen(
+            regions: const [
+              SupportRegionData(
+                id: SupportRegionId.uae,
+                displayName: 'Numberless',
+              ),
+            ],
+            whatsAppLauncher: WhatsAppLauncher(client: client),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
+      await tester.pump();
+
+      expect(
+        find.text('WhatsApp support is not available for UAE yet.'),
+        findsOneWidget,
+      );
+      expect(client.attemptedUris, isEmpty);
+    },
+  );
+
+  testWidgets('A local contact number opens WhatsApp with the region code', (
+    tester,
+  ) async {
+    final client = FakeUrlLauncherClient(nativeResult: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: const [Locale('en'), Locale('ar'), Locale('fr')],
+        localizationsDelegates: const [
+          AppTranslationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SupportScreen(
+          regions: const [
+            SupportRegionData(
+              id: SupportRegionId.syria,
+              displayName: 'Syria',
+              regionalContacts: [
+                SupportRegionalContact(
+                  name: 'روى',
+                  category: SupportContactCategory.upholsteryFabrics,
+                  area: 'إدلب',
+                  phone: '0989204480',
+                ),
+              ],
+            ),
+          ],
+          whatsAppLauncher: WhatsAppLauncher(client: client),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('support-whatsapp-button')));
+    await tester.pumpAndSettle();
+
+    // Syria's +963, with the local trunk 0 dropped — never the digits as
+    // stored, which WhatsApp would reject.
+    expect(client.attemptedUris.last.toString(), contains('963989204480'));
   });
 
   group('WhatsApp launch flow', () {

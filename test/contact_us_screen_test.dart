@@ -15,7 +15,9 @@ import 'package:anc_fabrics/models/support_region.dart';
 import 'package:anc_fabrics/screens/contact_us_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/email_launcher.dart';
+import 'package:anc_fabrics/services/maps_launcher.dart';
 import 'package:anc_fabrics/services/phone_launcher.dart';
+import 'package:anc_fabrics/services/whatsapp_launcher.dart';
 import 'package:anc_fabrics/services/url_launcher_client.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -69,6 +71,8 @@ void main() {
     SupportRegionData? region,
     PhoneLauncher? phoneLauncher,
     EmailLauncher? emailLauncher,
+    WhatsAppLauncher? whatsAppLauncher,
+    MapsLauncher? mapsLauncher,
     String? initialName,
     String? initialEmail,
     Locale locale = const Locale('en'),
@@ -87,6 +91,8 @@ void main() {
           region: region,
           phoneLauncher: phoneLauncher ?? const PhoneLauncher(),
           emailLauncher: emailLauncher ?? const EmailLauncher(),
+          whatsAppLauncher: whatsAppLauncher ?? const WhatsAppLauncher(),
+          mapsLauncher: mapsLauncher ?? const MapsLauncher(),
           initialName: initialName,
           initialEmail: initialEmail,
         ),
@@ -719,6 +725,56 @@ void main() {
         'tel:+9647514018777',
         'tel:+9647501661000',
       ]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("Tapping a location's address opens it in maps", (
+      tester,
+    ) async {
+      final client = FakeUrlLauncherClient(webResult: true);
+      await pumpContactUs(
+        tester,
+        region: region(SupportRegionId.iraq),
+        mapsLauncher: MapsLauncher(client: client),
+      );
+
+      final directions = find.byKey(
+        const ValueKey('office-location-directions-Erbil'),
+      );
+      await tester.ensureVisible(directions);
+      await tester.tap(directions);
+      await tester.pumpAndSettle();
+
+      final uri = client.attemptedUris.single;
+      expect(uri.host, 'www.google.com');
+      expect(uri.path, '/maps/search/');
+      // ANC's own address only — the user's position is never read.
+      expect(uri.queryParameters['query'], contains('Erbil'));
+      expect(uri.queryParameters['query'], contains('شارع 60'));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("Tapping a location's WhatsApp action opens that number", (
+      tester,
+    ) async {
+      final client = FakeUrlLauncherClient(nativeResult: true);
+      await pumpContactUs(
+        tester,
+        region: region(SupportRegionId.iraq),
+        whatsAppLauncher: WhatsAppLauncher(client: client),
+      );
+
+      final chat = find.byKey(
+        const ValueKey('office-location-whatsapp-Erbil'),
+      );
+      await tester.ensureVisible(chat);
+      await tester.tap(chat);
+      await tester.pumpAndSettle();
+
+      expect(
+        client.attemptedUris.single.toString(),
+        contains('9647514018777'),
+      );
       expect(tester.takeException(), isNull);
     });
 

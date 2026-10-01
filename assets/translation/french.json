@@ -303,7 +303,8 @@
     "directHotlineLabel": "LIGNE DIRECTE",
     "hoursFallback": "Les horaires d'assistance pour {region} seront confirmés prochainement.",
     "hotlineFallback": "Les numéros de la ligne directe pour {region} seront ajoutés prochainement.",
-    "callNumber": "Appeler {number}"
+    "callNumber": "Appeler {number}",
+    "mapsUnavailable": "Impossible d'ouvrir la carte. Veuillez réessayer."
   },
   "supportAction": {
     "heading": "Assistance directe par un spécialiste",
@@ -364,6 +365,11 @@
     "mainOfficeLabel": "SIÈGE PRINCIPAL",
     "callUsLabel": "APPELEZ-NOUS",
     "callNumber": "Appeler le {number}",
+    "chatOnWhatsAppNumber": "Discuter sur WhatsApp avec le {number}",
+    "whatsAppAction": "WhatsApp",
+    "whatsappOpenFailed": "Impossible d'ouvrir WhatsApp pour le {number}. Veuillez réessayer plus tard.",
+    "openInMaps": "Ouvrir {address} dans la carte",
+    "mapsUnavailable": "Impossible d'ouvrir la carte. Veuillez réessayer.",
     "dialerUnavailable": "Impossible d'ouvrir le composeur téléphonique. Veuillez réessayer.",
     "locationsLabel": "SITES",
     "regionalContactsLabel": "CONTACTS RÉGIONAUX",

@@ -40,6 +40,19 @@ enum SupportRegionId {
   /// `supportRegion.uae`), matching the enum's own `name` 1:1 with the
   /// `supportRegion.*` keys in the translation JSON files.
   String get translationKey => 'supportRegion.$name';
+
+  /// This region's international dialing code, used to turn a locally
+  /// written contact number (e.g. Syria's `0989204480`) into the
+  /// international form a WhatsApp link needs. Matches `kCountryCodes`'
+  /// entry for the same country — never a second, divergent source for a
+  /// dialing code.
+  String get dialCode => switch (this) {
+    SupportRegionId.uae => '+971',
+    SupportRegionId.syria => '+963',
+    SupportRegionId.iraq => '+964',
+    SupportRegionId.oman => '+968',
+    SupportRegionId.lebanon => '+961',
+  };
 }
 
 /// Single centralized resolver for a region's user-facing country name,
