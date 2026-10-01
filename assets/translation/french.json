@@ -43,7 +43,6 @@
     "noAvailabilityFound": "Aucune disponibilité trouvée pour « {code} ».",
     "catalogueLookupError": "Une erreur s'est produite. Veuillez réessayer.",
     "checkAvailabilityUnavailable": "Temporairement indisponible.",
-    "settingsComingSoon": "Écran des paramètres bientôt disponible",
     "scanFabricAvailability": "Scanner la disponibilité du tissu",
     "checkAvailability": "Vérifier la disponibilité",
     "enterCatalogueCode": "Saisissez le code du catalogue",

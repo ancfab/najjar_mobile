@@ -88,8 +88,8 @@ void main() {
   );
 
   testWidgets(
-    'Logo, language, and settings icons form a compact group with equal '
-    'fixed gaps and no expanding spacer between them',
+    'Logo and language button form a compact group with a fixed gap and no '
+    'expanding spacer between them',
     (tester) async {
       final avatarController = CurrentUserAvatarController();
       await tester.pumpWidget(
@@ -115,24 +115,26 @@ void main() {
       final language = find.byKey(
         const ValueKey('home-header-language-button'),
       );
-      final settings = find.byKey(
-        const ValueKey('home-header-settings-button'),
+      // The settings gear is gone: it only ever showed a "coming soon"
+      // message, so the brand mark is now the header's right-hand anchor.
+      expect(
+        find.byKey(const ValueKey('home-header-settings-button')),
+        findsNothing,
       );
+      expect(find.byIcon(Icons.settings_outlined), findsNothing);
 
-      // Logo is sized 34-36px tall (a modest bump from the prior 34px) and
-      // keeps its aspect ratio (no explicit width forced on it).
+      // The logo keeps its aspect ratio (no explicit width forced on it)
+      // and still clears the header's 68px minHeight.
       final logoSize = tester.getSize(logo);
-      expect(logoSize.height, inInclusiveRange(34, 36));
+      expect(logoSize.height, inInclusiveRange(40, 48));
+      expect(logoSize.height, lessThan(68));
 
       final logoRight = tester.getTopRight(logo).dx;
       final languageLeft = tester.getTopLeft(language).dx;
-      final languageRight = tester.getTopRight(language).dx;
-      final settingsLeft = tester.getTopLeft(settings).dx;
 
-      final logoToLanguageGap = languageLeft - logoRight;
-      final languageToSettingsGap = settingsLeft - languageRight;
-
-      expect(logoToLanguageGap, closeTo(languageToSettingsGap, 0.5));
+      // One fixed, modest gap — never an expanding spacer that would push
+      // the two apart across the header.
+      expect(languageLeft - logoRight, closeTo(12, 0.5));
     },
   );
 
@@ -164,8 +166,9 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('home-header-logo')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('home-header-settings-button')),
+      find.byKey(const ValueKey('home-header-language-button')),
       findsOneWidget,
     );
   });

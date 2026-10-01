@@ -1025,14 +1025,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => EditProfileScreen()));
   }
 
-  // Handles the header gear icon tap.
-  void _openSettings() {
-    // confirmation. Showing a safe placeholder instead of navigating.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.t('home.settingsComingSoon'))),
-    );
-  }
-
   // Opens the Account Balance drill-down from the balance hero card,
   // passing along the already-loaded Current Balance's ledger-derived
   // currency so Account Balance never has to re-fetch ledger entries or
@@ -1118,7 +1110,6 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeHeader(
               userName: _username ?? context.t('home.defaultUserLabel'),
               onAvatarTap: _openProfile,
-              onSettingsTap: _openSettings,
             ),
             Expanded(
               child: RefreshIndicator(

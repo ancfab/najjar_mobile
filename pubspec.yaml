@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+6
+version: 1.0.0+7
 
 environment:
   sdk: ^3.10.3
@@ -77,4 +77,13 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/logo/icon.png"
+  # Android 8+ masks the launcher icon to the launcher's own shape (circle,
+  # squircle, ...) and zooms it, so the adaptive foreground is a separate,
+  # far more padded rendering of the mark on a white background — without
+  # it the gold square's edges get cropped by the mask.
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/logo/icon_foreground.png"
+  # iOS icons may not carry an alpha channel; icon.png is already opaque,
+  # and this flattens anything that slips through.
+  remove_alpha_ios: true
   min_sdk_android: 21

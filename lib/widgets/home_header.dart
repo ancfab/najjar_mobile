@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../services/current_user_avatar_controller.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_radius.dart';
 import '../theme/app_typography.dart';
 import 'language_popup_menu.dart';
 
@@ -11,7 +10,6 @@ class HomeHeader extends StatelessWidget {
     super.key,
     required this.userName,
     this.onAvatarTap,
-    this.onSettingsTap,
     this.avatarController,
   });
 
@@ -21,23 +19,20 @@ class HomeHeader extends StatelessWidget {
   /// the Profile screen.
   final VoidCallback? onAvatarTap;
 
-  /// Called when the settings/gear icon is tapped.
-  final VoidCallback? onSettingsTap;
-
   /// Shared current-user avatar state. Defaults to the app-wide
   /// [currentUserAvatarController] singleton; overridable so tests can
   /// inject a fresh instance instead of sharing that mutable singleton
   /// across test cases.
   final CurrentUserAvatarController? avatarController;
 
-  /// Fixed gap used on both sides of the language icon, so the logo↔language
-  /// and language↔settings spacing in the right-side action group match.
-  static const double _actionGroupGap = 8;
+  /// Gap between the logo and the language button in the right-side action
+  /// group.
+  static const double _actionGroupGap = 12;
 
-  /// Logo height: slightly larger than the previous 34px to read clearly
-  /// next to the 34px language/settings icon buttons, while still fitting
-  /// the header's existing minHeight.
-  static const double _logoHeight = 36;
+  /// Logo height. Larger than it was beside the old settings gear: with
+  /// that button gone the brand mark is the header's right-hand anchor, and
+  /// it still clears the header's existing minHeight of 68.
+  static const double _logoHeight = 44;
 
   @override
   Widget build(BuildContext context) {
@@ -106,20 +101,6 @@ class HomeHeader extends StatelessWidget {
               const SizedBox(width: _actionGroupGap),
               LanguagePopupMenuButton(
                 key: const ValueKey('home-header-language-button'),
-              ),
-              const SizedBox(width: _actionGroupGap),
-              InkWell(
-                key: const ValueKey('home-header-settings-button'),
-                onTap: onSettingsTap,
-                borderRadius: AppRadius.circularAll,
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.settings_outlined,
-                    color: AppColors.textNavy,
-                    size: 26,
-                  ),
-                ),
               ),
             ],
           ),

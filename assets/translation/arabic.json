@@ -43,7 +43,6 @@
     "noAvailabilityFound": "لم يتم العثور على توفر لـ \"{code}\".",
     "catalogueLookupError": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
     "checkAvailabilityUnavailable": "غير متاح مؤقتًا.",
-    "settingsComingSoon": "شاشة الإعدادات قريبًا",
     "scanFabricAvailability": "مسح رمز توفر القماش",
     "checkAvailability": "التحقق من التوفر",
     "enterCatalogueCode": "أدخل رمز الكتالوج",
