@@ -4,13 +4,24 @@ import '../localization/translations.dart';
 import '../theme/app_colors.dart';
 
 class BalanceCard extends StatelessWidget {
-  const BalanceCard({super.key, required this.amount, this.onTap});
+  const BalanceCard({
+    super.key,
+    required this.amount,
+    this.onTap,
+    this.note,
+  });
 
   final String amount;
 
   /// Called when the card is tapped, e.g. to open the Account Balance
   /// screen. Null renders the card as non-interactive.
   final VoidCallback? onTap;
+
+  /// Optional qualifier shown under [amount] — used to say the figure is a
+  /// saved one rather than a freshly confirmed balance (see
+  /// `HomeScreen._buildCurrentBalanceSection`). Null renders the card
+  /// exactly as it did before this existed.
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +102,19 @@ class BalanceCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (note != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        note!,
+                        key: const ValueKey('balance-card-note'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFB7B8E3),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],

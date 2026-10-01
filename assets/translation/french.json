@@ -65,7 +65,8 @@
   "balanceCard": {
     "label": "SOLDE ACTUEL",
     "semanticsCurrent": "Solde actuel {amount}",
-    "semanticsHint": "Ouvre les détails du solde du compte"
+    "semanticsHint": "Ouvre les détails du solde du compte",
+    "lastSavedNote": "Dernier solde enregistré — actualisation impossible"
   },
   "currentBalance": {
     "errorGeneric": "Impossible de charger les données pour le moment.",

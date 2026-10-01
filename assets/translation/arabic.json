@@ -65,7 +65,8 @@
   "balanceCard": {
     "label": "الرصيد الحالي",
     "semanticsCurrent": "الرصيد الحالي {amount}",
-    "semanticsHint": "يفتح تفاصيل رصيد الحساب"
+    "semanticsHint": "يفتح تفاصيل رصيد الحساب",
+    "lastSavedNote": "آخر رصيد محفوظ — تعذّر التحديث"
   },
   "currentBalance": {
     "errorGeneric": "تعذّر تحميل البيانات الآن.",

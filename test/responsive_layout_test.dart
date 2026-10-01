@@ -39,6 +39,7 @@ import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_balance_history_data_source.dart';
+import 'helpers/fake_cached_current_balance_store.dart';
 import 'helpers/fake_current_balance_data_source.dart';
 import 'helpers/fake_home_dashboard_service.dart';
 import 'helpers/fake_invoice_lookup_data_source.dart';
@@ -167,6 +168,7 @@ void main() {
                 currencyCode: 'AED',
               ),
             ),
+            currentBalanceCache: FakeCachedCurrentBalanceStore(),
             authService: _authServiceForLayoutCheck(),
             dashboardService: FakeHomeDashboardService(),
           ),

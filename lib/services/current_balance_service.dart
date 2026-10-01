@@ -1,3 +1,4 @@
+import '../config/api_config.dart';
 import '../models/business_central/ledger_entry.dart';
 import 'ledger_entries_service.dart';
 
@@ -117,7 +118,18 @@ class CurrentBalanceService {
   CurrentBalanceService({
     LedgerEntriesService? ledgerEntriesService,
     this.maxPages = 500,
-  }) : _ledgerEntriesService = ledgerEntriesService ?? LedgerEntriesService();
+  }) : _ledgerEntriesService =
+           ledgerEntriesService ??
+           LedgerEntriesService(
+             // Every page must be fetched before a balance can be shown at
+             // all, and those fetches are sequential, so the page size is
+             // what decides how many round trips the user waits through.
+             // The largest page the Business Central endpoints accept cuts
+             // that count fourfold versus the list-screen default — the
+             // single biggest win available here without changing what the
+             // balance is computed from.
+             perPage: ApiConfig.businessCentralMaxPerPage,
+           );
 
   final LedgerEntriesService _ledgerEntriesService;
   final int maxPages;

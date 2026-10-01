@@ -65,7 +65,8 @@
   "balanceCard": {
     "label": "CURRENT BALANCE",
     "semanticsCurrent": "Current balance {amount}",
-    "semanticsHint": "Opens account balance details"
+    "semanticsHint": "Opens account balance details",
+    "lastSavedNote": "Last saved balance — couldn't refresh"
   },
   "currentBalance": {
     "errorGeneric": "Couldn't load data right now.",

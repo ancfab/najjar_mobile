@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/business_central/business_central_item_search_group.dart';
 import 'package:anc_fabrics/models/business_central/payment_entry.dart';
+import 'package:anc_fabrics/models/cached_current_balance.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/home_screen.dart';
@@ -20,6 +21,7 @@ import 'package:anc_fabrics/screens/support_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/auth_service.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
+import 'package:anc_fabrics/services/cached_current_balance_store.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
@@ -37,6 +39,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 
 import 'helpers/fake_auth_session_store.dart';
+import 'helpers/fake_cached_current_balance_store.dart';
 import 'helpers/fake_current_balance_data_source.dart';
 import 'helpers/fake_home_dashboard_service.dart';
 import 'helpers/fake_item_catalogue_search_service.dart';
@@ -163,6 +166,7 @@ Future<void> _pumpHomeScreen(
   double width, {
   LastPaymentDataSource? lastPaymentSource,
   CurrentBalanceDataSource? currentBalanceSource,
+  CachedCurrentBalanceStore? currentBalanceCache,
   StockLookupService? checkAvailabilityService,
   ItemCatalogueSearchService? catalogueSearchService,
   AuthService? authService,
@@ -189,6 +193,12 @@ Future<void> _pumpHomeScreen(
         currentBalanceSource:
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
+        // Empty by default: the live SecureCachedCurrentBalanceStore would
+        // reach for the real secure-storage platform channel, and an empty
+        // cache keeps every pre-existing expectation (spinner first, then
+        // the live figure) exactly as it was.
+        currentBalanceCache:
+            currentBalanceCache ?? FakeCachedCurrentBalanceStore(),
         // Check Availability only performs a lookup on user action (unlike
         // Last Payment, it never auto-fetches on initState), so these fakes
         // are never actually invoked by tests that don't search — they
@@ -223,6 +233,7 @@ Future<void> _pumpHomeScreenWithoutSettling(
   WidgetTester tester,
   LastPaymentDataSource lastPaymentSource, {
   CurrentBalanceDataSource? currentBalanceSource,
+  CachedCurrentBalanceStore? currentBalanceCache,
 }) async {
   tester.view.physicalSize = const Size(390, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -243,6 +254,8 @@ Future<void> _pumpHomeScreenWithoutSettling(
         currentBalanceSource:
             currentBalanceSource ??
             FakeCurrentBalanceDataSource(amount: _sampleCurrentBalance),
+        currentBalanceCache:
+            currentBalanceCache ?? FakeCachedCurrentBalanceStore(),
         authService: _authServiceFor(),
         dashboardService: FakeHomeDashboardService(),
       ),
@@ -1853,6 +1866,7 @@ void main() {
                 entry: _sampleLastPaymentSummary(),
               ),
               currentBalanceSource: source,
+              currentBalanceCache: FakeCachedCurrentBalanceStore(),
               authService: _authServiceFor(),
               dashboardService: FakeHomeDashboardService(),
             ),
@@ -1899,6 +1913,181 @@ void main() {
         expect(find.text('USD 999.00'), findsNothing);
       },
     );
+  });
+
+  group('Current Balance cache', () {
+    CachedCurrentBalance cachedBalance(double amount, {String? currency}) {
+      return CachedCurrentBalance(
+        amount: CurrentBalanceAmount(amount: amount, currencyCode: currency),
+        cachedAt: DateTime.utc(2026, 9, 30, 12),
+      );
+    }
+
+    testWidgets(
+      'A cached balance renders while the live sweep is still running, '
+      'instead of a spinner',
+      (tester) async {
+        final pending = Completer<CurrentBalanceAmount>();
+        await _pumpHomeScreenWithoutSettling(
+          tester,
+          FakeLastPaymentDataSource(entry: _sampleLastPaymentSummary()),
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            pendingFuture: pending.future,
+          ),
+          currentBalanceCache: FakeCachedCurrentBalanceStore(
+            cached: cachedBalance(1234.50, currency: 'USD'),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.descendant(
+            of: find.byType(BalanceCard),
+            matching: find.text('USD 1,234.50'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('current-balance-loading')),
+          findsNothing,
+        );
+        // Nothing claims the figure is stale while the refresh is still
+        // in flight — it is about to be replaced either way.
+        expect(find.byKey(const ValueKey('balance-card-note')), findsNothing);
+
+        pending.complete(
+          const CurrentBalanceAmount(amount: 2000, currencyCode: 'USD'),
+        );
+        await tester.pump();
+        await tester.pump();
+      },
+    );
+
+    testWidgets('The live result replaces the cached figure and is saved', (
+      tester,
+    ) async {
+      final cache = FakeCachedCurrentBalanceStore(
+        cached: cachedBalance(1234.50, currency: 'USD'),
+      );
+      await _pumpHomeScreen(
+        tester,
+        390,
+        currentBalanceSource: FakeCurrentBalanceDataSource(
+          amount: const CurrentBalanceAmount(
+            amount: 15320.75,
+            currencyCode: 'AED',
+          ),
+        ),
+        currentBalanceCache: cache,
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(BalanceCard),
+          matching: find.text('AED 15,320.75'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('USD 1,234.50'), findsNothing);
+      expect(find.byKey(const ValueKey('balance-card-note')), findsNothing);
+      expect(cache.savedAmounts, hasLength(1));
+      expect(cache.savedAmounts.single.amount, 15320.75);
+      expect(cache.savedAmounts.single.currencyCode, 'AED');
+    });
+
+    testWidgets(
+      'A failed refresh keeps the cached figure, labelled as last saved, '
+      'instead of the error card',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            error: const BusinessCentralFailureException(
+              BusinessCentralTemporarilyUnavailable(),
+            ),
+          ),
+          currentBalanceCache: FakeCachedCurrentBalanceStore(
+            cached: cachedBalance(1234.50, currency: 'USD'),
+          ),
+        );
+
+        expect(
+          find.descendant(
+            of: find.byType(BalanceCard),
+            matching: find.text('USD 1,234.50'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('current-balance-error')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('balance-card-note')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'A failed load with nothing cached still shows the error card',
+      (tester) async {
+        await _pumpHomeScreen(
+          tester,
+          390,
+          currentBalanceSource: FakeCurrentBalanceDataSource(
+            error: const BusinessCentralFailureException(
+              BusinessCentralTemporarilyUnavailable(),
+            ),
+          ),
+          currentBalanceCache: FakeCachedCurrentBalanceStore(),
+        );
+
+        expect(
+          find.byKey(const ValueKey('current-balance-error')),
+          findsOneWidget,
+        );
+        expect(find.byType(BalanceCard), findsNothing);
+      },
+    );
+
+    testWidgets('A cached figure never overwrites an already-live result', (
+      tester,
+    ) async {
+      final slowCache = FakeCachedCurrentBalanceStore(
+        cached: cachedBalance(1234.50, currency: 'USD'),
+      );
+      final cacheGate = Completer<void>();
+      slowCache.loadDelay = cacheGate.future;
+
+      await _pumpHomeScreen(
+        tester,
+        390,
+        currentBalanceSource: FakeCurrentBalanceDataSource(
+          amount: const CurrentBalanceAmount(
+            amount: 15320.75,
+            currencyCode: 'AED',
+          ),
+        ),
+        currentBalanceCache: slowCache,
+      );
+
+      // The live figure is already on screen; the cache read only resolves
+      // now, and must not drag the card back to the older number.
+      cacheGate.complete();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(BalanceCard),
+          matching: find.text('AED 15,320.75'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('USD 1,234.50'), findsNothing);
+    });
   });
 
   group('Current Balance card navigation', () {

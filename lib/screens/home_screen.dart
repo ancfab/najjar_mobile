@@ -9,6 +9,7 @@ import '../models/home_dashboard_data.dart';
 import '../services/api_stock_lookup_service.dart';
 import '../services/auth_service.dart';
 import '../services/business_central_error_mapper.dart';
+import '../services/cached_current_balance_store.dart';
 import '../services/current_balance_data_source.dart';
 import '../services/current_balance_service.dart';
 import '../services/demo_current_balance_data_source.dart';
@@ -115,6 +116,7 @@ class HomeScreen extends StatefulWidget {
     this.dashboardService,
     this.lastPaymentSource,
     this.currentBalanceSource,
+    this.currentBalanceCache,
     this.checkAvailabilityService,
     this.catalogueSearchService,
     this.authService,
@@ -143,6 +145,15 @@ class HomeScreen extends StatefulWidget {
   /// overridable so tests (and the demo flag) can inject a fake instead of
   /// exercising real HTTP/secure storage.
   final CurrentBalanceDataSource? currentBalanceSource;
+
+  /// Last-known Current Balance seam. Defaults (lazily, in State) to
+  /// [SecureCachedCurrentBalanceStore], so the card can show the previously
+  /// computed figure the moment the screen opens rather than holding a
+  /// spinner for the whole ledger sweep [currentBalanceSource] performs —
+  /// the sweep still runs, and its result still replaces whatever the cache
+  /// supplied. Overridable so tests can inject a fake instead of exercising
+  /// real secure storage.
+  final CachedCurrentBalanceStore? currentBalanceCache;
 
   /// Check Availability card's stock-lookup seam — the same shared
   /// [StockLookupService] contract `ScanStockScreen` depends on for its
@@ -200,6 +211,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final CurrentBalanceDataSource _currentBalanceSource =
       widget.currentBalanceSource ?? resolveDefaultCurrentBalanceDataSource();
+
+  /// Last-known Current Balance store — see [HomeScreen.currentBalanceCache].
+  late final CachedCurrentBalanceStore _currentBalanceCache =
+      widget.currentBalanceCache ?? SecureCachedCurrentBalanceStore();
 
   /// Check Availability's stock-lookup seam actually used by
   /// [searchFabricAvailabilityByCatalogueCode] — resolved in [initState],
@@ -267,6 +282,20 @@ class _HomeScreenState extends State<HomeScreen> {
   /// pull-to-refresh already started a newer one) can recognize itself as
   /// superseded and discard its result instead of corrupting fresher state.
   int _currentBalanceRequestId = 0;
+
+  /// Whether the amount currently on the card came from
+  /// [_currentBalanceCache] and has not yet been replaced by a live result.
+  /// Decides what a failed fetch does: a cached figure is kept on screen
+  /// (labelled, see [_currentBalanceNote]) because showing the last known
+  /// balance beats showing nothing, while a figure that was already
+  /// confirmed live this session keeps the existing error-card behaviour.
+  bool _currentBalanceIsFromCache = false;
+
+  /// Set when a live fetch failed while a cached figure was on screen —
+  /// the only state in which the card tells the user it is showing a saved
+  /// balance. While a refresh is merely still running, the cached figure is
+  /// shown unlabelled, since it is about to be replaced either way.
+  bool _currentBalanceRefreshFailed = false;
 
   // Last Payment row state — loaded live from customer_details.
   _LastPaymentUiState _lastPaymentState = _LastPaymentUiState.loading;
@@ -508,19 +537,30 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentBalanceState = _CurrentBalanceUiState.loading;
       _currentBalanceOutcome = null;
+      _currentBalanceIsFromCache = false;
+      _currentBalanceRefreshFailed = false;
     });
+    // Deliberately not awaited: the cached figure is a head start for the
+    // spinner, never a gate on the live fetch below. Whichever resolves
+    // first renders, and the live result always wins (see
+    // _showCachedCurrentBalance's own guards).
+    unawaited(_showCachedCurrentBalance(requestId));
     try {
       final result = await _currentBalanceSource.fetchCurrentBalance();
       if (!mounted || requestId != _currentBalanceRequestId) return;
       setState(() {
         _currentBalanceAmount = result;
         _currentBalanceState = _CurrentBalanceUiState.loaded;
+        _currentBalanceIsFromCache = false;
+        _currentBalanceRefreshFailed = false;
       });
+      await _currentBalanceCache.save(result);
     } on SessionExpiredException {
       // The centralized session coordinator has already cleared the
       // session and is navigating to Login — show nothing here.
     } on BusinessCentralFailureException catch (error) {
       if (!mounted || requestId != _currentBalanceRequestId) return;
+      if (_keepCachedCurrentBalance()) return;
       setState(() {
         _currentBalanceOutcome = error.outcome;
         _currentBalanceState = _CurrentBalanceUiState.error;
@@ -529,11 +569,45 @@ class _HomeScreenState extends State<HomeScreen> {
       // Covers CurrentBalanceInconsistentCurrencyException and any other
       // unexpected failure with the same generic, safe retry copy.
       if (!mounted || requestId != _currentBalanceRequestId) return;
+      if (_keepCachedCurrentBalance()) return;
       setState(() {
         _currentBalanceOutcome = null;
         _currentBalanceState = _CurrentBalanceUiState.error;
       });
     }
+  }
+
+  /// Renders the last balance computed for this account, if one was saved,
+  /// while the live fetch started by [_loadCurrentBalance] is still running.
+  ///
+  /// Applies only while that same request is still the newest one *and* the
+  /// card is still in its loading state, so a live result (or a newer load)
+  /// that resolved first is never overwritten by the older cached figure.
+  Future<void> _showCachedCurrentBalance(int requestId) async {
+    final cached = await _currentBalanceCache.load();
+    if (cached == null) return;
+    if (!mounted || requestId != _currentBalanceRequestId) return;
+    if (_currentBalanceState != _CurrentBalanceUiState.loading) return;
+    setState(() {
+      _currentBalanceAmount = cached.amount;
+      _currentBalanceState = _CurrentBalanceUiState.loaded;
+      _currentBalanceIsFromCache = true;
+    });
+  }
+
+  /// Whether a failed live fetch should leave the cached figure on screen
+  /// (labelled as saved) instead of replacing it with the error card.
+  /// Returns `false` — meaning "show the error" — whenever the amount on
+  /// screen was confirmed live this session, or there is no amount at all.
+  bool _keepCachedCurrentBalance() {
+    if (!_currentBalanceIsFromCache || _currentBalanceAmount == null) {
+      return false;
+    }
+    setState(() {
+      _currentBalanceState = _CurrentBalanceUiState.loaded;
+      _currentBalanceRefreshFailed = true;
+    });
+    return true;
   }
 
   /// Maps [_currentBalanceOutcome] to controlled, safe user-facing copy —
@@ -1183,6 +1257,9 @@ class _HomeScreenState extends State<HomeScreen> {
         return BalanceCard(
           amount: _formatCurrentBalanceAmount(result),
           onTap: _openAccountBalance,
+          note: _currentBalanceRefreshFailed
+              ? context.t('balanceCard.lastSavedNote')
+              : null,
         );
     }
   }

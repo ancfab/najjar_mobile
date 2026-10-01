@@ -1,3 +1,4 @@
+import '../config/api_config.dart';
 import '../models/business_central/ledger_entry.dart';
 import '../models/business_central/paginated_response.dart';
 import 'anc_api_client.dart';
@@ -48,7 +49,15 @@ class LedgerEntriesService {
     AncApiClient? apiClient,
     AuthSessionStore? sessionStore,
     SessionExpiryCoordinator? coordinator,
-  }) : _apiClient = apiClient ?? AncApiClient(),
+    int perPage = ApiConfig.businessCentralDefaultPerPage,
+  }) : assert(
+         perPage >= ApiConfig.businessCentralMinPerPage &&
+             perPage <= ApiConfig.businessCentralMaxPerPage,
+         'perPage must stay within this app general Business Central '
+         'pagination bounds',
+       ),
+       _perPage = perPage,
+       _apiClient = apiClient ?? AncApiClient(),
        _ownsApiClient = apiClient == null,
        _sessionStore = sessionStore ?? SecureAuthSessionStore(),
        _coordinator = coordinator ?? sessionExpiryCoordinator;
@@ -62,10 +71,15 @@ class LedgerEntriesService {
   int _currentPage = 1;
   int _lastPage = 1;
 
-  /// The fixed `per_page` size sent on every request — page 1 and every
+  /// The `per_page` size sent on every request — page 1 and every
   /// subsequent `loadNextPage()` call alike — so the effective page size
-  /// never drifts across a paging session.
-  static const int _perPage = 25;
+  /// never drifts across a paging session. Fixed for the lifetime of this
+  /// instance: screens paging a visible list keep the default
+  /// [ApiConfig.businessCentralDefaultPerPage], while a caller that must
+  /// sweep every page before it can show anything (see
+  /// `CurrentBalanceService`) raises it to cut the number of sequential
+  /// round trips a slow connection pays for.
+  final int _perPage;
 
   bool _isLoadingFirstPage = false;
   bool _isLoadingMore = false;
