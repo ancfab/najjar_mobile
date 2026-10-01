@@ -6,6 +6,7 @@
 // localization/RTL, and responsive layout.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -19,6 +20,10 @@ import 'package:anc_fabrics/services/demo_invoice_lookup_data_source.dart';
 import 'package:anc_fabrics/services/demo_order_detail_data_source.dart';
 import 'package:anc_fabrics/services/invoice_lookup_data_source.dart';
 import 'package:anc_fabrics/services/order_detail_data_source.dart';
+import 'package:anc_fabrics/models/order_document.dart';
+import 'package:anc_fabrics/services/invoice_document_actions.dart';
+import 'package:anc_fabrics/services/order_document_context.dart';
+import 'package:anc_fabrics/services/order_pdf_service.dart';
 import 'package:anc_fabrics/widgets/live_invoice_lines_card.dart';
 import 'package:anc_fabrics/widgets/payment_timeline.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -28,6 +33,42 @@ import 'helpers/fake_invoice_lookup_data_source.dart';
 import 'helpers/fake_order_detail_data_source.dart';
 import 'helpers/fake_sales_order_lines_data_source.dart'
     show sampleSalesOrderLine;
+
+/// Captures the document the screen asked to render, without building a
+/// real PDF.
+class _RecordingOrderPdfService implements OrderPdfService {
+  final List<OrderDocument> documents = [];
+
+  @override
+  Future<Uint8List> generate(OrderDocument document) async {
+    documents.add(document);
+    return Uint8List.fromList([1, 2, 3]);
+  }
+}
+
+/// Captures the native save/share handoff without invoking the platform.
+class _RecordingDocumentActions implements InvoiceDocumentActions {
+  final List<String> savedFilenames = [];
+  bool saveResult = true;
+
+  @override
+  Future<bool> printPdf(Uint8List bytes, String filename) async => true;
+
+  @override
+  Future<bool> savePdf(Uint8List bytes, String filename) async {
+    savedFilenames.add(filename);
+    return saveResult;
+  }
+}
+
+class _FixedOrderDocumentContext implements OrderDocumentContext {
+  _FixedOrderDocumentContext([this.data = const OrderDocumentContextData()]);
+
+  final OrderDocumentContextData data;
+
+  @override
+  Future<OrderDocumentContextData> load() async => data;
+}
 
 Future<void> _settleAsync(WidgetTester tester) async {
   await tester.pump();
@@ -41,6 +82,9 @@ Future<void> _pumpOrderDetailScreen(
   Locale locale = const Locale('en'),
   FakeOrderDetailDataSource? orderDetailSource,
   FakeInvoiceLookupDataSource? invoiceLookupSource,
+  OrderPdfService? pdfService,
+  InvoiceDocumentActions? documentActions,
+  OrderDocumentContext? orderDocumentContext,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -62,6 +106,12 @@ Future<void> _pumpOrderDetailScreen(
         orderDetailSource: orderDetailSource ?? FakeOrderDetailDataSource(),
         invoiceLookupSource:
             invoiceLookupSource ?? FakeInvoiceLookupDataSource(),
+        pdfService: pdfService ?? _RecordingOrderPdfService(),
+        documentActions: documentActions ?? _RecordingDocumentActions(),
+        // Defaults to an empty context: the live SessionOrderDocumentContext
+        // would reach for secure storage and the customer-details endpoint.
+        orderDocumentContext:
+            orderDocumentContext ?? _FixedOrderDocumentContext(),
       ),
     ),
   );
@@ -778,4 +828,80 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('Download PDF', () {
+    testWidgets('Renders the order as a Sales Quotation and saves it', (
+      tester,
+    ) async {
+      final pdfService = _RecordingOrderPdfService();
+      final actions = _RecordingDocumentActions();
+      await _pumpOrderDetailScreen(
+        tester,
+        pdfService: pdfService,
+        documentActions: actions,
+        orderDocumentContext: _FixedOrderDocumentContext(
+          const OrderDocumentContextData(
+            customerPhone: '+96170845918',
+            customerAddress: 'Saida',
+            balance: 24.37,
+          ),
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('order-detail-download-pdf-button')),
+      );
+      await _settleAsync(tester);
+
+      final document = pdfService.documents.single;
+      expect(document.orderNo, 'SO-24001');
+      expect(document.isZebra, isFalse);
+      expect(document.lines, isNotEmpty);
+      // Account figures and identity come from the context, not the lines.
+      expect(document.balance, 24.37);
+      expect(document.customerPhone, '+96170845918');
+      expect(document.customerAddress, 'Saida');
+      expect(actions.savedFilenames, ['order_SO-24001.pdf']);
+    });
+
+    testWidgets('A cancelled save tells the user, without an error', (
+      tester,
+    ) async {
+      final actions = _RecordingDocumentActions()..saveResult = false;
+      await _pumpOrderDetailScreen(tester, documentActions: actions);
+
+      await tester.tap(
+        find.byKey(const ValueKey('order-detail-download-pdf-button')),
+      );
+      await _settleAsync(tester);
+
+      expect(find.text('Download cancelled.'), findsOneWidget);
+      expect(find.text("Couldn't create the PDF. Please try again."),
+          findsNothing);
+    });
+
+    testWidgets('A failed render shows the failure message', (tester) async {
+      await _pumpOrderDetailScreen(
+        tester,
+        pdfService: _ThrowingOrderPdfService(),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('order-detail-download-pdf-button')),
+      );
+      await _settleAsync(tester);
+
+      expect(
+        find.text("Couldn't create the PDF. Please try again."),
+        findsOneWidget,
+      );
+    });
+  });
+}
+
+class _ThrowingOrderPdfService implements OrderPdfService {
+  @override
+  Future<Uint8List> generate(OrderDocument document) async {
+    throw StateError('font asset missing');
+  }
 }

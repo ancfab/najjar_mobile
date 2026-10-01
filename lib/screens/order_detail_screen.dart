@@ -6,13 +6,18 @@ import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/sales_order_line.dart';
 import '../models/business_central/zebra_sales_order_line.dart';
+import '../models/order_document.dart';
+import '../models/support_region.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/demo_invoice_lookup_data_source.dart';
 import '../services/demo_order_detail_data_source.dart';
 import '../services/demo_zebra_order_detail_data_source.dart';
+import '../services/invoice_document_actions.dart';
 import '../services/invoice_grouping.dart';
 import '../services/invoice_lookup_data_source.dart';
 import '../services/order_detail_data_source.dart';
+import '../services/order_document_context.dart';
+import '../services/order_pdf_service.dart';
 import '../services/zebra_order_detail_data_source.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency.dart';
@@ -96,7 +101,11 @@ class OrderDetailScreen extends StatefulWidget {
     OrderDetailDataSource? orderDetailSource,
     InvoiceLookupDataSource? invoiceLookupSource,
     ZebraOrderDetailDataSource? zebraOrderDetailSource,
-  }) : orderDetailSource =
+    OrderPdfService? pdfService,
+    this.documentActions = const PrintingInvoiceDocumentActions(),
+    this.orderDocumentContext = const SessionOrderDocumentContext(),
+  }) : pdfService = pdfService ?? LocalOrderPdfService(),
+       orderDetailSource =
            orderDetailSource ?? resolveDefaultOrderDetailDataSource(),
        invoiceLookupSource =
            invoiceLookupSource ?? resolveDefaultInvoiceLookupDataSource(),
@@ -127,6 +136,21 @@ class OrderDetailScreen extends StatefulWidget {
   /// fake.
   final ZebraOrderDetailDataSource zebraOrderDetailSource;
 
+  /// Renders this order as ANC's printed Sales Quotation / Zebra Sales
+  /// Quotation form. Overridable so tests can assert what was rendered
+  /// without building a real PDF.
+  final OrderPdfService pdfService;
+
+  /// Native save/share flow for the generated document — the same seam the
+  /// Invoice Details screen's Download PDF uses, reused rather than
+  /// duplicated since the behaviour is identical for any document.
+  final InvoiceDocumentActions documentActions;
+
+  /// Supplies the customer identity and account figures the printed form
+  /// shows but the order lines themselves don't carry. Overridable so
+  /// tests can inject a fixed context instead of reading secure storage.
+  final OrderDocumentContext orderDocumentContext;
+
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
@@ -149,6 +173,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   /// [_buildZebraDetailsCard] - the distinction only matters for avoiding a
   /// redundant re-fetch, not for what's shown.
   List<BusinessCentralZebraSalesOrderLine>? _zebraLines;
+
+  /// True while the printed document is being assembled and handed to the
+  /// native save/share sheet — keeps a second tap from starting a second
+  /// customer-details fetch and a second document.
+  bool _isGeneratingPdf = false;
 
   /// Also doubles as the duplicate-request guard in [_loadOrder] — mirrors
   /// `OrdersScreen._isLoading`'s exact convention.
@@ -341,8 +370,21 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         onPressed: () => Navigator.of(context).maybePop(),
       ),
       title: Text(context.t('orderDetail.title')),
-      actions: const [
-        Padding(
+      actions: [
+        if (_lines != null && _lines!.isNotEmpty)
+          IconButton(
+            key: const ValueKey('order-detail-download-pdf-button'),
+            icon: _isGeneratingPdf
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.picture_as_pdf_rounded),
+            tooltip: context.t('orderDetail.downloadPdf'),
+            onPressed: _isGeneratingPdf ? null : _downloadOrderPdf,
+          ),
+        const Padding(
           padding: EdgeInsetsDirectional.only(end: 16),
           child: ClientBrandTitle(
             badgeOnly: true,
@@ -351,6 +393,100 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Builds this order's printed Sales Quotation (or Zebra Sales
+  /// Quotation, when the Zebra enrichment resolved for it) and hands it to
+  /// the native save/share sheet.
+  Future<void> _downloadOrderPdf() async {
+    final lines = _lines;
+    if (lines == null || lines.isEmpty || _isGeneratingPdf) return;
+
+    setState(() => _isGeneratingPdf = true);
+    try {
+      final documentContext = await widget.orderDocumentContext.load();
+      if (!mounted) return;
+      final document = _buildOrderDocument(lines, documentContext);
+      final bytes = await widget.pdfService.generate(document);
+      final completed = await widget.documentActions.savePdf(
+        bytes,
+        'order_${document.orderNo}.pdf',
+      );
+      if (!mounted) return;
+      if (!completed) {
+        _showSnackBar(context.t('orderDetail.downloadCancelled'));
+      }
+    } catch (error) {
+      debugPrint('Order PDF action failed: $error');
+      if (!mounted) return;
+      _showSnackBar(context.t('orderDetail.downloadFailed'));
+    } finally {
+      if (mounted) setState(() => _isGeneratingPdf = false);
+    }
+  }
+
+  /// Assembles the printed document from whichever lines describe this
+  /// order best: the Zebra enrichment when it resolved (its own order
+  /// date, currency, memo and cut-to-size dimensions are all fields the
+  /// plain sales-order lines don't carry), the plain lines otherwise.
+  OrderDocument _buildOrderDocument(
+    List<BusinessCentralSalesOrderLine> lines,
+    OrderDocumentContextData documentContext,
+  ) {
+    final zebraLines = _zebraLines;
+    final isZebra = zebraLines != null && zebraLines.isNotEmpty;
+    final country = SupportRegionId.fromCountryIsoCode(
+      documentContext.countryIsoCode,
+    );
+
+    return OrderDocument(
+      orderNo: isZebra ? zebraLines.first.documentNo : lines.first.documentNo,
+      customerNo: isZebra
+          ? zebraLines.first.sellToCustomerNo
+          : lines.first.sellToCustomerNo,
+      customerName: isZebra
+          ? zebraLines.first.sellToCustomerName
+          : lines.first.sellToCustomerName,
+      isZebra: isZebra,
+      orderDate: isZebra ? zebraLines.first.orderDate : null,
+      currencyCode: isZebra ? zebraLines.first.currencyCode : null,
+      note: isZebra ? zebraLines.first.memo : null,
+      customerAddress: documentContext.customerAddress,
+      customerPhone: documentContext.customerPhone,
+      customerCountry: country?.localizedName(context),
+      balance: documentContext.balance,
+      lastPaymentAmount: documentContext.lastPaymentAmount,
+      lastPaymentDate: documentContext.lastPaymentDate,
+      lines: isZebra
+          ? [
+              for (final line in zebraLines)
+                OrderDocumentLine(
+                  description: line.description.trim().isEmpty
+                      ? line.itemNo
+                      : line.description,
+                  quantity: line.quantity,
+                  unitPrice: line.unitPrice,
+                  amount: line.amount,
+                  unitOfMeasureCode: line.unitOfMeasureCode,
+                  discountAmount: line.discountAmount,
+                  length: line.length,
+                  width: line.width,
+                ),
+            ]
+          : [
+              for (final line in lines)
+                OrderDocumentLine(
+                  description: line.description.trim().isEmpty
+                      ? line.itemNo
+                      : line.description,
+                  quantity: line.quantity,
+                  unitPrice: line.unitPrice,
+                  amount: line.amount,
+                  unitOfMeasureCode: line.unitOfMeasureCode,
+                  discountAmount: line.discountAmount,
+                ),
+            ],
     );
   }
 

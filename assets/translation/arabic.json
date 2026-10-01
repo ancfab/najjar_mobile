@@ -148,6 +148,9 @@
     "quantityAtPrice": "{quantity} x {unitPrice}"
   },
   "orderDetail": {
+    "downloadPdf": "تنزيل PDF",
+    "downloadCancelled": "تم إلغاء التنزيل.",
+    "downloadFailed": "تعذّر إنشاء ملف PDF. يرجى المحاولة مرة أخرى.",
     "unableToLoad": "تعذّر تحميل تفاصيل الطلب.",
     "temporarilyUnavailable": "غير متاح مؤقتًا.",
     "orderNotFoundTitle": "الطلب غير موجود",

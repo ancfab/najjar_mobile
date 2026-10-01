@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+5
+version: 1.0.0+6
 
 environment:
   sdk: ^3.10.3
@@ -64,6 +64,14 @@ flutter:
   assets:
     - assets/translation/
     - assets/logo/ANC Logo.png
+    # Arabic-capable TTF loaded by OrderPdfService as a PDF font fallback:
+    # the built-in PDF base fonts carry no Arabic glyphs, so a customer
+    # name or address coming back from Business Central in Arabic would
+    # otherwise render blank. Not registered as a Flutter font family —
+    # the app's own UI uses the system Arabic font, this is for generated
+    # documents only. Noto Naskh Arabic, SIL Open Font License (see
+    # assets/fonts/OFL.txt).
+    - assets/fonts/NotoNaskhArabic.ttf
 
 flutter_launcher_icons:
   android: true

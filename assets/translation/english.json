@@ -148,6 +148,9 @@
     "quantityAtPrice": "{quantity} x {unitPrice}"
   },
   "orderDetail": {
+    "downloadPdf": "Download PDF",
+    "downloadCancelled": "Download cancelled.",
+    "downloadFailed": "Couldn't create the PDF. Please try again.",
     "unableToLoad": "Unable to load order details.",
     "temporarilyUnavailable": "Temporarily unavailable.",
     "orderNotFoundTitle": "Order Not Found",

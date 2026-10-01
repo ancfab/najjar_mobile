@@ -71,6 +71,15 @@ String formatCompactLocalTimestamp(DateTime dateTime) {
       '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
 }
 
+/// Formats [dateTime] as `"dd/MM/yyyy"` (e.g. `"11/08/2026"`) — the date
+/// format ANC's own printed Sales Quotation and Delivery Note forms use,
+/// so a generated document reads the same as the paper one it replaces.
+String formatNumericDate(DateTime dateTime) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${twoDigits(dateTime.day)}/${twoDigits(dateTime.month)}/'
+      '${dateTime.year}';
+}
+
 /// Formats [dateTime] as `"d/M"` (e.g. `"21/9"`) — a locale-neutral,
 /// always-LTR numeric day/month used for expected-restock dates, where a
 /// spelled-out month name would need translating in every language (and
