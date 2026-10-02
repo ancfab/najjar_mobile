@@ -72,6 +72,9 @@
     "errorTemporarilyUnavailable": "غير متاح مؤقتًا."
   },
   "accountBalance": {
+    "invoiceUnavailable": "لا يتوفر مستند فاتورة لهذه الحركة.",
+    "downloadCancelled": "تم إلغاء التنزيل.",
+    "downloadFailed": "تعذّر إنشاء ملف PDF للفاتورة. يرجى المحاولة مرة أخرى.",
     "unableToLoad": "تعذّر تحميل رصيد الحساب.",
     "exportFailed": "تعذّر إنشاء كشف الحساب. يرجى المحاولة مرة أخرى.",
     "fullHistoryUnavailable": "السجل الكامل للمعاملات غير متوفر بعد.",
@@ -200,8 +203,9 @@
     "unableToLoad": "تعذر تحميل الفواتير.",
     "unableToLoadMore": "تعذر تحميل المزيد من الفواتير.",
     "loadMore": "تحميل المزيد",
-    "linesCount": "{count} بنود",
-    "overdueScopeNote": "يتم عرض جميع الفواتير — حالة التأخر لكل فاتورة غير متوفرة من النظام بعد. إجمالي المتأخرات في الصفحة الرئيسية بيانات حية."
+    "downloadCancelled": "تم إلغاء التنزيل.",
+    "downloadFailed": "تعذّر إنشاء ملف PDF للفاتورة. يرجى المحاولة مرة أخرى.",
+    "linesCount": "{count} بنود"
   },
   "invoiceDetails": {
     "title": "تفاصيل الفاتورة",

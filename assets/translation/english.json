@@ -72,6 +72,9 @@
     "errorTemporarilyUnavailable": "Temporarily unavailable."
   },
   "accountBalance": {
+    "invoiceUnavailable": "No invoice document is available for this transaction.",
+    "downloadCancelled": "Download cancelled.",
+    "downloadFailed": "Couldn't create the invoice PDF. Please try again.",
     "unableToLoad": "Unable to load account balance.",
     "exportFailed": "Could not generate the account statement. Please try again.",
     "fullHistoryUnavailable": "Full transaction history is not available yet.",
@@ -200,8 +203,9 @@
     "unableToLoad": "Unable to load invoices.",
     "unableToLoadMore": "Could not load more invoices.",
     "loadMore": "Load more",
-    "linesCount": "{count} lines",
-    "overdueScopeNote": "Showing all invoices — per-invoice overdue status is not available from the API yet. The overdue total on Home is live data."
+    "downloadCancelled": "Download cancelled.",
+    "downloadFailed": "Couldn't create the invoice PDF. Please try again.",
+    "linesCount": "{count} lines"
   },
   "invoiceDetails": {
     "title": "Invoice Details",

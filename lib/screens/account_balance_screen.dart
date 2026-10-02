@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../localization/translations.dart';
@@ -12,8 +13,13 @@ import '../services/auth_service.dart';
 import '../services/balance_history_data_source.dart';
 import '../services/business_central_error_mapper.dart';
 import '../services/current_user_avatar_controller.dart';
+import '../services/invoice_document_actions.dart';
+import '../services/invoice_document_builder.dart';
+import '../services/invoice_lines_by_number_service.dart';
 import '../services/ledger_entry_presentation_adapter.dart';
 import '../services/local_customer_profile_store.dart';
+import '../services/order_document_context.dart';
+import '../services/order_pdf_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
 import '../utils/user_initials.dart';
@@ -23,8 +29,8 @@ import '../widgets/balance_history_card.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/custom_bottom_nav.dart';
 import '../widgets/quick_history_card.dart';
-import 'account_transaction_details_screen.dart';
 import 'edit_profile_screen.dart';
+import 'invoices_screen.dart';
 import 'orders_screen.dart';
 import 'support_screen.dart';
 
@@ -120,7 +126,14 @@ class AccountBalanceScreen extends StatefulWidget {
     this.currencyCode,
     this.authService,
     this.localProfileStore,
-  }) : service = service ?? LiveAccountBalanceService(),
+    InvoiceLinesByNumberService? invoiceLinesService,
+    OrderPdfService? pdfService,
+    this.documentActions = const PrintingInvoiceDocumentActions(),
+    this.orderDocumentContext = const SessionOrderDocumentContext(),
+  }) : invoiceLinesService =
+           invoiceLinesService ?? ApiInvoiceLinesByNumberService(),
+       pdfService = pdfService ?? LocalOrderPdfService(),
+       service = service ?? LiveAccountBalanceService(),
        exporter = exporter ?? const LocalAccountStatementPdfExporter(),
        balanceHistorySource =
            balanceHistorySource ?? LedgerBalanceHistoryDataSource();
@@ -128,6 +141,20 @@ class AccountBalanceScreen extends StatefulWidget {
   /// Account balance data seam. Defaults to the live customer-details-backed
   /// implementation; overridable so tests can inject a fake.
   final AccountBalanceService service;
+
+  /// Resolves a Quick History row's invoice number to that invoice's lines,
+  /// so tapping the row can produce the invoice document itself.
+  final InvoiceLinesByNumberService invoiceLinesService;
+
+  /// Renders an invoice as ANC's printed form.
+  final OrderPdfService pdfService;
+
+  /// Native save/share flow for that document.
+  final InvoiceDocumentActions documentActions;
+
+  /// Supplies the customer identity and account figures the printed form
+  /// shows but the invoice lines don't carry.
+  final OrderDocumentContext orderDocumentContext;
 
   /// Export PDF seam: generates the account statement PDF and hands it to
   /// the native share/save/print flow. Defaults to on-device generation;
@@ -209,6 +236,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
 
   _QuickHistoryState _quickHistoryState = _QuickHistoryState.loading;
   List<AccountTransaction> _quickHistory = const [];
+
+  /// The Quick History row whose invoice document is being produced, so a
+  /// second tap can't start a second lookup and export.
+  String? _exportingTransactionId;
 
   /// Set only when [_quickHistoryState] is [_QuickHistoryState.error] from a
   /// [BusinessCentralFailureException] — `null` for a generic/unexpected
@@ -482,26 +513,63 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     }
   }
 
-  void _openTransactionDetails(AccountTransaction transaction) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            AccountTransactionDetailsScreen(transaction: transaction),
-      ),
-    );
+  /// Produces the printed invoice document for a tapped Quick History row.
+  ///
+  /// The row comes from the ledger and carries only a document number, so
+  /// its lines are looked up first. A row with no invoice behind it (a
+  /// payment, or an invoice older than the lookup's reach) says so instead
+  /// of producing an empty document.
+  Future<void> _openTransactionDetails(AccountTransaction transaction) async {
+    if (_exportingTransactionId != null) return;
+
+    final documentNo = transaction.reference?.trim() ?? '';
+    if (documentNo.isEmpty) {
+      _showSnackBar(context.t('accountBalance.invoiceUnavailable'));
+      return;
+    }
+
+    setState(() => _exportingTransactionId = transaction.id);
+    try {
+      final lines = await widget.invoiceLinesService.fetchLines(documentNo);
+      if (!mounted) return;
+      if (lines.isEmpty) {
+        _showSnackBar(context.t('accountBalance.invoiceUnavailable'));
+        return;
+      }
+
+      final documentContext = await widget.orderDocumentContext.load();
+      if (!mounted) return;
+      final bytes = await widget.pdfService.generate(
+        buildInvoiceDocument(lines: lines, context: documentContext),
+      );
+      final completed = await widget.documentActions.savePdf(
+        bytes,
+        'invoice_$documentNo.pdf',
+      );
+      if (!mounted) return;
+      if (!completed) {
+        _showSnackBar(context.t('accountBalance.downloadCancelled'));
+      }
+    } catch (error) {
+      debugPrint('Quick History invoice export failed: $error');
+      if (!mounted) return;
+      _showSnackBar(context.t('accountBalance.downloadFailed'));
+    } finally {
+      if (mounted) setState(() => _exportingTransactionId = null);
+    }
   }
 
-  // No full transaction-history screen exists yet anywhere in the app, so
-  // "See all" shows a safe placeholder instead of inventing one.
-  //
-  // TODO(scope): Replace this placeholder when the full transaction-history
-  // screen and route are confirmed as part of the project scope.
+  /// "See all" opens the customer's full invoice history.
   void _openFullTransactionHistory() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(context.t('accountBalance.fullHistoryUnavailable')),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => InvoicesScreen()));
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

@@ -160,7 +160,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   void _openInvoices() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const InvoicesScreen()));
+    ).push(MaterialPageRoute(builder: (_) => InvoicesScreen()));
   }
 
   void _openProfile() {

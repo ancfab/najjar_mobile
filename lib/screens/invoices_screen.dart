@@ -1,9 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../localization/translations.dart';
 import '../models/business_central/business_central_invoice_line.dart';
 import '../services/business_central_error_mapper.dart';
+import '../services/invoice_document_builder.dart';
+import '../services/invoice_document_actions.dart';
 import '../services/invoices_service.dart';
+import '../services/order_document_context.dart';
+import '../services/order_pdf_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_typography.dart';
@@ -11,7 +16,6 @@ import '../utils/currency.dart';
 import '../utils/date_time_format.dart';
 import '../utils/responsive.dart';
 import '../widgets/invoice_status_pill.dart';
-import 'invoice_details_screen.dart';
 
 /// Sort order applied client-side over the invoices already fetched (see
 /// [_InvoicesScreenState._sortedAndFiltered]) — never a claim about
@@ -34,11 +38,14 @@ enum InvoiceStatusFilter { all, overdue }
 /// rendering path with that invoice's own lines — no mock/dummy data
 /// anywhere on this flow.
 class InvoicesScreen extends StatefulWidget {
-  const InvoicesScreen({
+  InvoicesScreen({
     super.key,
     this.filter = InvoiceStatusFilter.all,
     this.invoicesService,
-  });
+    OrderPdfService? pdfService,
+    this.documentActions = const PrintingInvoiceDocumentActions(),
+    this.orderDocumentContext = const SessionOrderDocumentContext(),
+  }) : pdfService = pdfService ?? LocalOrderPdfService();
 
   final InvoiceStatusFilter filter;
 
@@ -46,6 +53,17 @@ class InvoicesScreen extends StatefulWidget {
   /// [InvoicesService]; overridable so tests can inject one wired to a fake
   /// client instead of real HTTP/secure storage.
   final InvoicesService? invoicesService;
+
+  /// Renders an invoice as ANC's printed form — tapping an invoice produces
+  /// the document itself rather than an on-screen detail view.
+  final OrderPdfService pdfService;
+
+  /// Native save/share flow for that document.
+  final InvoiceDocumentActions documentActions;
+
+  /// Supplies the customer identity and account figures the printed form
+  /// shows but the invoice lines don't carry.
+  final OrderDocumentContext orderDocumentContext;
 
   @override
   State<InvoicesScreen> createState() => _InvoicesScreenState();
@@ -95,6 +113,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   _LoadState _state = _LoadState.loading;
   List<_InvoiceGroup> _groups = const [];
   bool _isLoadingMore = false;
+
+  /// The invoice whose document is being produced, so its card can show a
+  /// spinner and a second tap can't start a second export.
+  String? _exportingDocumentNo;
 
   @override
   void initState() {
@@ -240,15 +262,39 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     return null;
   }
 
-  void _openInvoice(_InvoiceGroup group) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => InvoiceDetailsScreen(
-          invoiceNumber: group.documentNo,
-          liveInvoiceLines: group.lines,
-        ),
-      ),
-    );
+  /// Produces the printed invoice document and hands it to the native
+  /// save/share sheet. The lines are already loaded for the card, so this
+  /// only fetches the shared customer context (identity and account
+  /// figures) before rendering.
+  Future<void> _openInvoice(_InvoiceGroup group) async {
+    if (_exportingDocumentNo != null) return;
+
+    setState(() => _exportingDocumentNo = group.documentNo);
+    try {
+      final documentContext = await widget.orderDocumentContext.load();
+      if (!mounted) return;
+      final bytes = await widget.pdfService.generate(
+        buildInvoiceDocument(lines: group.lines, context: documentContext),
+      );
+      final completed = await widget.documentActions.savePdf(
+        bytes,
+        'invoice_${group.documentNo}.pdf',
+      );
+      if (!mounted) return;
+      if (!completed) _showSnackBar(context.t('invoices.downloadCancelled'));
+    } catch (error) {
+      debugPrint('Invoice PDF export failed: $error');
+      if (!mounted) return;
+      _showSnackBar(context.t('invoices.downloadFailed'));
+    } finally {
+      if (mounted) setState(() => _exportingDocumentNo = null);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -266,11 +312,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               : context.t('invoices.title'),
         ),
       ),
-      body: SafeArea(child: _buildBody(isOverdue)),
+      body: SafeArea(child: _buildBody()),
     );
   }
 
-  Widget _buildBody(bool isOverdue) {
+  Widget _buildBody() {
     switch (_state) {
       case _LoadState.loading:
         return const Center(
@@ -316,26 +362,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (isOverdue) ...[
-                Container(
-                  key: const ValueKey('invoices-overdue-note'),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.warningYellow.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    context.t('invoices.overdueScopeNote'),
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textNavy,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
               for (final group in _groups) ...[
-                _InvoiceCard(group: group, onTap: () => _openInvoice(group)),
+                _InvoiceCard(
+                  group: group,
+                  onTap: () => _openInvoice(group),
+                  isExporting: _exportingDocumentNo == group.documentNo,
+                ),
                 const SizedBox(height: 10),
               ],
               if (_service.hasNextPage)
@@ -363,10 +395,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 }
 
 class _InvoiceCard extends StatelessWidget {
-  const _InvoiceCard({required this.group, required this.onTap});
+  const _InvoiceCard({
+    required this.group,
+    required this.onTap,
+    this.isExporting = false,
+  });
 
   final _InvoiceGroup group;
   final VoidCallback onTap;
+
+  /// True while this invoice's document is being produced — the card shows
+  /// a spinner beside its status pill and stops accepting taps.
+  final bool isExporting;
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +418,7 @@ class _InvoiceCard extends StatelessWidget {
       child: InkWell(
         key: ValueKey('invoice-card-${group.documentNo}'),
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: isExporting ? null : onTap,
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -410,6 +450,16 @@ class _InvoiceCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        if (isExporting)
+                          const Padding(
+                            padding: EdgeInsetsDirectional.only(end: 8),
+                            child: SizedBox(
+                              key: ValueKey('invoice-card-exporting'),
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
                         InvoiceStatusPill(status: group.invoiceStatus),
                       ],
                     ),

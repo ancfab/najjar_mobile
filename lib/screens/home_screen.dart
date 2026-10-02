@@ -1065,7 +1065,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
-            const InvoicesScreen(filter: InvoiceStatusFilter.overdue),
+            InvoicesScreen(filter: InvoiceStatusFilter.overdue),
       ),
     );
   }

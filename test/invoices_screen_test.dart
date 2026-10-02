@@ -13,8 +13,9 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/localization/app_translations_delegate.dart';
 import 'package:anc_fabrics/models/auth/auth_session.dart';
-import 'package:anc_fabrics/screens/invoice_details_screen.dart';
 import 'package:anc_fabrics/screens/invoices_screen.dart';
+
+import 'helpers/fake_document_export.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/invoices_service.dart';
 
@@ -121,6 +122,8 @@ Future<void> _pumpInvoices(
   WidgetTester tester,
   InvoicesService service, {
   InvoiceStatusFilter filter = InvoiceStatusFilter.all,
+  FakeOrderPdfService? pdfService,
+  FakeDocumentActions? documentActions,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -131,7 +134,15 @@ Future<void> _pumpInvoices(
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: InvoicesScreen(filter: filter, invoicesService: service),
+      home: InvoicesScreen(
+        filter: filter,
+        invoicesService: service,
+        // Tapping an invoice produces its printed document; these keep the
+        // real renderer, share sheet and secure storage out of the test.
+        pdfService: pdfService ?? FakeOrderPdfService(),
+        documentActions: documentActions ?? FakeDocumentActions(),
+        orderDocumentContext: FakeOrderDocumentContext(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -313,8 +324,8 @@ void main() {
       expect(find.text('OMR 75.00'), findsOneWidget);
     });
 
-    testWidgets('tapping a card opens InvoiceDetailsScreen with that '
-        "invoice's own lines only", (tester) async {
+    testWidgets("tapping a card produces that invoice's own document, "
+        "never another invoice's lines", (tester) async {
       final service = _serviceWith([
         (req) async => _jsonResponse(
           200,
@@ -328,11 +339,40 @@ void main() {
         ),
       ]);
 
-      await _pumpInvoices(tester, service);
+      final pdfService = FakeOrderPdfService();
+      final documentActions = FakeDocumentActions();
+      await _pumpInvoices(
+        tester,
+        service,
+        pdfService: pdfService,
+        documentActions: documentActions,
+      );
       await tester.tap(find.byKey(const ValueKey('invoice-card-INV-24001')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(InvoiceDetailsScreen), findsOneWidget);
+      final document = pdfService.documents.single;
+      expect(document.invoiceNo, 'INV-24001');
+      expect(document.lines, hasLength(1));
+      expect(documentActions.savedFilenames, ['invoice_INV-24001.pdf']);
+    });
+
+    testWidgets('a cancelled share tells the user, without an error', (
+      tester,
+    ) async {
+      final service = _serviceWith([
+        (req) async => _jsonResponse(
+          200,
+          _envelope(rows: [_invoiceLineJson(documentNo: 'INV-24001')]),
+          request: req,
+        ),
+      ]);
+      final documentActions = FakeDocumentActions()..saveResult = false;
+
+      await _pumpInvoices(tester, service, documentActions: documentActions);
+      await tester.tap(find.byKey(const ValueKey('invoice-card-INV-24001')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Download cancelled.'), findsOneWidget);
     });
   });
 
@@ -362,7 +402,7 @@ void main() {
       expect(find.byKey(const ValueKey('invoices-retry')), findsOneWidget);
     });
 
-    testWidgets('the overdue scope note appears only for the overdue filter', (
+    testWidgets('the overdue filter shows no scope-note banner at all', (
       tester,
     ) async {
       final service = _serviceWith([
@@ -379,7 +419,7 @@ void main() {
         filter: InvoiceStatusFilter.overdue,
       );
 
-      expect(find.byKey(const ValueKey('invoices-overdue-note')), findsOneWidget);
+      expect(find.byKey(const ValueKey('invoices-overdue-note')), findsNothing);
       expect(find.text('Overdue Invoices'), findsOneWidget);
     });
   });

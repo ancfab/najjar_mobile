@@ -72,6 +72,9 @@
     "errorTemporarilyUnavailable": "Temporairement indisponible."
   },
   "accountBalance": {
+    "invoiceUnavailable": "Aucun document de facture n'est disponible pour cette opération.",
+    "downloadCancelled": "Téléchargement annulé.",
+    "downloadFailed": "Impossible de créer le PDF de la facture. Veuillez réessayer.",
     "unableToLoad": "Impossible de charger le solde du compte.",
     "exportFailed": "Impossible de générer le relevé de compte. Veuillez réessayer.",
     "fullHistoryUnavailable": "L'historique complet des transactions n'est pas encore disponible.",
@@ -200,8 +203,9 @@
     "unableToLoad": "Impossible de charger les factures.",
     "unableToLoadMore": "Impossible de charger plus de factures.",
     "loadMore": "Charger plus",
-    "linesCount": "{count} lignes",
-    "overdueScopeNote": "Toutes les factures sont affichées — le statut de retard par facture n'est pas encore disponible via l'API. Le total en retard sur l'accueil est une donnée en direct."
+    "downloadCancelled": "Téléchargement annulé.",
+    "downloadFailed": "Impossible de créer le PDF de la facture. Veuillez réessayer.",
+    "linesCount": "{count} lignes"
   },
   "invoiceDetails": {
     "title": "Détails de la facture",

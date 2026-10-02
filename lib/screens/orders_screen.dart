@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/api_config.dart';
 import '../config/demo_config.dart';
 import '../localization/translations.dart';
 import '../models/business_central/paginated_response.dart';
@@ -65,7 +66,12 @@ class OrdersScreen extends StatefulWidget {
 /// Fixed page size requested for every page of this screen's session —
 /// preserved across Previous/Next so the effective page size never drifts,
 /// per the confirmed pagination rules.
-const int _kOrdersPerPage = 25;
+///
+/// Business Central's largest allowed page rather than the 25-row default:
+/// an order's lines arrive one row each and are grouped client-side, so a
+/// small page showed only a handful of orders per request and made paging
+/// through them feel slow.
+const int _kOrdersPerPage = ApiConfig.businessCentralMaxPerPage;
 
 /// Resolves the [SalesOrderLinesDataSource] `OrdersScreen` falls back to
 /// when no source is injected by a caller (every existing test already

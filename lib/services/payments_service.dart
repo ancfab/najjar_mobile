@@ -62,7 +62,11 @@ class PaymentsService {
   /// The fixed `per_page` size sent on every request — page 1 and every
   /// subsequent `loadNextPage()` call alike — so the effective page size
   /// never drifts across a paging session.
-  final int _perPage = ApiConfig.businessCentralDefaultPerPage;
+  /// Business Central's largest allowed page rather than the 25-row
+  /// default: these lists are read top-to-bottom and a customer's invoices
+  /// arrive several lines per document, so a small page meant several
+  /// sequential round trips before the first screenful was complete.
+  final int _perPage = ApiConfig.businessCentralMaxPerPage;
 
   bool _isLoadingFirstPage = false;
   bool _isLoadingMore = false;

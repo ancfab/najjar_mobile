@@ -29,6 +29,7 @@ import 'package:anc_fabrics/models/balance_history_point.dart';
 import 'package:anc_fabrics/models/business_central/customer_details.dart';
 import 'package:anc_fabrics/models/local_customer_profile.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
+import 'package:anc_fabrics/screens/invoices_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
 import 'package:anc_fabrics/screens/orders_screen.dart';
 import 'package:anc_fabrics/screens/support_screen.dart';
@@ -48,6 +49,8 @@ import 'helpers/fake_account_balance_service.dart';
 import 'helpers/fake_account_statement_exporter.dart';
 import 'helpers/fake_auth_session_store.dart';
 import 'helpers/fake_balance_history_data_source.dart';
+import 'helpers/fake_document_export.dart';
+import 'helpers/fake_invoice_lookup_data_source.dart' show sampleInvoiceLine;
 import 'helpers/fake_local_customer_profile_store.dart';
 import 'helpers/fake_quick_history_data_source.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -155,6 +158,9 @@ Future<void> _pumpAccountBalanceScreen(
   BalanceHistoryDataSource? balanceHistorySource,
   AuthService? authService,
   LocalCustomerProfileStore? localProfileStore,
+  FakeInvoiceLinesByNumberService? invoiceLinesService,
+  FakeOrderPdfService? pdfService,
+  FakeDocumentActions? documentActions,
 }) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
@@ -186,6 +192,14 @@ Future<void> _pumpAccountBalanceScreen(
             ),
         authService: authService ?? _authServiceFor(),
         localProfileStore: localProfileStore ?? FakeLocalCustomerProfileStore(),
+        // Tapping a Quick History row produces that invoice's document;
+        // these keep the real lookup, renderer, share sheet and secure
+        // storage out of the test.
+        invoiceLinesService:
+            invoiceLinesService ?? FakeInvoiceLinesByNumberService(),
+        pdfService: pdfService ?? FakeOrderPdfService(),
+        documentActions: documentActions ?? FakeDocumentActions(),
+        orderDocumentContext: FakeOrderDocumentContext(),
       ),
     ),
   );
@@ -1006,9 +1020,19 @@ void main() {
     );
 
     testWidgets(
-      'Tapping a row opens Transaction Details with the selected transaction',
+      "Tapping a row produces that invoice's document, not a detail view",
       (tester) async {
-        await _pumpAccountBalanceScreen(tester);
+        final invoiceLines = FakeInvoiceLinesByNumberService(
+          lines: [sampleInvoiceLine(documentNo: 'INV-TEST-001')],
+        );
+        final pdfService = FakeOrderPdfService();
+        final documentActions = FakeDocumentActions();
+        await _pumpAccountBalanceScreen(
+          tester,
+          invoiceLinesService: invoiceLines,
+          pdfService: pdfService,
+          documentActions: documentActions,
+        );
 
         final row = find.byKey(
           const ValueKey('quick-history-row-ledger-entry-1001'),
@@ -1017,40 +1041,43 @@ void main() {
         await tester.tap(row);
         await tester.pumpAndSettle();
 
-        expect(find.text('Transaction Details'), findsOneWidget);
-
-        final detailsCard = find.byKey(
-          const ValueKey('account-transaction-details-card'),
-        );
-        expect(
-          find.descendant(
-            of: detailsCard,
-            matching: find.text('Invoice INV-TEST-001'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('\$100.50')),
-          findsOneWidget,
-        );
-        // Neutral rows never show a "Credit"/"Debit" status line.
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('Credit')),
-          findsNothing,
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('Debit')),
-          findsNothing,
-        );
-        expect(
-          find.descendant(of: detailsCard, matching: find.text('INV-TEST-001')),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
+        // The row carries only a document number, so its lines are looked
+        // up before the document can be produced.
+        expect(invoiceLines.requestedDocumentNos, ['INV-TEST-001']);
+        final document = pdfService.documents.single;
+        expect(document.invoiceNo, 'INV-TEST-001');
+        expect(document.customerName, 'Test Customer One');
+        expect(documentActions.savedFilenames, ['invoice_INV-TEST-001.pdf']);
+        expect(find.text('Transaction Details'), findsNothing);
       },
     );
 
-    testWidgets('Tapping See all shows the temporary placeholder SnackBar', (
+    testWidgets(
+      'A row with no invoice behind it says so, never an empty document',
+      (tester) async {
+        final pdfService = FakeOrderPdfService();
+        await _pumpAccountBalanceScreen(
+          tester,
+          invoiceLinesService: FakeInvoiceLinesByNumberService(),
+          pdfService: pdfService,
+        );
+
+        final row = find.byKey(
+          const ValueKey('quick-history-row-ledger-entry-1001'),
+        );
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('No invoice document is available for this transaction.'),
+          findsOneWidget,
+        );
+        expect(pdfService.documents, isEmpty);
+      },
+    );
+
+    testWidgets('Tapping See all opens the full invoice history', (
       tester,
     ) async {
       await _pumpAccountBalanceScreen(tester);
@@ -1060,13 +1087,14 @@ void main() {
       );
       await tester.ensureVisible(seeAllButton);
       await tester.tap(seeAllButton);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
+      expect(find.byType(InvoicesScreen), findsOneWidget);
       expect(
         find.text('Full transaction history is not available yet.'),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Shows a controlled empty state for a successful empty page', (
