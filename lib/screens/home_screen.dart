@@ -16,6 +16,7 @@ import '../services/demo_current_balance_data_source.dart';
 import '../services/home_dashboard_service.dart';
 import '../services/item_catalogue_search_service.dart';
 import '../services/last_payment_data_source.dart';
+import '../services/snapshot_current_balance_data_source.dart';
 import '../services/stock_lookup_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_radius.dart';
@@ -99,15 +100,22 @@ enum _CurrentBalanceUiState { loading, loaded, error }
 ///
 /// TEMPORARY CLIENT DEMO MODE indirection: when `useDemo` is true this
 /// returns [DemoCurrentBalanceDataSource] instead of
-/// [LiveCurrentBalanceDataSource] — the live service, data source, and
-/// calculation are untouched and fully restored once the flag is set back to
-/// `false`.
+/// [SnapshotCurrentBalanceDataSource] — the live services and calculation
+/// are untouched and fully restored once the flag is set back to `false`.
+///
+/// The live default is [SnapshotCurrentBalanceDataSource] (two parallel
+/// requests) rather than [LiveCurrentBalanceDataSource] (one request per
+/// ledger page, sequentially): the sweep left the card spinning for 10–15
+/// seconds on a real account, and the balance it computed could disagree
+/// with the figure the Account Balance screen already showed for the same
+/// customer. [LiveCurrentBalanceDataSource] remains for anything that needs
+/// the balance derived from the ledger rows themselves.
 CurrentBalanceDataSource resolveDefaultCurrentBalanceDataSource({
   bool useDemo = DemoConfig.useDemoCurrentBalance,
 }) {
   return useDemo
       ? const DemoCurrentBalanceDataSource()
-      : LiveCurrentBalanceDataSource();
+      : SnapshotCurrentBalanceDataSource();
 }
 
 class HomeScreen extends StatefulWidget {

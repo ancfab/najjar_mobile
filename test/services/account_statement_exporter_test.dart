@@ -19,6 +19,7 @@ void main() {
     historyFrom: DateTime.utc(2023, 10, 1),
     historyTo: DateTime.utc(2023, 10, 30),
     generatedAt: DateTime.utc(2023, 10, 30),
+    clientName: 'Amina Saleh',
   );
 
   group('buildAccountStatementPdfBytes', () {
@@ -37,13 +38,16 @@ void main() {
     // in the content stream rather than one contiguous run, so multi-word
     // phrases are asserted word-by-word instead of as a joined substring.
     test(
-      'includes the brand name, document title, and generation date',
+      "includes the client's own name, document title, and generation date",
       () async {
         final bytes = await buildAccountStatementPdfBytes(data);
         final text = String.fromCharCodes(bytes);
 
-        expect(text, contains('(Indigo)'));
-        expect(text, contains('(Loom)'));
+        // The former hardcoded "Indigo Loom" brand was removed in favour of
+        // the signed-in client's real name (product decision, 2026-09-03).
+        expect(text, contains('(Amina)'));
+        expect(text, contains('(Saleh)'));
+        expect(text, isNot(contains('(Indigo)')));
         expect(text, contains('(Account)'));
         expect(text, contains('(Statement)'));
         expect(text, contains('(Generated:)'));

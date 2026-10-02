@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 
 import 'package:anc_fabrics/models/auth/auth_session.dart';
 import 'package:anc_fabrics/models/business_central/business_central_item_search_group.dart';
-import 'package:anc_fabrics/models/business_central/payment_entry.dart';
 import 'package:anc_fabrics/models/cached_current_balance.dart';
 import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/screens/edit_profile_screen.dart';
@@ -25,6 +24,7 @@ import 'package:anc_fabrics/services/cached_current_balance_store.dart';
 import 'package:anc_fabrics/services/current_balance_data_source.dart';
 import 'package:anc_fabrics/services/current_balance_service.dart';
 import 'package:anc_fabrics/services/demo_current_balance_data_source.dart';
+import 'package:anc_fabrics/services/snapshot_current_balance_data_source.dart';
 import 'package:anc_fabrics/services/home_dashboard_service.dart';
 import 'package:anc_fabrics/services/item_catalogue_search_service.dart';
 import 'package:anc_fabrics/services/last_payment_data_source.dart';
@@ -2244,7 +2244,8 @@ void main() {
     // (the pure resolver HomeScreen falls back to when no currentBalanceSource
     // is injected) for both DemoConfig.useDemoCurrentBalance branches,
     // regardless of the flag's current compiled-in value. With the flag now
-    // false, HomeScreen's real default is LiveCurrentBalanceDataSource, so
+    // false, HomeScreen's real default is SnapshotCurrentBalanceDataSource
+    // (the two-parallel-request balance, replacing the full ledger sweep), so
     // the widget test below always injects a currentBalanceSource rather
     // than relying on the default (which would attempt real HTTP/secure
     // storage and hang in the widget-test sandbox).
@@ -2254,11 +2255,16 @@ void main() {
       expect(source, isA<DemoCurrentBalanceDataSource>());
     });
 
-    test('useDemo: false resolves to LiveCurrentBalanceDataSource, leaving the '
-        'live Current Balance integration fully reachable', () {
-      final source = resolveDefaultCurrentBalanceDataSource(useDemo: false);
-      expect(source, isA<LiveCurrentBalanceDataSource>());
-    });
+    test(
+      'useDemo: false resolves to SnapshotCurrentBalanceDataSource — the '
+      'single-snapshot balance, never the per-page ledger sweep that left '
+      'the card spinning',
+      () {
+        final source = resolveDefaultCurrentBalanceDataSource(useDemo: false);
+        expect(source, isA<SnapshotCurrentBalanceDataSource>());
+        expect(source, isNot(isA<LiveCurrentBalanceDataSource>()));
+      },
+    );
 
     testWidgets(
       'With DemoConfig.useDemoCurrentBalance false, HomeScreen resolves its '

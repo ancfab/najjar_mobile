@@ -207,7 +207,7 @@ void main() {
 
   group('Header', () {
     testWidgets(
-      'Shows the Indigo Loom brand and initials derived from the real '
+      "Shows the client's own name and initials derived from the real "
       "locally-stored customer profile's full name",
       (tester) async {
         final localProfileStore = FakeLocalCustomerProfileStore()
@@ -225,8 +225,17 @@ void main() {
           localProfileStore: localProfileStore,
         );
 
-        expect(find.text('Indigo Loom'), findsOneWidget);
-        expect(find.text('AS'), findsOneWidget);
+        // No fabricated company brand anywhere any more (product decision,
+        // 2026-09-03): the header carries this customer's own identity.
+        expect(find.text('Indigo Loom'), findsNothing);
+        expect(find.text('Amina Saleh'), findsWidgets);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('account-balance-avatar')),
+            matching: find.text('AS'),
+          ),
+          findsOneWidget,
+        );
       },
     );
 
@@ -238,7 +247,15 @@ void main() {
 
         // _sampleSession.username is "sample.user" — a single "word" per
         // userInitials' whitespace-splitting rule, so just its first letter.
-        expect(find.text('S'), findsOneWidget);
+        // Scoped to this screen's own avatar: the AppBar's ClientBrandTitle
+        // badge renders the same initial beside it.
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('account-balance-avatar')),
+            matching: find.text('S'),
+          ),
+          findsOneWidget,
+        );
       },
     );
 
@@ -261,7 +278,13 @@ void main() {
         localProfileStore: localProfileStore,
       );
 
-      expect(find.text('AS'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('account-balance-avatar')),
+          matching: find.text('AS'),
+        ),
+        findsOneWidget,
+      );
       var badge = tester.widget<AvatarInitialsBadge>(
         find.byKey(const ValueKey('account-balance-avatar')),
       );

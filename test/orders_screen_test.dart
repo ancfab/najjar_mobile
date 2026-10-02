@@ -142,7 +142,10 @@ void main() {
   ) async {
     await _pumpOrdersScreen(tester);
 
-    expect(find.text('Indigo Loom'), findsOneWidget);
+    // No fabricated company brand in headers any more (product decision,
+    // 2026-09-03) — the header carries this customer's own identity, which
+    // is blank here because no session is seeded for this pump.
+    expect(find.text('Indigo Loom'), findsNothing);
     expect(find.text('Client Portal'), findsOneWidget);
     expect(find.text('GLOBAL LOGISTICS'), findsOneWidget);
     expect(find.text('Fabric Orders'), findsOneWidget);
