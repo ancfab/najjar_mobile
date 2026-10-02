@@ -148,7 +148,7 @@ class BusinessCentralZebraSalesOrderLine {
       orderId: _requireString(json, 'orderId'),
       sellToCustomerNo: _requireString(json, 'Sell_to_Customer_No'),
       sellToCustomerName: _requireString(json, 'Sell_to_Customer_Name'),
-      itemNo: _requireString(json, 'No.'),
+      itemNo: _requireItemNo(json),
       description: _requireString(json, 'Description'),
       quantity: _requireNum(json, 'Quantity'),
       unitPrice: _requireNum(json, 'Unit_Price'),
@@ -251,6 +251,19 @@ class BusinessCentralZebraSalesOrderLine {
   /// Requires [key] to be present and a non-empty [String] — same
   /// non-empty check as [BusinessCentralSalesOrderLine]'s equivalent
   /// helper, applied to every required string field here.
+  /// Reads `No.`, which must be present but may legitimately be blank — a
+  /// charge line (the "Delivery Charge" row the printed form carries) has
+  /// no item number. See `BusinessCentralSalesOrderLine._requireItemNo`.
+  static String _requireItemNo(Map<String, dynamic> json) {
+    final value = json['No.'];
+    if (value is! String) {
+      throw const FormatException(
+        'BusinessCentralZebraSalesOrderLine.No. missing or not a string',
+      );
+    }
+    return value;
+  }
+
   static String _requireString(Map<String, dynamic> json, String key) {
     final value = json[key];
     if (value is! String || value.isEmpty) {

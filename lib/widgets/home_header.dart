@@ -29,10 +29,10 @@ class HomeHeader extends StatelessWidget {
   /// group.
   static const double _actionGroupGap = 12;
 
-  /// Logo height. Larger than it was beside the old settings gear: with
-  /// that button gone the brand mark is the header's right-hand anchor, and
-  /// it still clears the header's existing minHeight of 68.
-  static const double _logoHeight = 44;
+  /// Logo height. The mark is wider than it is tall, so this reads as a
+  /// compact brand anchor beside the language button rather than a banner,
+  /// and clears the header's existing minHeight of 68.
+  static const double _logoHeight = 34;
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +94,10 @@ class HomeHeader extends StatelessWidget {
                 key: const ValueKey('home-header-logo'),
                 height: _logoHeight,
                 child: Image.asset(
-                  'assets/logo/ANC Logo.png',
+                  // The mark on transparency — the full logo file carries
+                  // its own opaque backdrop, which read as a pale panel
+                  // sitting on the header.
+                  'assets/logo/anc_mark.png',
                   fit: BoxFit.contain,
                 ),
               ),

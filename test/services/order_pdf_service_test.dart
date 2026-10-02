@@ -239,4 +239,40 @@ void main() {
     expect(text, contains('(Contact)'));
     expect(text, contains('(76-050466)'));
   });
+
+  group('Arabic', () {
+    test('An Arabic customer name embeds the Arabic font', () async {
+      final bytes = await service.generate(
+        OrderDocument(
+          orderNo: 'SO-339392',
+          customerNo: 'CLNT-04677',
+          customerName: 'ياسر خزيم',
+          customerAddress: 'بيروت B, BEIRUT B',
+          customerCountry: 'Lebanon',
+          lines: const [
+            OrderDocumentLine(
+              description: 'قماش هاواي',
+              quantity: 18,
+              unitOfMeasureCode: 'MT',
+              unitPrice: 7.5,
+              amount: 135,
+            ),
+          ],
+        ),
+      );
+      final text = String.fromCharCodes(bytes);
+
+      // The built-in base fonts carry no Arabic glyphs, so the bundled TTF
+      // must actually be embedded for the name to render at all.
+      expect(text, contains('NotoNaskhArabic'));
+      expect(bytes, isNotEmpty);
+    });
+
+    test('Latin-only documents still render without the Arabic font', () async {
+      final text = String.fromCharCodes(await service.generate(_document()));
+
+      expect(text, contains('(Sales)'));
+      expect(text, contains('(CLNT-00801)'));
+    });
+  });
 }

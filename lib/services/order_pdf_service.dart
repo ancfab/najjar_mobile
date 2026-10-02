@@ -200,20 +200,59 @@ class LocalOrderPdfService implements OrderPdfService {
       ],
     ];
 
-    return pw.TableHelper.fromTextArray(
-      headers: headers,
-      data: rows,
+    // Built by hand rather than through TableHelper so each cell can carry
+    // its own text direction: a Business Central description comes back in
+    // Arabic as readily as in English, and TableHelper gives every cell the
+    // same LTR direction (see [_text]).
+    return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
-      headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-      cellStyle: const pw.TextStyle(fontSize: 8),
-      headerAlignment: pw.Alignment.center,
-      cellAlignment: pw.Alignment.centerRight,
-      cellAlignments: {
-        0: pw.Alignment.center,
-        1: pw.Alignment.centerLeft,
-        2: pw.Alignment.center,
+      columnWidths: {
+        0: const pw.FlexColumnWidth(0.8),
+        1: const pw.FlexColumnWidth(3.2),
       },
-      columnWidths: {0: const pw.FlexColumnWidth(0.8)},
+      children: [
+        pw.TableRow(
+          children: [
+            for (final header in headers)
+              _cell(header, bold: true, align: pw.TextAlign.center),
+          ],
+        ),
+        for (var index = 0; index < document.lines.length; index++)
+          pw.TableRow(
+            children: [
+              for (var column = 0; column < rows[index].length; column++)
+                _cell(
+                  rows[index][column],
+                  align: _columnAlignment(column),
+                ),
+            ],
+          ),
+        pw.TableRow(
+          children: [
+            for (var column = 0; column < rows.last.length; column++)
+              _cell(
+                rows.last[column],
+                bold: true,
+                align: _columnAlignment(column),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Sr.No centred, the description left, every figure right — the printed
+  /// form's own column alignment.
+  pw.TextAlign _columnAlignment(int column) => switch (column) {
+    0 => pw.TextAlign.center,
+    1 => pw.TextAlign.left,
+    _ => pw.TextAlign.right,
+  };
+
+  pw.Widget _cell(String value, {bool bold = false, pw.TextAlign? align}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: _text(value, bold: bold, align: align),
     );
   }
 
@@ -382,18 +421,9 @@ class LocalOrderPdfService implements OrderPdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            label,
-            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-          ),
+          _text(label, bold: true),
           pw.SizedBox(width: 8),
-          pw.Flexible(
-            child: pw.Text(
-              value,
-              textAlign: pw.TextAlign.right,
-              style: const pw.TextStyle(fontSize: 8),
-            ),
-          ),
+          pw.Flexible(child: _text(value, align: pw.TextAlign.right)),
         ],
       ),
     );
@@ -404,10 +434,6 @@ class LocalOrderPdfService implements OrderPdfService {
     String value, {
     bool emphasized = false,
   }) {
-    final style = pw.TextStyle(
-      fontSize: 8,
-      fontWeight: emphasized ? pw.FontWeight.bold : pw.FontWeight.normal,
-    );
     return pw.Container(
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.black, width: 0.5),
@@ -416,13 +442,13 @@ class LocalOrderPdfService implements OrderPdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: style),
+          _text(label, bold: emphasized),
           pw.SizedBox(width: 8),
           pw.Flexible(
-            child: pw.Text(
+            child: _text(
               value,
-              textAlign: pw.TextAlign.right,
-              style: style,
+              bold: emphasized,
+              align: pw.TextAlign.right,
             ),
           ),
         ],
@@ -430,17 +456,53 @@ class LocalOrderPdfService implements OrderPdfService {
     );
   }
 
-  pw.Widget _value(String text) =>
-      pw.Text(text, style: const pw.TextStyle(fontSize: 9));
+  pw.Widget _value(String text) => _text(text, fontSize: 9);
+
+  /// Any Arabic letter, including the Presentation Forms blocks a backend
+  /// may already have substituted.
+  static final RegExp _arabicPattern = RegExp(
+    r'[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]',
+  );
+
+  static bool _isArabic(String value) => _arabicPattern.hasMatch(value);
+
+  /// Builds a text widget that renders Arabic correctly.
+  ///
+  /// `package:pdf` only joins Arabic letters into their connected forms and
+  /// reorders a line right-to-left when the surrounding text direction is
+  /// RTL; left to its default LTR it draws the isolated letters in typed
+  /// order, which is the "messed up" rendering a customer name came out as.
+  /// Latin text keeps LTR, so an order number or amount is never flipped.
+  pw.Widget _text(
+    String value, {
+    double fontSize = 8,
+    bool bold = false,
+    pw.TextAlign? align,
+  }) {
+    final arabic = _isArabic(value);
+    final style = pw.TextStyle(
+      fontSize: fontSize,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      // Arabic text asks for the Arabic face directly rather than leaving
+      // the base font to miss every glyph and fall back; Latin text keeps
+      // the crisper built-in base font.
+      font: arabic ? _arabicFont : null,
+    );
+    final text = pw.Text(
+      value,
+      style: style,
+      textAlign: align ?? (arabic ? pw.TextAlign.right : null),
+      textDirection: arabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+    );
+    if (!arabic) return text;
+    return pw.Directionality(textDirection: pw.TextDirection.rtl, child: text);
+  }
 
   pw.Widget _labelledInline(String label, String value) {
     return pw.Row(
       children: [
-        pw.Text(
-          '$label : ',
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.Text(value, style: const pw.TextStyle(fontSize: 9)),
+        _text('$label : ', fontSize: 9, bold: true),
+        _text(value, fontSize: 9),
       ],
     );
   }

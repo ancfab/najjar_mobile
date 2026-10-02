@@ -100,6 +100,20 @@ void main() {
       );
     });
 
+    test(
+      'accepts a blank "No." — a charge line (Delivery Charge) carries no '
+      'item number, and rejecting it would cost the order every line',
+      () {
+        final json = _validJson();
+        json['No.'] = '';
+
+        final line = BusinessCentralSalesOrderLine.fromJson(json);
+
+        expect(line.itemNo, '');
+        expect(line.description, isNotEmpty);
+      },
+    );
+
     test('does not accept a normalized "No" key in place of "No."', () {
       final json = _validJson()..remove('No.');
       json['No'] = '880107';

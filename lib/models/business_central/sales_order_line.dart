@@ -106,7 +106,7 @@ class BusinessCentralSalesOrderLine {
       lineNo: _requireInt(json, 'Line_No'),
       sellToCustomerNo: _requireString(json, 'Sell_to_Customer_No'),
       sellToCustomerName: _requireString(json, 'Sell_to_Customer_Name'),
-      itemNo: _requireString(json, 'No.'),
+      itemNo: _requireItemNo(json),
       description: _requireString(json, 'Description'),
       quantity: _requireNum(json, 'Quantity'),
       unitPrice: _requireNum(json, 'Unit_Price'),
@@ -192,6 +192,21 @@ class BusinessCentralSalesOrderLine {
   /// silently accepted as blank; the same non-empty check is applied to
   /// every other required string field here rather than carving out a
   /// separate, more permissive path for them.
+  /// Reads `No.`, which must be present but may legitimately be blank: a
+  /// charge line (Business Central's G/L Account line type — the "Delivery
+  /// Charge" row every ANC invoice carries) has no item number at all, and
+  /// rejecting it cost the whole order its lines, not just that row.
+  /// A *missing* key is still a malformed row and still throws.
+  static String _requireItemNo(Map<String, dynamic> json) {
+    final value = json['No.'];
+    if (value is! String) {
+      throw const FormatException(
+        'BusinessCentralSalesOrderLine.No. missing or not a string',
+      );
+    }
+    return value;
+  }
+
   static String _requireString(Map<String, dynamic> json, String key) {
     final value = json[key];
     if (value is! String || value.isEmpty) {

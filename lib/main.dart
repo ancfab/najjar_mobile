@@ -78,8 +78,16 @@ Future<StartupSession> resolveStartupSession(AuthService authService) async {
   };
 }
 
+/// Shortest time the native launch screen (the branded artwork — see
+/// `flutter_native_splash` in pubspec.yaml) stays up. The startup auth gate
+/// below usually takes longer than this on a real connection, in which case
+/// this costs nothing; on a fast one it keeps the brand from flashing past
+/// in a frame or two. Deliberately short enough not to feel like a delay.
+const Duration _minimumSplashDuration = Duration(milliseconds: 1200);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final startedAt = DateTime.now();
   // Startup auth gate: confirms any persisted secure session against
   // `GET /auth/me` (not just its local presence) before the first frame, so
   // a relaunch never briefly shows — or worse, stays on — an authenticated
@@ -104,6 +112,11 @@ Future<void> main() async {
     // authenticated-user state (here, a cached avatar) around for whichever
     // account signs in next on this device.
     currentUserAvatarController.clear();
+  }
+
+  final elapsed = DateTime.now().difference(startedAt);
+  if (elapsed < _minimumSplashDuration) {
+    await Future<void>.delayed(_minimumSplashDuration - elapsed);
   }
 
   runApp(
@@ -185,7 +198,7 @@ class MyApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           navigatorKey: navigatorKey,
-          title: 'ANC Fabrics',
+          title: 'ANC FABRIC',
           debugShowCheckedModeBanner: false,
           locale: localeController.locale,
           supportedLocales: AppLocale.supportedLocales,

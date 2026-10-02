@@ -126,7 +126,7 @@ void main() {
       // The logo keeps its aspect ratio (no explicit width forced on it)
       // and still clears the header's 68px minHeight.
       final logoSize = tester.getSize(logo);
-      expect(logoSize.height, inInclusiveRange(40, 48));
+      expect(logoSize.height, inInclusiveRange(30, 40));
       expect(logoSize.height, lessThan(68));
 
       final logoRight = tester.getTopRight(logo).dx;
