@@ -1,7 +1,7 @@
 workflows:
   ios-screenshots:
     name: iOS Screenshots
-    max_build_duration: 30
+    max_build_duration: 45
     instance_type: mac_mini_m2
     environment:
       flutter: stable
@@ -25,26 +25,9 @@ workflows:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "PATH=$HOME/.maestro/bin:$PATH" >> $CM_ENV
 
-      - name: Boot simulator and install app
+      - name: Sign the simulator build
         script: |
           set -e
-
-          SIM_NAME="iPhone 16"
-          BUNDLE_ID="com.ancfabrics.app"
-          APP_PATH="build/ios/iphonesimulator/Runner.app"
-
-          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['udid'] for v in d['devices'].values() for x in v if x['name']=='$SIM_NAME'), ''))")
-
-          if [ -z "$UDID" ]; then
-            echo "No $SIM_NAME simulator found, creating one..."
-            RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; d=json.load(sys.stdin); r=[x for x in d['runtimes'] if x['name'].startswith('iOS')]; print(sorted(r, key=lambda x: x['version'])[-1]['identifier'])")
-            DEVICETYPE=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; d=json.load(sys.stdin); print(next((x['identifier'] for x in d['devicetypes'] if x['name']=='$SIM_NAME'), ''))")
-            UDID=$(xcrun simctl create "$SIM_NAME" "$DEVICETYPE" "$RUNTIME")
-          fi
-
-          echo "UDID=$UDID" >> $CM_ENV
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
           cat > /tmp/sim.entitlements <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,26 +44,31 @@ workflows:
           </dict>
           </plist>
           PLIST
-          codesign --force --deep --sign - --entitlements /tmp/sim.entitlements "$APP_PATH"
-          xcrun simctl install "$UDID" "$APP_PATH"
+          codesign --force --deep --sign - --entitlements /tmp/sim.entitlements \
+            build/ios/iphonesimulator/Runner.app
 
-      - name: Run Maestro flow and capture screenshots
+      # App Store Connect needs one iPhone 6.9" set and — because this app
+      # ships for iPad too (TARGETED_DEVICE_FAMILY "1,2") — one iPad 13" set.
+      # Both runs use the same Maestro flow, so the two sets show the same
+      # screens, each with a clean 9:41 status bar the way Apple's own store
+      # imagery does.
+      - name: Capture iPhone 6.9 inch screenshots
         script: |
-          set -e
-          mkdir -p screenshots
-          cd screenshots
-                  maestro --device "$UDID" test -e TEST_MOBILE="$TEST_MOBILE" -e TEST_CLIENT="$TEST_CLIENT" -e TEST_PASSWORD="$TEST_PASSWORD" ../maestro/login_flow.yaml || true
-                  cd "$CM_BUILD_DIR"
-                  echo "Searching for generated screenshot files..."
-                  find "$HOME" -iname "screen-1-login.png" -o -iname "screen-2-home.png" -o -iname "screen-3-balance.png" -o -iname "screen-4-profile.png" 2>/dev/null | while read -r f; do
-                  echo "Found: $f"
-                  cp "$f" screenshots/ 2>/dev/null || true
-                  done
-                  echo "Contents of screenshots/:"
-                  ls -la screenshots/
+          bash tool/capture_app_store_screenshots.sh iphone-6.9 "iPhone 17 Pro Max,iPhone 16 Pro Max,iPhone 15 Pro Max"
+
+      - name: Capture iPad 13 inch screenshots
+        script: |
+          bash tool/capture_app_store_screenshots.sh ipad-13 "iPad Pro 13-inch (M4),iPad Pro (12.9-inch) (6th generation)"
+
+      - name: Report captured sizes
+        script: |
+          echo "Screenshots produced:"
+          find screenshots -name '*.png' | while read -r f; do
+            echo "$f -> $(sips -g pixelWidth -g pixelHeight "$f" | tail -2 | tr -d ' ')"
+          done
 
     artifacts:
-      - screenshots/*.png
+      - screenshots/**/*.png
 
   ios-device-build:
     name: iOS Device Build (unsigned)
