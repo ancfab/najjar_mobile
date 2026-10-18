@@ -73,7 +73,7 @@ Map<String, dynamic> _envelope({
   'last_page_url': '/?page=$lastPage',
   'next_page_url': currentPage < lastPage ? '/?page=${currentPage + 1}' : null,
   'path': '/',
-  'per_page': 25,
+  'per_page': 100,
   'prev_page_url': null,
   'to': ids.isEmpty ? null : ids.length,
   'total': ids.length,
@@ -133,7 +133,7 @@ void main() {
       expect(fakeHttp.requestCount, 1);
     });
 
-    test('requests the items endpoint with page=1 and per_page=25', () async {
+    test('requests the items endpoint with page=1 and per_page=100', () async {
       final fakeHttp = _ScriptedHttpClient([
         (req) async =>
             _jsonResponse(200, _envelope(ids: ['id-1']), request: req),
@@ -148,7 +148,7 @@ void main() {
 
       expect(fakeHttp.requestedUrls.single.path, '/api/business-central/items');
       expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
-      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
+      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '100');
     });
 
     test('parses an empty first page (no rows)', () async {
@@ -281,8 +281,8 @@ void main() {
       await service.loadFirstPage();
       await service.loadNextPage();
 
-      expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '25');
-      expect(fakeHttp.requestedUrls[1].queryParameters['per_page'], '25');
+      expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '100');
+      expect(fakeHttp.requestedUrls[1].queryParameters['per_page'], '100');
     });
 
     test('cannot run twice concurrently', () async {

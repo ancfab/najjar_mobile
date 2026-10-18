@@ -11,6 +11,7 @@
 //
 // All identifiers below (token) are synthetic fixtures.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,7 @@ import 'package:anc_fabrics/screens/account_balance_screen.dart';
 import 'package:anc_fabrics/services/anc_api_client.dart';
 import 'package:anc_fabrics/services/balance_history_data_source.dart';
 import 'package:anc_fabrics/services/business_central_error_mapper.dart';
+import 'package:anc_fabrics/services/customer_details_service.dart';
 import 'package:anc_fabrics/services/ledger_entries_service.dart';
 
 import '../helpers/fake_auth_session_store.dart';
@@ -64,11 +66,17 @@ Map<String, dynamic> _entryJson(
   };
 }
 
+/// Every ledger row served so far in the current test, so the fake
+/// customer-details reply can be derived from them.
+final List<Map<String, dynamic>> _servedLedgerRows = [];
+
 Map<String, dynamic> _envelope({
   required List<Map<String, dynamic>> rows,
   int currentPage = 1,
   int lastPage = 1,
-}) => {
+}) {
+  _servedLedgerRows.addAll(rows);
+  return {
   'current_page': currentPage,
   'data': rows,
   'first_page_url':
@@ -83,9 +91,10 @@ Map<String, dynamic> _envelope({
   'path': 'https://api.ancfab.com/api/business-central/ledger-entries',
   'per_page': 25,
   'prev_page_url': null,
-  'to': rows.isEmpty ? null : rows.length,
-  'total': rows.length,
-};
+    'to': rows.isEmpty ? null : rows.length,
+    'total': rows.length,
+  };
+}
 
 http.StreamedResponse _jsonResponse(
   int statusCode,
@@ -100,21 +109,70 @@ http.StreamedResponse _jsonResponse(
   );
 }
 
-/// Serves one scripted response per request, in call order.
+/// Serves the scripted ledger responses in call order, and answers the
+/// customer-details request the graph now makes alongside them.
+///
+/// The balance reply is held until the ledger script is exhausted so it can
+/// be computed from exactly the rows this test served — the same figure
+/// `computeCurrentBalance` produced when the graph swept the whole ledger
+/// itself, which keeps every expectation below unchanged.
 class _ScriptedHttpClient extends http.BaseClient {
-  _ScriptedHttpClient(this._responses);
+  _ScriptedHttpClient(this._responses) {
+    _servedLedgerRows.clear();
+  }
 
   final List<Future<http.StreamedResponse> Function(http.Request)> _responses;
   final List<Uri> requestedUrls = [];
+  final Completer<void> _ledgerDone = Completer<void>();
   int requestCount = 0;
+
+  /// Ledger requests only — what the assertions below count.
+  int get ledgerRequestCount => requestCount;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final req = request as http.Request;
+
+    if (req.url.path.contains('customer-details')) {
+      if (!_ledgerDone.isCompleted) await _ledgerDone.future;
+      return _jsonResponse(
+        200,
+        {
+          'customerbalance': _balanceFromServedRows(),
+          'availableCredit': 0.0,
+          'usedCredit': 0.0,
+        },
+        request: req,
+      );
+    }
+
     requestedUrls.add(req.url);
     requestCount++;
     final handler = _responses.removeAt(0);
-    return handler(req);
+    final response = await handler(req);
+    if (_responses.isEmpty && !_ledgerDone.isCompleted) {
+      _ledgerDone.complete();
+    }
+    return response;
+  }
+
+  double _balanceFromServedRows() {
+    const relevant = {
+      'Invoice',
+      'Payment',
+      'Credit Memo',
+      'Refund',
+      'Finance Charge Memo',
+      'Reminder',
+    };
+    var total = 0.0;
+    for (final row in _servedLedgerRows) {
+      if (row['Open'] != true) continue;
+      final type = (row['Document_Type'] as String).trim();
+      if (type.isNotEmpty && !relevant.contains(type)) continue;
+      total += (row['Remaining_Amount'] as num).toDouble();
+    }
+    return total;
   }
 
   @override
@@ -122,9 +180,15 @@ class _ScriptedHttpClient extends http.BaseClient {
 }
 
 LedgerBalanceHistoryDataSource _sourceWith(http.Client fakeHttp) {
+  final apiClient = AncApiClient(httpClient: fakeHttp);
   return LedgerBalanceHistoryDataSource(
     ledgerEntriesService: LedgerEntriesService(
-      apiClient: AncApiClient(httpClient: fakeHttp),
+      apiClient: apiClient,
+      sessionStore: FakeAuthSessionStore()..seed(_session()),
+      coordinator: FakeSessionExpiryCoordinator(),
+    ),
+    customerDetailsService: CustomerDetailsService(
+      apiClient: apiClient,
       sessionStore: FakeAuthSessionStore()..seed(_session()),
       coordinator: FakeSessionExpiryCoordinator(),
     ),

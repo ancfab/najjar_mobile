@@ -79,7 +79,7 @@ Map<String, dynamic> _envelope({
   'last_page_url': '/?page=$lastPage',
   'next_page_url': currentPage < lastPage ? '/?page=${currentPage + 1}' : null,
   'path': '/',
-  'per_page': 25,
+  'per_page': 100,
   'prev_page_url': null,
   'to': ids.isEmpty ? null : ids.length,
   'total': ids.length,
@@ -139,7 +139,7 @@ void main() {
       expect(fakeHttp.requestCount, 1);
     });
 
-    test('requests the inventory endpoint with page=1, per_page=25, and the '
+    test('requests the inventory endpoint with page=1, per_page=100, and the '
         'exact requested item_no', () async {
       final fakeHttp = _ScriptedHttpClient([
         (req) async =>
@@ -158,7 +158,7 @@ void main() {
         '/api/business-central/inventory',
       );
       expect(fakeHttp.requestedUrls.single.queryParameters['page'], '1');
-      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '25');
+      expect(fakeHttp.requestedUrls.single.queryParameters['per_page'], '100');
       expect(
         fakeHttp.requestedUrls.single.queryParameters['item_no'],
         'ITEM-001',
@@ -399,8 +399,8 @@ void main() {
       await service.loadFirstPage(itemNo: 'ITEM-001');
       await service.loadNextPage();
 
-      expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '25');
-      expect(fakeHttp.requestedUrls[1].queryParameters['per_page'], '25');
+      expect(fakeHttp.requestedUrls[0].queryParameters['per_page'], '100');
+      expect(fakeHttp.requestedUrls[1].queryParameters['per_page'], '100');
     });
 
     test('cannot run twice concurrently', () async {

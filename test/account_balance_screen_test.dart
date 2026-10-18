@@ -737,7 +737,15 @@ void main() {
         final picker = tester.widget<BalanceHistoryDateRangePicker>(
           find.byType(BalanceHistoryDateRangePicker),
         );
-        final invalidFrom = picker.to.add(const Duration(days: 10));
+        // Calendar arithmetic, not a 10-day Duration: an absolute duration
+        // that crosses a daylight-saving change lands at 23:00 of the
+        // previous day, which the screen then normalises to date-only — a
+        // mismatch that only appears near the clock change.
+        final invalidFrom = DateTime(
+          picker.to.year,
+          picker.to.month,
+          picker.to.day + 10,
+        );
         picker.onFromChanged(invalidFrom);
         await tester.pumpAndSettle();
 
@@ -760,7 +768,13 @@ void main() {
       final picker = tester.widget<BalanceHistoryDateRangePicker>(
         find.byType(BalanceHistoryDateRangePicker),
       );
-      final invalidTo = picker.from.subtract(const Duration(days: 10));
+      // Calendar arithmetic rather than an absolute duration — see the
+      // From-clamp test above.
+      final invalidTo = DateTime(
+        picker.from.year,
+        picker.from.month,
+        picker.from.day - 10,
+      );
       picker.onToChanged(invalidTo);
       await tester.pumpAndSettle();
 

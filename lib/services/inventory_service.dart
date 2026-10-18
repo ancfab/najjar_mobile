@@ -85,7 +85,11 @@ class InventoryService {
   /// The fixed `per_page` size sent on every request — page 1 and every
   /// subsequent `loadNextPage()` call alike — so the effective page size
   /// never drifts across a paging session.
-  final int _perPage = ApiConfig.businessCentralDefaultPerPage;
+  /// Business Central's largest allowed page rather than the 25-row
+  /// default: this walks every page of a server-filtered result before it
+  /// can answer, so the page size is what decides how many sequential round
+  /// trips the user waits through.
+  final int _perPage = ApiConfig.businessCentralMaxPerPage;
 
   bool _isLoadingFirstPage = false;
   bool _isLoadingMore = false;

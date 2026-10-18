@@ -169,7 +169,11 @@ class ApiItemCatalogueSearchService implements ItemCatalogueSearchService {
 
   /// Fixed `per_page` for every search request this service sends, matching
   /// the app's general Business Central pagination policy.
-  static const int _perPage = ApiConfig.businessCentralDefaultPerPage;
+  /// Business Central's largest allowed page rather than the 25-row
+  /// default: this walks every page of a server-filtered result before it
+  /// can answer, so the page size is what decides how many sequential round
+  /// trips the user waits through.
+  static const int _perPage = ApiConfig.businessCentralMaxPerPage;
 
   /// Hard cap on pages fetched for one search — defensive only, matching
   /// `ApiStockLookupService._maxPages`'s role: guarantees termination even

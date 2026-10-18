@@ -1,6 +1,9 @@
+import '../config/api_config.dart';
 import '../models/balance_history_point.dart';
+import '../models/business_central/customer_details.dart';
 import '../models/business_central/ledger_entry.dart';
 import 'current_balance_service.dart';
+import 'customer_details_service.dart';
 import 'ledger_entries_service.dart';
 
 /// Strips the time-of-day component so callers only ever compare calendar
@@ -132,18 +135,50 @@ abstract class BalanceHistoryDataSource {
 /// day's starting point; it is just not plotted separately, to avoid two
 /// points sharing the same date).
 class LedgerBalanceHistoryDataSource implements BalanceHistoryDataSource {
-  LedgerBalanceHistoryDataSource({LedgerEntriesService? ledgerEntriesService})
-    : _ledgerEntriesService = ledgerEntriesService ?? LedgerEntriesService();
+  LedgerBalanceHistoryDataSource({
+    LedgerEntriesService? ledgerEntriesService,
+    CustomerDetailsService? customerDetailsService,
+    this.maxPages = 20,
+  }) : _ledgerEntriesService =
+           ledgerEntriesService ??
+           LedgerEntriesService(perPage: ApiConfig.businessCentralMaxPerPage),
+       _customerDetailsService =
+           customerDetailsService ?? CustomerDetailsService();
 
   final LedgerEntriesService _ledgerEntriesService;
+  final CustomerDetailsService _customerDetailsService;
+
+  /// Hard cap on how many ledger pages one graph will read. Only reached
+  /// when a customer has thousands of entries inside the requested range;
+  /// a defensive bound, not a business rule.
+  final int maxPages;
 
   @override
   Future<BalanceHistoryData> fetchBalanceHistory({
     required DateTime from,
     required DateTime to,
   }) async {
-    await _ledgerEntriesService.loadAllPages();
-    final allEntries = _ledgerEntriesService.entries;
+    // Started first so the balance request overlaps the ledger paging
+    // rather than adding its own round trip on top. Its failure is captured
+    // rather than thrown here: if the ledger walk below fails too, that is
+    // the error the caller should see, and an abandoned request must not
+    // surface as an unhandled error.
+    Object? balanceError;
+    final balanceRequest = _customerDetailsService
+        .fetchCustomerDetails()
+        .then<CustomerDetails?>(
+          (details) => details,
+          onError: (Object error) {
+            balanceError = error;
+            return null;
+          },
+        );
+
+    final allEntries = await _loadEntriesFrom(_dateOnly(from));
+
+    final details = await balanceRequest;
+    if (details == null) throw balanceError!;
+    final currentBalance = details.customerBalance;
 
     final fromDate = _dateOnly(from);
     final toDate = _dateOnly(to);
@@ -171,10 +206,6 @@ class LedgerBalanceHistoryDataSource implements BalanceHistoryDataSource {
     final currencyCode = distinctCurrencies.isEmpty
         ? null
         : distinctCurrencies.single;
-
-    // Reuses the exact same pure function/rule CurrentBalanceService uses —
-    // never a second, competing balance calculation.
-    final currentBalance = computeCurrentBalance(allEntries).amount;
 
     final futureFromOnwardsAmount = [
       for (final entry in relevantAscending)
@@ -242,8 +273,51 @@ class LedgerBalanceHistoryDataSource implements BalanceHistoryDataSource {
     );
   }
 
-  /// Closes the underlying [LedgerEntriesService]'s HTTP client, but only
-  /// when this instance created its own (a caller-supplied
-  /// [LedgerEntriesService] is left for the caller to manage).
-  void close() => _ledgerEntriesService.close();
+  /// Reads ledger pages until the graph has everything it needs: entries
+  /// posted on or after [fromDate].
+  ///
+  /// The ledger endpoint has no date filter, so the range has to be found by
+  /// paging. Entries come back newest first, so once a page holds nothing
+  /// inside the range — and an earlier page did — the walk has passed the
+  /// range and stops. That turns a default 30-day graph into one or two
+  /// requests instead of a sweep of the customer's entire ledger, which is
+  /// what made this screen take 10+ seconds.
+  ///
+  /// The stop is deliberately conditional on having already seen an
+  /// in-range entry, so a backend that returned oldest-first would simply
+  /// page through as before rather than stop on its first (old) page.
+  Future<List<LedgerEntry>> _loadEntriesFrom(DateTime fromDate) async {
+    await _ledgerEntriesService.loadFirstPage();
+    var pagesLoaded = 1;
+    var seenInRange = _containsFrom(_ledgerEntriesService.entries, fromDate);
+    var scannedCount = _ledgerEntriesService.entries.length;
+
+    while (_ledgerEntriesService.hasNextPage && pagesLoaded < maxPages) {
+      await _ledgerEntriesService.loadNextPage();
+      pagesLoaded++;
+
+      final page = _ledgerEntriesService.entries.sublist(scannedCount);
+      scannedCount = _ledgerEntriesService.entries.length;
+      final pageHasInRange = _containsFrom(page, fromDate);
+      if (seenInRange && !pageHasInRange) break;
+      seenInRange = seenInRange || pageHasInRange;
+    }
+
+    return _ledgerEntriesService.entries;
+  }
+
+  bool _containsFrom(List<LedgerEntry> entries, DateTime fromDate) {
+    for (final entry in entries) {
+      if (!_dateOnly(entry.postingDate).isBefore(fromDate)) return true;
+    }
+    return false;
+  }
+
+  /// Closes the underlying services' HTTP clients, but only when this
+  /// instance created its own (caller-supplied ones are left for the caller
+  /// to manage).
+  void close() {
+    _ledgerEntriesService.close();
+    _customerDetailsService.close();
+  }
 }
