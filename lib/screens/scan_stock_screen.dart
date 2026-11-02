@@ -1137,16 +1137,25 @@ class _LocationAvailabilityRow extends StatelessWidget {
     final locationLabel = hasLocationCode
         ? locationCode
         : context.t('scanStock.unknownLocationLabel');
-    final availableText = isLowStock
-        ? context.t('common.contactSupportForInquiries')
-        : context.t('common.available');
+    final isUnavailable = availability.isUnavailableInMeters;
+    final availableText = isUnavailable
+        ? context.t('home.stockOutOfStock')
+        : (isLowStock
+              ? context.t('common.contactSupportForInquiries')
+              : context.t('common.available'));
 
+    // Three meters bands, matching the Home card's pill: red below the
+    // unavailable floor, yellow through the low-stock band, green above it.
     final Color? backgroundColor = !isMeters
         ? null
-        : (isLowStock ? AppColors.warningYellow : AppColors.mint);
+        : (isUnavailable
+              ? AppColors.stockOutBg
+              : (isLowStock ? AppColors.warningYellow : AppColors.mint));
     final foregroundColor = !isMeters
         ? Colors.white60
-        : (isLowStock ? AppColors.darkAmber : AppColors.darkTeal);
+        : (isUnavailable
+              ? AppColors.stockOutText
+              : (isLowStock ? AppColors.darkAmber : AppColors.darkTeal));
     final quantityForegroundColor = !isMeters ? Colors.white : foregroundColor;
 
     final row = Row(

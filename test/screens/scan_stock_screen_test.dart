@@ -712,7 +712,7 @@ void main() {
       );
     });
 
-    group('Low-stock (<= 100 m) hides the quantity', () {
+    group('Low-stock (10-50 m) hides the quantity', () {
       Future<void> pumpWithQuantity(
         WidgetTester tester,
         num remainingQuantity,
@@ -742,13 +742,37 @@ void main() {
         await tester.pump();
       }
 
-      testWidgets('99 m shows Contact Support, not the quantity, with a '
-          'yellow row background', (tester) async {
-        await pumpWithQuantity(tester, 99);
+      testWidgets('9 m (below the floor) shows Currently unavailable with a '
+          'red row background, never contact-support copy', (tester) async {
+        await pumpWithQuantity(tester, 9);
+
+        expect(find.text('Currently unavailable'), findsOneWidget);
+        expect(
+          find.text(
+            'For more information, please contact the orders department.',
+          ),
+          findsNothing,
+        );
+        expect(find.textContaining('9'), findsNothing);
+        final rowContainer = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          (rowContainer.decoration as BoxDecoration).color,
+          AppColors.stockOutBg,
+        );
+      });
+
+      testWidgets('10 m (the floor) shows Contact Support, not the quantity, '
+          'with a yellow row background', (tester) async {
+        await pumpWithQuantity(tester, 10);
 
         expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
         expect(find.text('Available'), findsNothing);
-        expect(find.textContaining('99'), findsNothing);
+        expect(find.textContaining('10'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
             of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
@@ -761,13 +785,13 @@ void main() {
         );
       });
 
-      testWidgets('100 m (the boundary) shows Contact Support, not the '
+      testWidgets('50 m (the ceiling) shows Contact Support, not the '
           'quantity, with a yellow row background', (tester) async {
-        await pumpWithQuantity(tester, 100);
+        await pumpWithQuantity(tester, 50);
 
         expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
         expect(find.text('Available'), findsNothing);
-        expect(find.textContaining('100'), findsNothing);
+        expect(find.textContaining('50'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(
             of: find.byKey(const ValueKey('scan-stock-availability-row-0')),
@@ -780,12 +804,12 @@ void main() {
         );
       });
 
-      testWidgets('100.01 m shows Available without the real quantity, with '
+      testWidgets('50.01 m shows Available without the real quantity, with '
           'a green row background', (tester) async {
-        await pumpWithQuantity(tester, 100.01);
+        await pumpWithQuantity(tester, 50.01);
 
         expect(find.text('Available'), findsOneWidget);
-        expect(find.textContaining('100.01'), findsNothing);
+        expect(find.textContaining('50.01'), findsNothing);
         expect(find.text('For more information, please contact the orders department.'), findsNothing);
         final rowContainer = tester.widget<Container>(
           find.descendant(

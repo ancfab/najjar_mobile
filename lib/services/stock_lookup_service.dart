@@ -49,11 +49,19 @@ final class StockLocationAvailability {
   /// [isLowStockInMeters] must never fire for them.
   static const String _metersUnitOfMeasureCode = 'MT';
 
-  /// The low-stock threshold, in meters: at or below this quantity, the
-  /// exact figure must not be shown to the user (see [isLowStockInMeters]).
-  /// CONFIRMED business rule: `quantity > 100` is "Available" with the real
-  /// quantity shown; `quantity <= 100` hides the quantity entirely.
-  static const num lowStockThresholdMeters = 100;
+  /// The low-stock ceiling, in meters: at or below this quantity (and at or
+  /// above [unavailableBelowMeters]) the item reads as "contact the orders
+  /// department" and the exact figure is never shown.
+  ///
+  /// Business rule (meters only): `< 10` is unavailable, `10..50` is low
+  /// stock, `> 50` is available. Below the low-stock ceiling the quantity is
+  /// hidden entirely.
+  static const num lowStockThresholdMeters = 50;
+
+  /// The unavailable floor, in meters: below this quantity there is too
+  /// little left to sell, so the item reads as unavailable rather than as
+  /// low stock.
+  static const num unavailableBelowMeters = 10;
 
   /// True when [unitOfMeasureCode] is meters — the single source of truth
   /// every screen displaying per-location availability must check to tell
@@ -65,15 +73,26 @@ final class StockLocationAvailability {
   /// meaning something else entirely (no MT threshold rule applies at all).
   bool get isMeasuredInMeters => unitOfMeasureCode == _metersUnitOfMeasureCode;
 
-  /// True when this entry is measured in meters and [remainingQuantity] is
-  /// at or below [lowStockThresholdMeters] — the single source of truth
-  /// every screen displaying per-location availability (`ScanStockScreen`,
-  /// the Home screen's Check Availability card) must branch on instead of
-  /// duplicating the `> 100` comparison. Always `false` for a non-meters
+  /// True when this entry is measured in meters and [remainingQuantity]
+  /// falls in the low-stock band — at or above [unavailableBelowMeters] and
+  /// at or below [lowStockThresholdMeters]. The single source of truth every
+  /// screen displaying per-location availability (`ScanStockScreen`, the
+  /// Home screen's Check Availability card) must branch on instead of
+  /// duplicating the comparison. Always `false` for a non-meters
   /// [unitOfMeasureCode] — this rule is meters-specific and must not affect
   /// other units of measure (e.g. yards, pieces).
   bool get isLowStockInMeters =>
-      isMeasuredInMeters && remainingQuantity <= lowStockThresholdMeters;
+      isMeasuredInMeters &&
+      remainingQuantity >= unavailableBelowMeters &&
+      remainingQuantity <= lowStockThresholdMeters;
+
+  /// True when this entry is measured in meters and [remainingQuantity] is
+  /// below [unavailableBelowMeters] — too little left to sell, so it reads
+  /// as unavailable rather than as low stock. Always `false` for a
+  /// non-meters [unitOfMeasureCode], for the same reason as
+  /// [isLowStockInMeters].
+  bool get isUnavailableInMeters =>
+      isMeasuredInMeters && remainingQuantity < unavailableBelowMeters;
 
   @override
   bool operator ==(Object other) =>
@@ -141,12 +160,14 @@ class StockLookupSuccess extends StockLookupResult {
   /// Availability card shows one status per variation, never a per-location
   /// breakdown.
   ///
-  /// The MT threshold rule is unchanged (see
-  /// [StockLocationAvailability.lowStockThresholdMeters]); it is applied to
-  /// the *summed* meters quantity here:
+  /// The MT threshold rule (see
+  /// [StockLocationAvailability.lowStockThresholdMeters] and
+  /// [StockLocationAvailability.unavailableBelowMeters]) is applied to the
+  /// *summed* meters quantity here:
   /// - Any meters (`MT`) entries → classify on their summed remaining
-  ///   quantity: `> 100` [StockAvailabilityLevel.available], `0 < q <= 100`
-  ///   [StockAvailabilityLevel.low], `<= 0` [StockAvailabilityLevel.outOfStock].
+  ///   quantity: `> 50` [StockAvailabilityLevel.available], `10..50`
+  ///   [StockAvailabilityLevel.low], `< 10`
+  ///   [StockAvailabilityLevel.outOfStock].
   /// - No meters entries, but other units summing above zero →
   ///   [StockAvailabilityLevel.available].
   /// - Nothing left anywhere (no entries, or every summed quantity `<= 0`) →
@@ -163,7 +184,9 @@ class StockLookupSuccess extends StockLookupResult {
         0,
         (sum, entry) => sum + entry.remainingQuantity,
       );
-      if (metersTotal <= 0) return StockAvailabilityLevel.outOfStock;
+      if (metersTotal < StockLocationAvailability.unavailableBelowMeters) {
+        return StockAvailabilityLevel.outOfStock;
+      }
       if (metersTotal <= StockLocationAvailability.lowStockThresholdMeters) {
         return StockAvailabilityLevel.low;
       }
@@ -186,15 +209,17 @@ class StockLookupSuccess extends StockLookupResult {
 /// [StockLookupSuccess.combinedAvailabilityLevel]. Deliberately does not
 /// carry the underlying quantity: the UI renders only a label and colour.
 enum StockAvailabilityLevel {
-  /// Summed remaining quantity is above the low-stock threshold (or the item
+  /// Summed remaining quantity is above the low-stock ceiling (or the item
   /// is stocked in a non-meters unit with a positive total).
   available,
 
-  /// Summed meters quantity is at/below the low-stock threshold but above
-  /// zero — the UI shows "contact support" copy, never the figure.
+  /// Summed meters quantity is within the low-stock band (at or above the
+  /// unavailable floor, at or below the low-stock ceiling) — the UI shows
+  /// "contact the orders department" copy, never the figure.
   low,
 
-  /// Nothing remaining across any location.
+  /// Summed meters quantity is below the unavailable floor — too little left
+  /// to sell — or nothing remaining across any location at all.
   outOfStock,
 }
 

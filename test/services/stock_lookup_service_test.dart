@@ -140,33 +140,58 @@ void main() {
     });
 
     group('isLowStockInMeters', () {
-      test('99 m (below the 100 m threshold) is low stock', () {
+      test('10 m (the floor, inclusive) is low stock', () {
         const availability = StockLocationAvailability(
           locationCode: 'BEIRUT',
-          remainingQuantity: 99,
+          remainingQuantity: 10,
+          unitOfMeasureCode: 'MT',
+        );
+
+        expect(availability.isLowStockInMeters, isTrue);
+        expect(availability.isUnavailableInMeters, isFalse);
+      });
+
+      test('50 m (the ceiling, inclusive) is low stock', () {
+        const availability = StockLocationAvailability(
+          locationCode: 'BEIRUT',
+          remainingQuantity: 50,
           unitOfMeasureCode: 'MT',
         );
 
         expect(availability.isLowStockInMeters, isTrue);
       });
 
-      test('100 m (the boundary, inclusive) is low stock', () {
+      test('50.01 m (just above the ceiling) is not low stock', () {
         const availability = StockLocationAvailability(
           locationCode: 'BEIRUT',
-          remainingQuantity: 100,
+          remainingQuantity: 50.01,
           unitOfMeasureCode: 'MT',
         );
 
-        expect(availability.isLowStockInMeters, isTrue);
+        expect(availability.isLowStockInMeters, isFalse);
+        expect(availability.isUnavailableInMeters, isFalse);
       });
 
-      test('100.01 m (just above the boundary) is not low stock', () {
+      test('9.99 m (below the floor) is unavailable, not low stock', () {
         const availability = StockLocationAvailability(
           locationCode: 'BEIRUT',
-          remainingQuantity: 100.01,
+          remainingQuantity: 9.99,
           unitOfMeasureCode: 'MT',
         );
 
+        expect(availability.isUnavailableInMeters, isTrue);
+        expect(availability.isLowStockInMeters, isFalse);
+      });
+
+      test('a non-meters unit below the floor is never unavailable by this '
+          'rule — it is meters-specific', () {
+        const availability = StockLocationAvailability(
+          locationCode: 'BEIRUT',
+          remainingQuantity: 2,
+          unitOfMeasureCode: 'YD',
+        );
+
+        expect(availability.isUnavailableInMeters, isFalse);
         expect(availability.isLowStockInMeters, isFalse);
       });
 
@@ -180,7 +205,7 @@ void main() {
         expect(availability.isLowStockInMeters, isFalse);
       });
 
-      test('a non-meters unit at or below 100 is never low stock — the rule '
+      test('a non-meters unit inside the band is never low stock — the rule '
           'is meters-specific', () {
         const availability = StockLocationAvailability(
           locationCode: 'BEIRUT',
@@ -191,7 +216,7 @@ void main() {
         expect(availability.isLowStockInMeters, isFalse);
       });
 
-      test('PCS at or below 100 is never low stock', () {
+      test('PCS inside the band is never low stock', () {
         const availability = StockLocationAvailability(
           locationCode: 'BEIRUT',
           remainingQuantity: 5,

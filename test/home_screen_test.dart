@@ -1138,36 +1138,55 @@ void main() {
           expect(_pillColor(tester, 'out'), AppColors.stockOutBg);
         });
 
-        testWidgets('99 m → yellow "contact support" pill, not the quantity', (
+        testWidgets('9.99 m (just under the unavailable floor) → red '
+            '"Currently unavailable" pill, never contact-support copy', (
           tester,
         ) async {
-          await checkMeters(tester, 99);
+          await checkMeters(tester, 9.99);
+
+          expect(find.text('Currently unavailable'), findsOneWidget);
+          expect(
+            find.text(
+              'For more information, please contact the orders department.',
+            ),
+            findsNothing,
+          );
+          expect(find.textContaining('9.99'), findsNothing);
+          expect(_pillColor(tester, 'out'), AppColors.stockOutBg);
+        });
+
+        testWidgets('10 m (the low-stock floor) → yellow "contact support" '
+            'pill, not the quantity', (
+          tester,
+        ) async {
+          await checkMeters(tester, 10);
 
           expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
           expect(find.text('Available'), findsNothing);
-          expect(find.textContaining('99'), findsNothing);
+          expect(find.textContaining('10'), findsNothing);
           expect(find.text('LOC-01'), findsNothing);
           expect(_pillColor(tester, 'low'), AppColors.stockLowBg);
         });
 
-        testWidgets('100 m (the boundary) → yellow "contact support" pill', (
+        testWidgets('50 m (the low-stock ceiling) → yellow "contact support" '
+            'pill', (
           tester,
         ) async {
-          await checkMeters(tester, 100);
+          await checkMeters(tester, 50);
 
           expect(find.text('For more information, please contact the orders department.'), findsOneWidget);
           expect(find.text('Available'), findsNothing);
-          expect(find.textContaining('100'), findsNothing);
+          expect(find.textContaining('50'), findsNothing);
           expect(_pillColor(tester, 'low'), AppColors.stockLowBg);
         });
 
-        testWidgets('100.01 m → green "Available" pill, not the quantity', (
+        testWidgets('50.01 m → green "Available" pill, not the quantity', (
           tester,
         ) async {
-          await checkMeters(tester, 100.01);
+          await checkMeters(tester, 50.01);
 
           expect(find.text('Available'), findsOneWidget);
-          expect(find.textContaining('100.01'), findsNothing);
+          expect(find.textContaining('50.01'), findsNothing);
           expect(
             find.textContaining('For more information, please contact the orders department.'),
             findsNothing,

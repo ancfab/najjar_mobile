@@ -716,7 +716,13 @@ void main() {
       final picker = tester.widget<BalanceHistoryDateRangePicker>(
         find.byType(BalanceHistoryDateRangePicker),
       );
-      final newTo = picker.from.add(const Duration(days: 3));
+      // Calendar arithmetic, not an absolute Duration — see the From-clamp
+      // test's comment on daylight saving.
+      final newTo = DateTime(
+        picker.from.year,
+        picker.from.month,
+        picker.from.day + 3,
+      );
       picker.onToChanged(newTo);
       await tester.pumpAndSettle();
 
@@ -1347,7 +1353,13 @@ void main() {
       final picker = tester.widget<BalanceHistoryDateRangePicker>(
         find.byType(BalanceHistoryDateRangePicker),
       );
-      final newFrom = picker.to.subtract(const Duration(days: 89));
+      // Calendar arithmetic, not an absolute Duration — see the From-clamp
+      // test's comment on daylight saving.
+      final newFrom = DateTime(
+        picker.to.year,
+        picker.to.month,
+        picker.to.day - 89,
+      );
       picker.onFromChanged(newFrom);
       await tester.pumpAndSettle();
 
